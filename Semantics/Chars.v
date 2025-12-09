@@ -31,6 +31,11 @@ Section Chars.
     | Input s _ => s
     end.
 
+  Definition pref_str (i:input) : string :=
+  match i with
+  | Input _ s => s
+  end.
+
   Definition current_str (i:input) (dir: Direction) : string :=
     match i with
     | Input next pref =>
