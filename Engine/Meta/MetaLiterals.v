@@ -11,6 +11,7 @@ From Linden Require Import Parameters LWParameters.
 From Linden Require Import StrictSuffix Prefix.
 From Linden Require Import EngineSpec.
 From Warblre Require Import Base RegExpRecord.
+From Linden Require Import Tactics.
 
 
 Section MetaLiterals.
@@ -35,7 +36,7 @@ Theorem try_lit_search_correct {strs:StrSearch}:
 Proof.
 	unfold try_lit_search.
 	intros r inp tree ol Htree Htry.
-	wt_eq.
+	eqdec.
 	- injection Htry as <-.
 		assert (extract_literal rer (lazy_prefix r) = Impossible). {
 			assert (RegExpRecord.ignoreCase rer = false). {
