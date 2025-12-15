@@ -74,7 +74,7 @@ Instance UnanchorEngine {engine:AnchoredEngine rer} (lazy_prefix_supp: lazy_pref
 Qed.
 
 (* we show that the PikeVM fits the scheme of an anchored engine *)
-#[refine]
+#[export] #[refine]
 Instance PikeVMAnchoredEngine: AnchoredEngine rer := {
   exec r inp := match pike_vm_match rer r inp with
                 | OutOfFuel => None
