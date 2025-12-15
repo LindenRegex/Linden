@@ -97,7 +97,7 @@ Definition search_from_input_acc {strs:StrSearch} {engine:AnchoredEngine rer} (r
 
 Lemma search_from_before_jump_eq {strs:StrSearch} {engine:AnchoredEngine rer}:
   forall i r inp inp',
-    supported_regex rer r ->
+    supported_regex rer r = true ->
     input_search (prefix (extract_literal rer r)) inp = Some inp' ->
     input_prefix i inp' forward ->
     input_prefix inp i forward ->
@@ -128,7 +128,7 @@ Qed.
 
 Lemma input_search_exec_none {strs:StrSearch} {engine:AnchoredEngine rer}:
   forall i r inp,
-    supported_regex rer r ->
+    supported_regex rer r = true ->
     input_search (prefix (extract_literal rer r)) inp = None ->
     input_prefix inp i forward ->
     exec rer r i = None.
@@ -142,7 +142,7 @@ Qed.
 
 Lemma search_from_none_prefix {strs:StrSearch} {engine:AnchoredEngine rer}:
   forall i r inp,
-    supported_regex rer r ->
+    supported_regex rer r = true ->
     input_search (prefix (extract_literal rer r)) inp = None ->
     input_prefix inp i forward ->
     search_from r (next_str i) (pref_str i) = None.
@@ -158,7 +158,7 @@ Qed.
 
 Lemma input_search_exec_impossible {strs:StrSearch} {engine:AnchoredEngine rer}:
   forall inp r,
-    supported_regex rer r ->
+    supported_regex rer r = true ->
     extract_literal rer r = Impossible ->
     exec rer r inp = None.
 Proof.
@@ -170,7 +170,7 @@ Qed.
 
 Lemma search_from_impossible_prefix {strs:StrSearch} {engine:AnchoredEngine rer}:
   forall inp r,
-    supported_regex rer r ->
+    supported_regex rer r = true ->
     extract_literal rer r = Impossible ->
     search_from r (next_str inp) (pref_str inp) = None.
 Proof.
@@ -181,7 +181,7 @@ Qed.
 
 Theorem builtin_exec_equiv {strs:StrSearch} {engine:AnchoredEngine rer}:
   forall r inp,
-    supported_regex rer r ->
+    supported_regex rer r = true ->
     search_from_input r inp = search_from_input_acc r inp (extract_literal rer r).
 Proof.
   intros r inp Hsubset.

@@ -23,12 +23,11 @@ Class AnchoredEngine := {
   exec: regex -> input -> option leaf;
 
   (* asserts the supported subset of regexes *)
-  (* FIXME: these will need a decidable version for the Meta engine *)
-  supported_regex: regex -> Prop;
+  supported_regex: regex -> bool;
 
   (* the execution follows the backtracking tree semantics *)
   exec_correct: forall r inp tree ol,
-    supported_regex r ->
+    supported_regex r = true ->
     is_tree rer [Areg r] inp Groups.GroupMap.empty forward tree ->
     (first_leaf tree inp = ol <-> exec r inp = ol)
 }.
@@ -44,11 +43,11 @@ Class UnanchoredEngine := {
   un_exec: regex -> input -> option leaf;
 
   (* asserts the supported subset of regexes *)
-  un_supported_regex: regex -> Prop;
+  un_supported_regex: regex -> bool;
 
   (* the execution follows the backtracking tree semantics *)
   un_exec_correct: forall r inp tree ol,
-    un_supported_regex r ->
+    un_supported_regex r = true ->
     is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
     (first_leaf tree inp = ol <-> un_exec r inp = ol)
 }.
@@ -61,7 +60,7 @@ Section Instances.
 
 (* predicate stating that if we support a regex then we support its lazy prefix *)
 Definition lazy_prefix_supported {engine:AnchoredEngine rer} : Prop :=
-  forall r, supported_regex rer r -> supported_regex rer (lazy_prefix r).
+  forall r, supported_regex rer r = true -> supported_regex rer (lazy_prefix r) = true.
 
 (* We show that any anchored engine can be turned into an unanchored engine by just *)
 (* executing the anchored engine with a lazy prefix *)
@@ -81,10 +80,11 @@ Instance PikeVMAnchoredEngine: AnchoredEngine rer := {
                 | OutOfFuel => None
                 | Finished res => res
                 end;
-  supported_regex := pike_regex;
+  supported_regex := is_pike_regex;
 }.
   (* exec_correct *)
   intros r inp tree ol Hsubset Htree.
+  rewrite is_pike_regex_correct in Hsubset.
   pose proof (pike_vm_match_terminates rer r inp Hsubset) as [res Hmatch].
   rewrite Hmatch.
   split.
