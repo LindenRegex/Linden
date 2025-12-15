@@ -39,7 +39,7 @@ Definition is_anchored (r:regex) : bool :=
 	else is_anchored' r.
 
 (* performs an anchored search at the start position if the regex is anchored *)
-Definition anchored_search {engine:AnchoredEngine rer} (r:regex) (inp:input) : option (option leaf) :=
+Definition try_anchored_search {engine:AnchoredEngine rer} (r:regex) (inp:input) : option (option leaf) :=
 	if is_anchored r then
 		if pref_str inp == [] then
 			Some (exec rer r inp)
@@ -160,15 +160,15 @@ Qed.
 
 
 (* the anchored_search correctly finds unanchored results for anchored regexes *)
-Theorem anchored_search_correct {engine:AnchoredEngine rer}:
+Theorem try_anchored_search_correct {engine:AnchoredEngine rer}:
 	forall r inp leaf tree,
 		supported_regex rer r = true ->
 		is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
-		anchored_search r inp = Some leaf ->
+		try_anchored_search r inp = Some leaf ->
 		first_leaf tree inp = leaf.
 Proof.
 	intros r inp leaf tree Hsup Htree Hanch.
-	unfold anchored_search in Hanch.
+	unfold try_anchored_search in Hanch.
 	destruct (is_anchored r) eqn:Hisanch; [|discriminate].
 	eqdec; injection Hanch as <-.
 	(* we are at the start of the input *)
