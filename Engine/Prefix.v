@@ -12,15 +12,8 @@ Import ListNotations.
 From Linden Require Import Regex Chars Semantics Tree FunctionalSemantics.
 From Linden Require Import Parameters LWParameters.
 From Linden Require Import StrictSuffix.
+From Linden Require Import Tactics.
 From Warblre Require Import Base RegExpRecord.
-
-(* Tactic for rewriting decidable equalities into propositional ones *)
-Ltac wt_eq := repeat match goal with
-  | [ H: (?x ==? ?y)%wt = true |- _ ] => rewrite EqDec.inversion_true in H; subst
-  | [ H: (?x ==? ?y)%wt = false |- _ ] => rewrite EqDec.inversion_false in H
-  | [ |- context[(?x ==? ?y)%wt] ] => destruct (x ==? y)%wt eqn:?Heq
-  | [ H: context[(?x ==? ?y)%wt] |- _ ] => destruct (x ==? y)%wt eqn:?Heq
-end.
 
 Section Prefix.
   Context {params: LindenParameters}.
@@ -36,7 +29,7 @@ Proof.
   - eauto using sw_nil.
   - destruct s2 as [|h2 t2].
     + right. intros H. inversion H.
-    + destruct (h1 ==? h2)%wt eqn:Heq; wt_eq.
+    + destruct (h1 ==? h2)%wt eqn:Heq; eqdec.
       * destruct (IH t2) as [Hsw|Hnsw].
         -- left. now constructor.
         -- right. intros H. now inversion H.
@@ -197,7 +190,7 @@ Proof.
   intros ss s i j H k [Hik Hkj].
   functional induction brute_force_str_search ss s i.
   - injection H as <-. lia.
-  - destruct (k ==? i)%wt eqn:Heq; wt_eq.
+  - destruct (k ==? i)%wt eqn:Heq; eqdec.
     + assumption.
     + apply IHo; [assumption|lia].
   - discriminate.
@@ -212,7 +205,7 @@ Proof.
   intros ss s i H k [Hik Hks] Hsw.
   functional induction brute_force_str_search ss s i.
   - discriminate.
-  - destruct (k ==? i)%wt eqn:Heq; wt_eq.
+  - destruct (k ==? i)%wt eqn:Heq; eqdec.
     + contradiction.
     + eapply IHo; [assumption|lia].
   - apply Nat.leb_gt in e. lia.
@@ -352,6 +345,7 @@ Notation Unknown := (Prefix []).
 
 Definition literal_eq_dec: forall (l1 l2: literal), { l1 = l2 } + { l1 <> l2 }.
 Proof. decide equality; apply string_eq_dec. Defined.
+#[export]
 Instance literal_EqDec: EqDec literal := EqDec.make literal literal_eq_dec.
 
 (* the string with which every match of that regex from which the literal was extracted starts *)
@@ -423,7 +417,7 @@ Lemma starts_with_common_prefix: forall s1 s2,
 Proof.
   induction s1; simpl.
   - reflexivity.
-  - destruct s2; wt_eq; constructor; auto.
+  - destruct s2; eqdec; constructor; auto.
 Qed.
 
 (*
@@ -438,7 +432,7 @@ Lemma starts_with_chain_merge_literals: forall l1 l2 l3,
   starts_with (prefix (chain_literals (merge_literals l1 l2) l3)) (prefix (chain_literals l1 l3)).
 Proof.
   unfold merge_literals; intros l1 l2 l3 H.
-  destruct l1, l2, l3; wt_eq; simpl;
+  destruct l1, l2, l3; eqdec; simpl;
     try easy;
     try apply starts_with_common_prefix;
     solve[transitivity s; [apply starts_with_common_prefix|now apply starts_with_app_right]].
@@ -448,7 +442,7 @@ Lemma common_prefix_comm:
   forall s1 s2,
     common_prefix s1 s2 = common_prefix s2 s1.
 Proof.
-  induction s1; destruct s2; simpl; wt_eq; congruence.
+  induction s1; destruct s2; simpl; eqdec; congruence.
 Qed.
 
 Lemma merge_literals_comm:
@@ -456,7 +450,7 @@ Lemma merge_literals_comm:
     merge_literals l1 l2 = merge_literals l2 l1.
 Proof.
   unfold merge_literals; intros.
-  destruct l1, l2; wt_eq; try congruence; now rewrite common_prefix_comm.
+  destruct l1, l2; eqdec; try congruence; now rewrite common_prefix_comm.
 Qed.
 
 Lemma merge_literals_impossible:
@@ -464,8 +458,8 @@ Lemma merge_literals_impossible:
     merge_literals l1 l2 = Impossible <-> (l1 = Impossible /\ l2 = Impossible).
 Proof.
   unfold merge_literals; intros. split; intros.
-  - destruct l1, l2; now wt_eq.
-  - destruct H; wt_eq; subst; easy.
+  - destruct l1, l2; now eqdec.
+  - destruct H; eqdec; subst; easy.
 Qed.
 
 (* extracting literals from a character description *)
@@ -575,7 +569,7 @@ Proof.
     (* the cd does not produce Impossible *)
     try solve[discriminate].
   (* CdRange *)
-  - simpl in Hextract. wt_eq; discriminate.
+  - simpl in Hextract. eqdec; discriminate.
   (* CdUnion *)
   - simpl in Hextract.
     apply merge_literals_impossible in Hextract as [Hcd1 Hcd2].
@@ -716,12 +710,12 @@ Proof.
   - unfold_match Hmatch no_i_flag.
     assert (c = c0). {
       simpl in Hmatch. rewrite (canonicalize_casesenst _ _ no_i_flag) in Hmatch.
-      wt_eq. reflexivity.
+      eqdec. reflexivity.
     } subst.
     simpl.
     destruct rest; simpl; eauto with prefix.
   (* CdRange *)
-  - simpl. wt_eq.
+  - simpl. eqdec.
     2: destruct rest; constructor.
     apply char_match_range_same in Hmatch; auto. subst.
     destruct rest; simpl; eauto with prefix.
@@ -868,7 +862,7 @@ Lemma common_prefix_length:
     length (common_prefix s1 s2) <= Nat.min (length s1) (length s2).
 Proof.
   induction s1; destruct s2; simpl; try lia.
-  wt_eq; simpl.
+  eqdec; simpl.
   - specialize (IHs1 s2). lia.
   - lia.
 Qed.
@@ -878,7 +872,7 @@ Lemma merge_literals_length:
     length (prefix (merge_literals l1 l2)) <= Nat.max (length (prefix l1)) (length (prefix l2)).
 Proof.
   intros l1 l2; unfold merge_literals.
-  destruct l1, l2; wt_eq; try pose proof (common_prefix_length s s0); simpl; try lia.
+  destruct l1, l2; eqdec; try pose proof (common_prefix_length s s0); simpl; try lia.
 Qed.
 
 (* note: this will not hold true if support for backreferences is added.
@@ -891,7 +885,7 @@ Proof.
   induction r; simpl; destruct_i; simpl; try lia.
   (* Character *)
   - induction cd; simpl; try lia.
-    + wt_eq; simpl; lia.
+    + eqdec; simpl; lia.
     + pose proof (merge_literals_length (extract_literal_char cd1) (extract_literal_char cd2)); lia.
   (* Disjunction *)
   - pose proof (merge_literals_length (extract_literal r1) (extract_literal r2)); lia.
