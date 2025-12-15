@@ -4,6 +4,7 @@ Import ListNotations.
 From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree Semantics.
 From Linden Require Import Parameters.
+From Linden Require Import Tactics.
 From Warblre Require Import Numeric Base.
 
 (* The subset of regexes supported by the PikeVM engine *)
@@ -90,6 +91,34 @@ Section PikeSubset.
   (* used for the lists of trees gm and input manipulated by the PikeTree and MemoTree algorithms *)
   Definition pike_list (l: list (tree * group_map * input)) : Prop :=
     (forall t gm i, In (t, gm, i) l -> pike_subtree t).
+
+  (* Functional version *)
+  Fixpoint is_pike_regex (r:regex) : bool :=
+    match r with
+    | Epsilon => true
+    | Regex.Character _ => true
+    | Disjunction r1 r2 => is_pike_regex r1 && is_pike_regex r2
+    | Sequence r1 r2 => is_pike_regex r1 && is_pike_regex r2
+    | Quantified _ 0 (NoI.N 0) r1 => true
+    | Quantified _ 0 NoI.Inf r1 | Quantified _ 0 (NoI.N 1) r1 => is_pike_regex r1
+    | Group _ r1 => is_pike_regex r1
+    | Anchor _ => true
+    | _ => false
+    end.
+
+  Lemma is_pike_regex_correct:
+    forall r,
+      is_pike_regex r = true <-> pike_regex r.
+  Proof.
+    intros r. split; intros H.
+    - induction r; try econstructor; simpl in *; boolprop; eauto; try discriminate.
+      (* quatified *)
+      destruct min; [|discriminate].
+      destruct delta; [|constructor; eauto].
+      destruct n; [constructor|].
+      destruct n; [constructor; eauto|discriminate].
+    - induction H; simpl in *; boolprop; eauto.
+  Qed.
 
 
   (** * Subset Properties  *)

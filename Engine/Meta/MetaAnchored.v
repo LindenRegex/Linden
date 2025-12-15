@@ -162,7 +162,7 @@ Qed.
 (* the anchored_search correctly finds unanchored results for anchored regexes *)
 Theorem anchored_search_correct {engine:AnchoredEngine rer}:
 	forall r inp leaf tree,
-		supported_regex rer r ->
+		supported_regex rer r = true ->
 		is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
 		anchored_search r inp = Some leaf ->
 		first_leaf tree inp = leaf.
