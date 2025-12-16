@@ -36,20 +36,17 @@ Theorem try_lit_search_correct {strs:StrSearch}:
 Proof.
 	unfold try_lit_search.
 	intros r inp tree ol Htree Htry.
-	eqdec.
-	- injection Htry as <-.
-		assert (extract_literal rer (lazy_prefix r) = Impossible). {
-			assert (RegExpRecord.ignoreCase rer = false). {
-				unfold extract_literal in Heq.
-				destruct (RegExpRecord.ignoreCase rer) eqn:Hic; [|reflexivity].
-				(* simpl in Heq. FIXME: why does Heq not reduce?? *)
-				admit.
-			}
-			simpl. now rewrite H, Heq.
-		}
-		eapply extract_literal_impossible; eauto.
-	- discriminate.
-Admitted.
+	eqdec; [|discriminate].
+  injection Htry as <-.
+  assert (extract_literal rer (lazy_prefix r) = Impossible). {
+    assert (Hic: RegExpRecord.ignoreCase rer = false). {
+      unfold extract_literal in Heq.
+      destruct (RegExpRecord.ignoreCase rer) eqn:Hicm, r; easy.
+    }
+    simpl. now rewrite Hic, Heq.
+  }
+  eapply extract_literal_impossible; eauto.
+Qed.
 
 
 (** * Bruteforce search *)
@@ -80,20 +77,6 @@ Definition search_from_input_acc {strs:StrSearch} {engine:AnchoredEngine rer} (r
   | Some i => search_from r (next_str i) (pref_str i)
   end.
 
-
-(* Fixpoint jump_try {strs:StrSearch} {engine:AnchoredEngine} (r:regex) (p:string) (next pref:string) : option leaf :=
-  (* we skip the initial input that does not match the prefix *)
-  match (input_search p (Input next pref)) with
-  | None => None (* if prefix is not present anywhere, then we cannot match *)
-  | Some (Input  =>
-      match (exec r (Input next pref)) with
-      | Some leaf => Some leaf
-      | None => match next with
-                | [] => None
-                | c::t => jump_try r p t (c::pref)
-                end
-      end
-  end. *)
 
 Lemma search_from_before_jump_eq {strs:StrSearch} {engine:AnchoredEngine rer}:
   forall i r inp inp',
