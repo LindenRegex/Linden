@@ -9,6 +9,7 @@ Import ListNotations.
 From Linden Require Import Regex Chars Semantics Tree.
 From Linden Require Import Parameters LWParameters.
 From Linden Require Import PikeSubset SeenSets FunctionalPikeVM.
+From Linden Require Import Prefix.
 From Linden Require Import Correctness.
 From Warblre Require Import Base RegExpRecord.
 
@@ -92,6 +93,27 @@ Instance PikeVMAnchoredEngine: AnchoredEngine rer := {
     subst. eauto using pike_vm_match_correct, pike_vm_correct.
   - intros <-.
     symmetry. eauto using pike_vm_match_correct, pike_vm_correct.
+Qed.
+
+(* we show that the PikeVM fits the scheme of an unanchored engine *)
+#[export] #[refine]
+Instance PikeVMUnanchoredEngine {strs:StrSearch}: UnanchoredEngine rer := {
+  un_exec r inp := match pike_vm_match_unanchored rer r inp with
+                | OutOfFuel => None
+                | Finished res => res
+                end;
+  un_supported_regex := is_pike_regex;
+}.
+  (* exec_correct *)
+  intros r inp tree ol Hsubset Htree.
+  rewrite is_pike_regex_correct in Hsubset.
+  pose proof (pike_vm_match_terminates_unanchored rer r inp Hsubset) as [res Hmatch].
+  rewrite Hmatch.
+  split.
+  - intros Hleaf.
+    subst. eauto using pike_vm_match_correct_unanchored, pike_vm_correct_unanchored.
+  - intros <-.
+    symmetry. eauto using pike_vm_match_correct_unanchored, pike_vm_correct_unanchored.
 Qed.
 
 End Instances.
