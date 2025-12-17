@@ -30,6 +30,7 @@ Fixpoint is_anchored' (r:regex) : bool :=
 	| Sequence r1 r2 => is_anchored' r1 || is_anchored' r2
 	| Group _ r1 => is_anchored' r1
 	| Quantified _ min _ r1 => (min != 0) && is_anchored' r1
+	| Lookaround LookAhead r1 => is_anchored' r1
 	| Anchor _ | Lookaround _ _ | Epsilon | Regex.Character _ | Backreference _ => false
 	end.
 
@@ -110,9 +111,13 @@ Proof.
 		+	erewrite res_group_map_indep; eauto.
 		+	erewrite res_group_map_indep; eauto.
 	(* tree_lk *)
-	- destruct positivity, (tree_res treelk); eauto.
-		destruct l.
-		eapply res_group_map_indep; eauto.
+	- boolprop.
+		+	(* lk is anchored, so it is positive *)
+			destruct positivity eqn:Hpos; [|now destruct lk].
+			erewrite IHHtree1; destruct lk; eauto || easy.
+		+ destruct positivity, (tree_res treelk); eauto.
+			destruct l.
+			eapply res_group_map_indep; eauto.
 	(* tree_anchor *)
 	- boolprop; eauto.
 		unfold anchor_satisfied in ANCHOR. rewrite Hmulti in ANCHOR.
@@ -123,7 +128,7 @@ Proof.
 Qed.
 
 (* is_anchored_match_not_begin specialized to a single anchored regex *)
-Lemma is_anchored_match_not_begin_regex:
+Corollary is_anchored_match_not_begin_regex:
 	forall r c next pref tree,
 		is_anchored r = true ->
 		is_tree rer [Areg r] (Input next (c::pref)) Groups.GroupMap.empty forward tree ->
