@@ -10,8 +10,6 @@ Ltac eqdec := repeat match goal with
   | [ H: context[(?x ==? ?y)%wt] |- _ ] => destruct (x ==? y)%wt eqn:?Heq
 end.
 
-Check andb_prop.
-
 (* A tactic that turns boolean operators into propositional ones *)
 Ltac boolprop := repeat match goal with
   | [ H: context[(?b1 && ?b2 = true)] |- _ ] => rewrite andb_true_iff in H
