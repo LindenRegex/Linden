@@ -89,11 +89,6 @@ Section PikeTree.
     forall t inp (NORES: first_leaf t inp = None),
       may_erase t None.
 
-  Definition dot_star : regex :=
-    Quantified false 0 NoI.Inf (Regex.Character CdAll).
-  Definition lazy_prefix (r:regex) : regex :=
-    Sequence dot_star r.
-
   (* the initial future for the unanchored version of the PikeTree *)
   Definition initial_future_actions_unanchored (r: regex) (inp: input) :=
     [Areg (Regex.Character CdAll); Acheck inp; Areg dot_star; Areg r].

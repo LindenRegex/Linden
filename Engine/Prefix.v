@@ -321,6 +321,14 @@ Proof.
     now apply Hnf.
 Qed.
 
+(* input_search finds no result iff str_search finds no result *)
+Lemma input_search_none_str_search {strs: StrSearch}:
+  forall s inp,
+    input_search s inp = None <-> str_search s (next_str inp) = None.
+Proof.
+  unfold input_search. split; now destruct str_search.
+Qed.
+
 Section Literal.
   Context (rer: RegExpRecord).
 
@@ -833,6 +841,56 @@ Proof.
   intro r; rewrite <- (extract_actions_literal_regex r).
   intros.
   eauto using extract_literal_prefix_general_contra.
+Qed.
+
+(* if str_search finds nothing for the literal of r, *)
+(* then the tree over that r has no results *)
+Lemma str_search_none_nores {strs:StrSearch}:
+  forall r inp tree,
+    is_tree rer [Areg r] inp Groups.GroupMap.empty forward tree ->
+    str_search (prefix (extract_literal r)) (next_str inp) = None ->
+    first_leaf tree inp = None.
+Proof.
+  intros r [next pref] tree Htree Hsearch.
+  eapply extract_literal_prefix_contra with (tree:=tree) in Htree; eauto.
+  replace (next_str _) with (skipn 0 next) by eauto using skipn_O.
+  eapply not_found; eauto; lia.
+Qed.
+
+(* one unfolded iteration of the lazy_prefix *)
+Lemma str_search_none_nores_unanchored_iter {strs:StrSearch}:
+  forall r inp tree,
+    is_tree rer [Areg (Regex.Character CdAll); Acheck inp; Areg dot_star; Areg r] inp Groups.GroupMap.empty forward tree ->
+    str_search (prefix (extract_literal r)) (next_str inp) = None ->
+    first_leaf tree inp = None.
+Proof.
+  intros r [next pref].
+  generalize dependent pref.
+  induction next; intros pref tree Htree Hsearch.
+  - now inversion Htree.
+  - inversion Htree; [|discriminate]. inversion READ. subst.
+    inversion TREECONT; [|easy]. inversion TREECONT0. destruct plus; [discriminate|]. subst.
+    eapply str_search_none_next in Hsearch.
+    eapply str_search_none_nores in SKIP; eauto.
+    specialize (IHnext (c::pref) titer). repeat specialize_prove IHnext by eauto.
+    unfold first_leaf in *. simpl. unfold advance_input'. simpl.
+    now rewrite SKIP, IHnext.
+Qed.
+
+(* if str_search finds nothing for the literal of r, *)
+(* then the tree over (lazy_prefix r) has no results *)
+Theorem str_search_none_nores_unanchored {strs:StrSearch}:
+  forall r inp tree,
+    is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
+    str_search (prefix (extract_literal r)) (next_str inp) = None ->
+    first_leaf tree inp = None.
+Proof.
+  intros r [next pref] tree Htree Hsearch.
+  inversion Htree. inversion CONT. destruct plus; [discriminate|]. subst.
+  eapply str_search_none_nores with (tree:=tskip) in Hsearch as Hnotfound; eauto.
+  eapply str_search_none_nores_unanchored_iter with (tree:=titer) in ISTREE1; eauto.
+  unfold first_leaf in *. simpl.
+  now rewrite Hnotfound, ISTREE1.
 Qed.
 
 

@@ -873,10 +873,9 @@ Proof.
     (* so next_prefix_counter result is the result of the str_search *)
     unfold next_prefix_counter in Hcounter. simpl in Hcounter. destruct str_search eqn:Hsearch; [discriminate|].
     (* tskip has no result *)
-    pose proof (not_found _ _ Hsearch 0 ltac:(lia)) as Hnostart.
     let inp := constr:(Input next (c::pref)) in
-    replace (skipn 0 next) with (next_str inp) in Hnostart by easy.
-    eapply extract_literal_prefix_contra in Hnostart; eauto. 
+    replace next with (next_str inp) in Hsearch by easy.
+    pose proof (str_search_none_nores _ _ _ _ SKIP Hsearch) as Hnostart.
     unfold first_leaf in Hnostart |- *. simpl. unfold advance_input'. simpl.
     rewrite Hnostart. simpl.
     (* IH for titer *)

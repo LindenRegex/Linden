@@ -134,5 +134,14 @@ Section Regex.
   (* r?? *)
   Definition lazy_qmark (r:regex) : regex :=
     Quantified false 0 (NoI.N 1) r.
+
+  (* [^]*? *)
+  Definition dot_star : regex :=
+    lazy_star (Regex.Character CdAll).
+  
+  (* [^]*?r *)
+  Definition lazy_prefix (r:regex) : regex :=
+    Sequence dot_star r.
+
   
 End Regex.
