@@ -878,6 +878,7 @@ Qed.
 (* note: this will not hold true if support for backreferences is added.
     Consider /(abc)\1\1/. The extracted literal would be 'abcabcabc' which is not upperbounded by the regex size.
 *)
+(* The size of extracted literals is bounded by the size of the regex *)
 Theorem extract_literal_size_bound:
   forall r,
     length (prefix (extract_literal r)) <= regex_size r.
