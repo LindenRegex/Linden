@@ -112,9 +112,8 @@ Proof.
 		+	erewrite res_group_map_indep; eauto.
 	(* tree_lk *)
 	- boolprop.
-		+	(* lk is anchored, so it is positive *)
-			destruct positivity eqn:Hpos; [|now destruct lk].
-			erewrite IHHtree1; destruct lk; eauto || easy.
+		+	destruct lk; try discriminate.
+			erewrite IHHtree1; eauto.
 		+ destruct positivity, (tree_res treelk); eauto.
 			destruct l.
 			eapply res_group_map_indep; eauto.

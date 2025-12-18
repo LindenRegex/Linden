@@ -842,7 +842,6 @@ Lemma chain_literals_length:
   forall l1 l2,
     length (prefix (chain_literals l1 l2)) <= length (prefix l1) + length (prefix l2).
 Proof.
-  intros l1 l2.
   destruct l1, l2; simpl; try rewrite app_length; lia.
 Qed.
 
@@ -878,6 +877,7 @@ Qed.
 (* note: this will not hold true if support for backreferences is added.
     Consider /(abc)\1\1/. The extracted literal would be 'abcabcabc' which is not upperbounded by the regex size.
 *)
+(* The size of extracted literals is bounded by the size of the regex *)
 Theorem extract_literal_size_bound:
   forall r,
     length (prefix (extract_literal r)) <= regex_size r.
