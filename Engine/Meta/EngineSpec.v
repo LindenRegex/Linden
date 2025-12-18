@@ -104,7 +104,7 @@ Instance PikeVMUnanchoredEngine {strs:StrSearch}: UnanchoredEngine rer := {
                 end;
   un_supported_regex := is_pike_regex;
 }.
-  (* exec_correct *)
+  (* un_exec_correct *)
   intros r inp tree ol Hsubset Htree.
   rewrite is_pike_regex_correct in Hsubset.
   pose proof (pike_vm_match_terminates_unanchored rer r inp Hsubset) as [res Hmatch].

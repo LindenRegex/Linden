@@ -16,10 +16,12 @@ Ltac boolprop := repeat match goal with
   | [ H: context[(?b1 && ?b2 = false)] |- _ ] => rewrite andb_false_iff in H
   | [ H: context[(?b1 || ?b2 = true)] |- _ ] => rewrite orb_true_iff in H
   | [ H: context[(?b1 || ?b2 = false)] |- _ ] => rewrite orb_false_iff in H
+  | [ H: context[negb ?b1 = ?b2] |- _ ] => rewrite negb_true_iff in H || rewrite negb_false_iff in H
   | [ |- context[(?b1 && ?b2 = true)] ] => rewrite andb_true_iff
   | [ |- context[(?b1 && ?b2 = false)] ] => rewrite andb_false_iff
   | [ |- context[(?b1 || ?b2 = true)] ] => rewrite orb_true_iff
   | [ |- context[(?b1 || ?b2 = false)] ] => rewrite orb_false_iff
+  | [ |- context[negb ?b1 = ?b2] ] => rewrite negb_true_iff || rewrite negb_false_iff
 
   (* split goals *)
   | [ H: (?p1 /\ ?p2) |- _ ] => destruct H
