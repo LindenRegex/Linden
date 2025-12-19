@@ -18,34 +18,132 @@ Section MetaLiterals.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
 
+(* whether a regex has capturing groups *)
+Fixpoint has_groups (r:regex) : bool :=
+  match r with
+  | Group _ _ => true
+  | Sequence r1 r2 | Disjunction r1 r2 => has_groups r1 || has_groups r2
+  | Quantified _ _ _ r' | Lookaround _ r' => has_groups r'
+  | Regex.Character _ | Epsilon | Backreference _ | Anchor _ => false
+  end.
+
 (* tries to perform a search using only the literal from the regex *)
-(* On success, returns the leaf. On failure, returns the literal. *)
-Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : (option leaf) + literal :=
-  let lit := extract_literal rer r in
-  if lit == Impossible then inl None else
-		(* LATER: do a different search when we have Exact *)
-		inr lit.
+(* On success, returns Some leaf. On failure, returns the None. *)
+Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : option (option leaf) :=
+  match extract_literal rer r with
+  | Prefix s => None
+  | Impossible => Some None
+  | Exact s =>
+  		(* if it has asserts doing a string search is not enough *)
+      if has_asserts r then None
+      else
+        match input_search s inp with
+        | Some inp' =>
+            (* if it has groups we must reconstruct them *)
+            (* LATER: do group reconstruction with an anchored engine *)
+            if has_groups r then None
+            else Some (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty))
+        | None => Some None
+        end
+  end.
+
+Definition has_groups_action (a:action) : bool :=
+  match a with
+  | Areg r => has_groups r
+  | Acheck _ => false
+  | Aclose _ => true
+  end.
+
+Fixpoint has_groups_actions (acts:list action) : bool :=
+  match acts with
+  | [] => false
+  | a::t => has_groups_action a || has_groups_actions t
+  end.
+
+(* if a regex has no groups, then it defines no groups *)
+Lemma has_no_groups_def_groups:
+  forall r,
+    has_groups r = false -> def_groups r = [].
+Proof.
+  induction r; eauto; try easy.
+  - simpl; intros H; boolprop.
+    now rewrite (IHr1 H), (IHr2 H0).
+  - simpl; intros H; boolprop.
+    now rewrite (IHr1 H), (IHr2 H0).
+Qed.
+
+(* if a list of actions contains no groups, any matching leaf produces an empty group map *)
+Lemma no_groups_empty_gm:
+  forall acts inp dir tree leaf,
+    has_groups_actions acts = false ->
+    is_tree rer acts inp Groups.GroupMap.empty dir tree ->
+    tree_res tree Groups.GroupMap.empty inp dir = Some leaf ->
+    snd leaf = Groups.GroupMap.empty.
+Proof.
+  intros acts inp dir tree leaf Hnogroups Htree Hleaf.
+  remember Groups.GroupMap.empty as gm.
+  generalize dependent leaf.
+  induction Htree; intros leaf Hleaf;
+    (* simplify *)
+    subst; simpl in *; boolprop;
+    (* remove cases with groups *)
+    try discriminate;
+    (* remove trivial cases *)
+    inversion Hleaf; eauto.
+  - eapply read_char_success_advance, advance_input_success in READ as <-.
+    eauto.
+  - destruct (tree_res t1), (tree_res t2); eauto.
+  - destruct dir; simpl in IHHtree; boolprop; eapply IHHtree; eauto.
+  - rewrite has_no_groups_def_groups in *; eauto.
+  - destruct greedy; simpl in Hleaf; rewrite has_no_groups_def_groups in *; eauto.
+    + destruct (tree_res titer); eauto.
+    + destruct (tree_res tskip); eauto.
+  - unfold lk_result in RES_LK. destruct positivity.
+    + destruct (tree_res treelk) eqn:Hres; [destruct l|discriminate].
+      injection RES_LK as <-.
+      repeat specialize_prove IHHtree1 by eauto. specialize (IHHtree1 (i, g) ltac:(eauto)).
+      simpl in IHHtree1. subst. eauto.
+    + destruct (tree_res treelk); [discriminate|inversion RES_LK; subst; eauto].
+  - rewrite <-read_backref_success_advance with (1:=READ_BACKREF) in Hleaf; eauto.
+Qed.
 
 
 (* if the try_lit_search returned a leaf, it is the first_leaf *)
 Theorem try_lit_search_correct {strs:StrSearch}:
 	forall r inp tree ol,
 		is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
-		try_lit_search r inp = inl ol ->
+		try_lit_search r inp = Some ol ->
 		first_leaf tree inp = ol.
 Proof.
 	unfold try_lit_search.
 	intros r inp tree ol Htree Htry.
-	eqdec; [|discriminate].
-  injection Htry as <-.
-  assert (extract_literal rer (lazy_prefix r) = Impossible). {
-    assert (Hic: RegExpRecord.ignoreCase rer = false). {
-      unfold extract_literal in Heq.
-      destruct (RegExpRecord.ignoreCase rer) eqn:Hicm, r; easy.
+  destruct extract_literal eqn:Heq.
+  (* Exact *)
+  - destruct has_asserts eqn:Hasserts; [discriminate|].
+    destruct input_search eqn:Hsearch.
+    (* we found a match *)
+    + destruct has_groups eqn:Hgroups; [discriminate|].
+      injection Htry as <-.
+      eapply no_asserts_exact_literal in Hsearch as [leaf [Hleaf Hres]]; eauto.
+      eapply no_groups_empty_gm in Htree; simpl; boolprop; eauto.
+      now rewrite Hleaf, <-Hres, <-Htree, <-surjective_pairing.
+    (* we did not find a match *)
+    + injection Htry as <-.
+      rewrite input_search_none_str_search in Hsearch.
+      eapply str_search_none_nores_unanchored; eauto.
+      now rewrite Heq.
+  (* Prefix *)
+  - discriminate.
+  (* Impossible *)
+  - injection Htry as <-.
+    assert (extract_literal rer (lazy_prefix r) = Impossible). {
+      assert (Hic: RegExpRecord.ignoreCase rer = false). {
+        unfold extract_literal in Heq.
+        destruct RegExpRecord.ignoreCase eqn:Hicm, r; easy.
+      }
+      simpl. now rewrite Hic, Heq.
     }
-    simpl. now rewrite Hic, Heq.
-  }
-  eapply extract_literal_impossible; eauto.
+    eapply extract_literal_impossible; eauto.
 Qed.
 
 
