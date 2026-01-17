@@ -216,7 +216,7 @@ End FunctionalPikeVM.
 
 From Linden Require Import Inst.
 From Warblre Require Import Inst.
-Require Import Coq.Strings.Ascii Coq.Strings.String.
+Require Import Stdlib.Strings.Ascii Stdlib.Strings.String.
 Open Scope string_scope.
 
 Section Example.

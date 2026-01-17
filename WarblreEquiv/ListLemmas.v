@@ -1,5 +1,5 @@
 From Warblre Require Import List.
-From Coq Require Import List Lia ZArith.
+From Stdlib Require Import List Lia ZArith.
 Import ListNotations.
 
 (** * Lemmas on lists *)

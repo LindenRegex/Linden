@@ -3,7 +3,7 @@ From Linden Require Import Regex GroupMapMS LWParameters Groups Tree Chars Seman
   GroupMapLemmas Tactics CharDescrCharSet LKFactorization StrictSuffix
   Parameters.
 From Warblre Require Import Parameters List Notation Result Typeclasses Base Errors RegExpRecord StaticSemantics Semantics Base.
-From Coq Require Import List ZArith Lia DecidableClass ClassicalFacts.
+From Stdlib Require Import List ZArith Lia DecidableClass ClassicalFacts.
 Import ListNotations.
 Import Notation.
 Import Result.Notations.

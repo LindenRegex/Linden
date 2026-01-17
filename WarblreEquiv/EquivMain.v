@@ -4,7 +4,7 @@ From Linden Require Import Equiv EquivDef LWParameters RegexpTranslation
   Parameters ResultTranslation.
 From Warblre Require Import Patterns RegExpRecord Parameters Semantics
   Result Base Notation Match.
-From Coq Require Import List Lia PeanoNat ZArith DecidableClass.
+From Stdlib Require Import List Lia PeanoNat ZArith DecidableClass.
 Import Match.
 Import Notation.
 Import ListNotations.

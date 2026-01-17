@@ -1,4 +1,4 @@
-From Coq Require Export Bool Arith List Equivalence Lia.
+From Stdlib Require Export Bool Arith List Equivalence Lia.
 From Warblre Require Import Base RegExpRecord.
 From Linden Require Import Regex Chars Groups Tree Semantics
   FunctionalSemantics FunctionalUtils ComputeIsTree Parameters

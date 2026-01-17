@@ -9,7 +9,7 @@ Import Result.Notations.
 Import Notation.
 Import NodeProps.Zipper.
 Import Match.
-From Coq Require Import ZArith PeanoNat Lia RelationClasses.
+From Stdlib Require Import ZArith PeanoNat Lia RelationClasses.
 
 Local Open Scope result_flow.
 

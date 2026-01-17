@@ -9,7 +9,7 @@ From Linden Require Import StrictSuffix.
 From Linden Require Import Parameters.
 From Warblre Require Import Numeric Base RegExpRecord.
 
-From Coq Require Import Lia DecidableClass.
+From Stdlib Require Import Lia DecidableClass.
 
 (** * Functional version of the inductive semantics *)
 

@@ -8,7 +8,7 @@ From Warblre Require Import Numeric Base RegExpRecord.
 From Linden Require Import Groups.
 From Linden Require Import StrictSuffix.
 From Linden Require Import Parameters LWParameters.
-From Coq Require Import Lia.
+From Stdlib Require Import Lia.
 
 (** * Inductive semantics of JavaScript regexes *)
 (* This relates a regex and a string to their backtracking tree *)

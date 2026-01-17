@@ -1,7 +1,7 @@
 From Warblre Require Import Match Notation Parameters RegExpRecord List Result
   Semantics Result.
 From Linden Require Import Chars MSInput.
-From Coq Require Import ZArith Lia List.
+From Stdlib Require Import ZArith Lia List.
 Import Notation.
 Import Result.Notations.
 Import Match.MatchState.
@@ -20,7 +20,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma range_seq: forall base l, List.List.Range.Nat.Length.range base l = Coq.Lists.List.seq base l.
+Lemma range_seq: forall base l, List.List.Range.Nat.Length.range base l = Stdlib.Lists.List.seq base l.
 Proof.
   intros base l.
   revert base.

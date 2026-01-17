@@ -1,6 +1,6 @@
 From Linden Require Import Chars Parameters LWParameters.
 From Warblre Require Import Base Parameters.
-From Coq Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 

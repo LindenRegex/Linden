@@ -1,4 +1,4 @@
-From Coq Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 From Warblre Require Import Typeclasses.
 

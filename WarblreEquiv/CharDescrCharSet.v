@@ -2,7 +2,7 @@ From Linden Require Import Chars LWParameters Parameters RegexpTranslation Warbl
 From Warblre Require Import Parameters Semantics Result Patterns RegExpRecord Typeclasses.
 Import Result.Notations.
 Import Patterns.
-From Coq Require Import Lia.
+From Stdlib Require Import Lia.
 
 Local Open Scope result_flow.
 
