@@ -1,6 +1,6 @@
 (** * Some examples of Backtracking Trees  *)
 
-Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
@@ -40,7 +40,7 @@ Example fig2_regex: regex :=
           a_char))
     (Sequence b_char c_char).
 
-Example fig2_input: input := Input [a;b;b;c] []. 
+Example fig2_input: input := Input [a;b;b;c] [].
 
 Example fig2_tree: tree :=
   Choice

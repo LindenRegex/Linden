@@ -108,16 +108,16 @@ Section MSInput.
     assert (end_ind' = end_ind) by lia. rewrite H in H8. clear H.
     f_equal.
     - apply (f_equal (skipn end_ind)) in H4, H6. rewrite skipn_app in H4, H6.
-      subst end_ind. rewrite rev_length in H4, H6.
+      subst end_ind. rewrite length_rev in H4, H6.
       replace (length pref - length pref') with 0 in H6 by lia. rewrite Nat.sub_diag in H4.
-      rewrite <- H8 in H6 at 1. rewrite <- rev_length in H6 at 1. rewrite <- rev_length in H4 at 1.
+      rewrite <- H8 in H6 at 1. rewrite <- length_rev in H6 at 1. rewrite <- length_rev in H4 at 1.
       rewrite skipn_all in H4, H6. simpl in H4, H6. congruence.
     - apply (f_equal (firstn end_ind)) in H4, H6. rewrite firstn_app in H4, H6.
-      subst end_ind. rewrite rev_length in H4, H6.
+      subst end_ind. rewrite length_rev in H4, H6.
       rewrite H8 in H6. rewrite Nat.sub_diag in H4, H6. rewrite <- H8 in H6 at 1.
-      rewrite <- rev_length in H4 at 1, H6 at 1. rewrite firstn_all in H4, H6.
+      rewrite <- length_rev in H4 at 1, H6 at 1. rewrite firstn_all in H4, H6.
       simpl in H4, H6. rewrite app_nil_r in H4, H6.
-      apply (f_equal (rev (A := Character))) in H4, H6. rewrite rev_involutive in H4, H6. congruence. 
+      apply (f_equal (rev (A := Character))) in H4, H6. rewrite rev_involutive in H4, H6. congruence.
   Qed.
 
   Lemma strict_suffix_irreflexive_bool:
@@ -146,7 +146,7 @@ Section MSInput.
     intros ms [next pref] Hmsinp.
     inversion Hmsinp. subst next0 pref0. simpl.
     subst end_ind. split. 1: lia.
-    rewrite <- H3, app_length, rev_length. lia.
+    rewrite <- H3, length_app, length_rev. lia.
   Qed.
 
   (* Corollary with a compatible input string. *)
@@ -184,7 +184,7 @@ Section MSInput.
     2: exfalso; eapply error_succ_abs; eauto.
     injection Hgetchr as ->.
     (* Any way to automate this from now on? *)
-    pose proof f_equal (@length Character) Hstr0 as Hstr0len. rewrite app_length in Hstr0len. rewrite <- rev_length in Hlenpref. rewrite <- Hstr0 in Hgetchr'.
+    pose proof f_equal (@length Character) Hstr0 as Hstr0len. rewrite length_app in Hstr0len. rewrite <- length_rev in Hlenpref. rewrite <- Hstr0 in Hgetchr'.
     rewrite nth_error_app2 in Hgetchr' by lia.
     replace (end_ind - length _) with 0 in Hgetchr' by lia.
     destruct next as [|x next']. 1: discriminate.
@@ -203,10 +203,10 @@ Section MSInput.
     inversion Hmatches as [str0 end_ind cap next pref0 Hlenpref Hstr0 Heqms Heqnext].
     subst ms pref0 next. simpl in *.
     split.
-    - apply (f_equal (@length Character)) in Hstr0. rewrite app_length, rev_length, Hlenpref in Hstr0. simpl in Hstr0. lia.
+    - apply (f_equal (@length Character)) in Hstr0. rewrite length_app, length_rev, Hlenpref in Hstr0. simpl in Hstr0. lia.
     - rewrite List.List.Indexing.Int.of_nat.
       unfold List.List.Indexing.Nat.indexing. rewrite <- Hstr0.
-      rewrite nth_error_app2. 2: rewrite rev_length; lia. replace (end_ind - _) with 0 by (rewrite rev_length; lia).
+      rewrite nth_error_app2. 2: rewrite length_rev; lia. replace (end_ind - _) with 0 by (rewrite length_rev; lia).
       auto.
   Qed.
 
@@ -225,9 +225,9 @@ Section MSInput.
     exists pref'. exists next. f_equal. f_equal.
     subst end_ind. replace (Z.of_nat _ - 1)%Z with (Z.of_nat (length pref')) in Hgetchr by lia. rewrite List.List.Indexing.Int.of_nat in Hgetchr.
     rewrite <- Hstr0 in Hgetchr. unfold List.List.Indexing.Nat.indexing in Hgetchr.
-    rewrite nth_error_app1 in Hgetchr. 2: { rewrite app_length, rev_length. simpl. lia. }
-    rewrite nth_error_app2 in Hgetchr. 2: { rewrite rev_length. reflexivity. }
-    replace (length _ - length _) with 0 in Hgetchr. 2: { rewrite rev_length. lia. }
+    rewrite nth_error_app1 in Hgetchr. 2: { rewrite length_app, length_rev. simpl. lia. }
+    rewrite nth_error_app2 in Hgetchr. 2: { rewrite length_rev. reflexivity. }
+    replace (length _ - length _) with 0 in Hgetchr. 2: { rewrite length_rev. lia. }
 
     simpl in *. now injection Hgetchr.
   Qed.
@@ -243,8 +243,8 @@ Section MSInput.
     replace (Z.of_nat end_ind - 1)%Z with (Z.of_nat (length pref)) by lia.
     rewrite List.List.Indexing.Int.of_nat.
     unfold List.List.Indexing.Nat.indexing. rewrite <- Hstr0.
-    rewrite nth_error_app1. 2: { rewrite app_length, rev_length. simpl. lia. }
-    rewrite nth_error_app2. 2: { rewrite rev_length. reflexivity. }
-    rewrite rev_length, Nat.sub_diag. reflexivity.
+    rewrite nth_error_app1. 2: { rewrite length_app, length_rev. simpl. lia. }
+    rewrite nth_error_app2. 2: { rewrite length_rev. reflexivity. }
+    rewrite length_rev, Nat.sub_diag. reflexivity.
   Qed.
 End MSInput.

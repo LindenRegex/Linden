@@ -18,7 +18,7 @@ Section ComputeIsTree.
 
     intros act inp gm dir t. simpl.
     destruct act as [|[reg | inpcheck | gid] acts].
-    1: { 
+    1: {
       intros H. injection H as <-. apply tree_match.
     }
 
@@ -26,7 +26,7 @@ Section ComputeIsTree.
 
     - (* Empty *)
       intros H. apply tree_epsilon. apply IHfuel; auto.
-    
+
     - (* Char *)
       destruct Chars.read_char as [[c nextinp]|] eqn:Hreadchar.
       + destruct (compute_tree rer acts nextinp gm dir fuel) as [treecont|] eqn:Hcomputecont; try discriminate.
@@ -34,16 +34,16 @@ Section ComputeIsTree.
         apply tree_char with (nextinp := nextinp); auto.
       + intros H. injection H as <-.
         apply tree_char_fail. auto.
-    
+
     - (* Disjunction *)
       destruct compute_tree as [t1|] eqn:Hcompute1; try discriminate.
       destruct (compute_tree rer (Areg r2 :: acts)%list inp gm dir fuel) as [t2|] eqn:Hcompute2; try discriminate.
       intros H. injection H as <-.
       apply tree_disj; apply IHfuel; auto.
-    
+
     - (* Sequence *)
       intros Hcompsucc. apply tree_sequence; apply IHfuel; auto.
-    
+
     - (* Quantified *)
       destruct min as [|min'].
       1: destruct delta as [[|n']|].
@@ -74,7 +74,7 @@ Section ComputeIsTree.
         destruct compute_tree as [titer|] eqn:Hiter; simpl; try discriminate.
         intros H. injection H as <-.
         apply tree_quant_forced; auto.
-    
+
     - (* Lookaround *)
       destruct compute_tree as [treelk|] eqn:Htreelk; simpl; try discriminate.
       destruct (lk_result lk treelk gm inp) eqn:LKRES.
@@ -100,7 +100,7 @@ Section ComputeIsTree.
       + (* Anchor is not satisfied *)
         intros H. injection H as <-.
         apply tree_anchor_fail; auto.
-    
+
     - (* Backreference *)
       destruct read_backref as [[br_str nextinp]|] eqn:Hreadbr.
       + (* Success *)
@@ -110,7 +110,7 @@ Section ComputeIsTree.
       + (* Failure *)
         intro H. injection H as <-.
         auto using tree_backref_fail.
-    
+
     - (* Check *)
       destruct is_strict_suffix eqn:Hssuffix.
       + (* Is strict suffix *)

@@ -1,4 +1,4 @@
-Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups Tree.
@@ -30,11 +30,11 @@ Class TSeen (params:LindenParameters) :=
 #[refine]
 Instance TSlist (params:LindenParameters) : TSeen params :=
   { seentrees := list tree;
-    
+
     initial_seentrees := [];
-    
+
     add_seentrees (s:list tree) (t:tree) := t::s;
-    
+
     inseen (s:list tree) (t:tree) :=
       List.existsb (fun x => tree_eqb x t) s;
   }.
@@ -66,10 +66,10 @@ Class VMSeen :=
 (* one instantiation using lists, but you could use anything else *)
 Definition lblbool_eq_dec : forall (l1 l2 : (label*LoopBool)), { l1 = l2 } + { l1 <> l2 }.
 Proof. repeat decide equality. Defined.
-  
+
 Definition lblbool_eqb l1 l2 : bool :=
   match lblbool_eq_dec l1 l2 with | left _ => true | _ => false end.
-  
+
 #[refine]
   Instance VMSlist : VMSeen :=
   { seenpcs := list (label * LoopBool);
@@ -132,4 +132,3 @@ Definition mbt_state_eqb {params:LindenParameters} s1 s2 : bool :=
 (* initial_empty *)
 - auto.
 Defined.
-

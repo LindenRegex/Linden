@@ -11,7 +11,7 @@ Local Open Scope result_flow.
 Section CharDescrCharSet.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
-  
+
   (* Definition *)
   Definition equiv_cd_charset (cd: char_descr) (charset: CharSet) :=
     forall c: Character, char_match rer c cd = CharSet.exist_canonicalized rer charset (Character.canonicalize rer c).
@@ -99,7 +99,7 @@ Section CharDescrCharSet.
     intros HnoDotAll c. unfold char_match. simpl. unfold dot_matches. rewrite HnoDotAll.
     reflexivity.
   Qed.
-    
+
   Lemma equiv_cd_single:
     forall c, equiv_cd_charset (CdSingle c) (CharSet.singleton c).
   Proof.

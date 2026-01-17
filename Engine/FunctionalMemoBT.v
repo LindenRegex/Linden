@@ -1,6 +1,6 @@
 (* The MemoBT algorithm, expressed as a fuel-based function *)
 
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.

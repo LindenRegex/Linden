@@ -34,7 +34,7 @@ and blocked thread, we can do the "acceleration" step, where we jump ahead in th
 to the next position where the prefix matches.
 *)
 
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.

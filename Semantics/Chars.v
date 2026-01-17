@@ -1,4 +1,4 @@
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 From Linden Require Import Utils Parameters LWParameters.
 Import Utils.List.
@@ -127,11 +127,11 @@ Section Chars.
       CharSet.exist_canonicalized rer Characters.all c
     else
       CharSet.exist_canonicalized rer (CharSet.remove_all Characters.all Characters.line_terminators) c.
-  
+
   Fixpoint char_match' (ccan: Character) (cd: char_descr): bool :=
     match cd with
     | CdEmpty => false
-    | CdDot => 
+    | CdDot =>
         dot_matches (RegExpRecord.dotAll rer) ccan
     | CdAll => true
     | CdSingle c' => ccan == Character.canonicalize rer c'

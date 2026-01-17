@@ -146,7 +146,7 @@ Proof.
   - intros * ->%Hl _ ->; reflexivity.
 Qed.
 
-Require Import FMapInterface FMapList FMapFacts.
+From Stdlib Require Import FMapInterface FMapList FMapFacts.
 
 Module Type OrderedTypeWithIrrelevance.
   Declare Module OT: OrderedType.

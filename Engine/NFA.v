@@ -1,4 +1,4 @@
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
@@ -234,26 +234,26 @@ Section NFA.
     - inversion COMPILE.
       destruct (compile r1 (S fresh)) as [bc1 f1] eqn:COMP1. destruct (compile r2 (S f1)) as [bc2 f2] eqn:COMP2.
       inversion H0. subst f2. apply IHr1 in COMP1. apply IHr2 in COMP2. simpl.
-      rewrite <- COMP1 in COMP2. simpl in COMP2. rewrite app_length. simpl. lia.
+      rewrite <- COMP1 in COMP2. simpl in COMP2. rewrite length_app. simpl. lia.
     - inversion COMPILE.
       destruct (compile r1 fresh) as [bc1 f1] eqn:COMP1. destruct (compile r2 f1) as [bc2 f2] eqn:COMP2.
       inversion H0. subst f2. apply IHr1 in COMP1. apply IHr2 in COMP2.
-      rewrite <- COMP1 in COMP2. rewrite app_length. lia.
+      rewrite <- COMP1 in COMP2. rewrite length_app. lia.
     - inversion COMPILE. destruct min.
       2: { inversion H0. simpl. lia. }
       destruct delta.
       + destruct n; try destruct n; try solve[inversion H0; simpl; lia].
-        destruct (compile r (S (S (S fresh)))) as [bc1 f1] eqn:COMP1. 
+        destruct (compile r (S (S (S fresh)))) as [bc1 f1] eqn:COMP1.
         inversion H0. apply IHr in COMP1.
-        subst. simpl. rewrite app_length. simpl. lia.
-      + destruct (compile r (S (S (S fresh)))) as [bc1 f1] eqn:COMP1. 
+        subst. simpl. rewrite length_app. simpl. lia.
+      + destruct (compile r (S (S (S fresh)))) as [bc1 f1] eqn:COMP1.
         inversion H0. apply IHr in COMP1.
-        subst. simpl. rewrite app_length. simpl. lia.
+        subst. simpl. rewrite length_app. simpl. lia.
     - inversion COMPILE.
       destruct (compile r (S fresh)) as [bc1 f1] eqn:COMP1. inversion H0. apply IHr in COMP1.
-      subst. simpl. rewrite app_length. simpl. lia.
-  Qed.    
-  
+      subst. simpl. rewrite length_app. simpl. lia.
+  Qed.
+
   (* this shows that the compilation function adheres to the representation predicate *)
   Theorem compile_nfa_rep:
     forall r c start endl prev,
@@ -268,7 +268,7 @@ Section NFA.
       inversion H2. subst. apply nfa_rep_disj with (end1:=end1).
       + rewrite get_first. simpl. auto.
       + apply IHr1 with (prev:=prev ++ [Fork (S (length prev)) (S end1)]) in COMP1.
-        2: { rewrite app_length. simpl. lia. }
+        2: { rewrite length_app. simpl. lia. }
         replace (prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
           (((prev ++ [Fork (S (length prev)) (S end1)]) ++ bc1) ++ (Jmp endl :: bc2)).
         2:{ rewrite <- app_assoc. rewrite <- app_assoc. auto. }
@@ -282,14 +282,14 @@ Section NFA.
           2: { rewrite <- app_assoc. simpl. apply f_equal. apply f_equal. rewrite <- app_assoc. auto. }
           auto.
         * apply fresh_correct in COMP1. rewrite <- COMP1. simpl.
-          rewrite app_length. simpl. rewrite app_length. simpl. lia.
+          rewrite length_app. simpl. rewrite length_app. simpl. lia.
     - inversion H. destruct (compile r1 start) as [bc1 end1] eqn:COMP1. destruct (compile r2 end1) as [bc2 end2] eqn:COMP2.
       inversion H2. subst. econstructor.
       + apply IHr1 with (prev:=prev) in COMP1; auto.
         rewrite app_assoc. apply nfa_rep_extend. eauto.
       + apply IHr2 with (prev:=prev ++ bc1) in COMP2; auto.
         * rewrite app_assoc. auto.
-        * apply fresh_correct in COMP1. rewrite app_length. lia.
+        * apply fresh_correct in COMP1. rewrite length_app. lia.
     - inversion H. destruct min.
       2: { inversion H2. subst. apply nfa_unsupported.
           - unfold not. intros. inversion H0.
@@ -308,12 +308,12 @@ Section NFA.
                ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
              2: { rewrite <- app_assoc. auto. }
              apply nfa_rep_extend. auto.
-          ** rewrite app_length. simpl. lia.
+          ** rewrite length_app. simpl. lia.
         * replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
             ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
           2: { rewrite <- app_assoc. auto. }
           apply fresh_correct in COMP1. subst. apply get_first_0.
-          simpl. rewrite app_length. simpl. lia.
+          simpl. rewrite length_app. simpl. lia.
       (* Star *)
       + destruct (compile r (S (S (S start)))) as [bc1 end1] eqn:COMP1. inversion H2. subst. constructor.
         * rewrite get_first. simpl. auto.
@@ -325,12 +325,12 @@ Section NFA.
                ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
              2: { rewrite <- app_assoc. auto. }
              apply nfa_rep_extend. auto.
-          ** rewrite app_length. simpl. lia.
+          ** rewrite length_app. simpl. lia.
         * replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
             ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
           2: { rewrite <- app_assoc. auto. }
           apply fresh_correct in COMP1. subst. apply get_first_0.
-          simpl. rewrite app_length. simpl. lia.
+          simpl. rewrite length_app. simpl. lia.
       (* Unsupported *)
       + assert (([KillThread], S start) = (c,endl)).
         { destruct delta'; auto. lia. destruct delta'; auto. lia. }
@@ -344,13 +344,13 @@ Section NFA.
       constructor.
       + rewrite get_first. simpl. auto.
       +  apply IHr with (prev:=prev ++ [SetRegOpen id]) in COMP1.
-        2: { rewrite app_length. simpl. lia. }
+        2: { rewrite length_app. simpl. lia. }
         replace (prev ++ SetRegOpen id :: bc1 ++ [SetRegClose id]) with ((prev ++ SetRegOpen id :: bc1) ++ [SetRegClose id]).
         2:{ rewrite <- app_assoc. auto. }
         apply nfa_rep_extend. rewrite <- app_assoc in COMP1. simpl in COMP1. auto.
       + replace (prev ++ SetRegOpen id :: bc1 ++ [SetRegClose id]) with ((prev ++ SetRegOpen id :: bc1) ++ [SetRegClose id]).
         2:{ rewrite <- app_assoc. auto. }
-        apply get_first_0. apply fresh_correct in COMP1. subst. rewrite app_length. simpl. lia.
+        apply get_first_0. apply fresh_correct in COMP1. subst. rewrite length_app. simpl. lia.
     - inversion H. subst. constructor. apply get_first.
     - inversion H. subst. apply nfa_unsupported.
       + unfold not. intros. inversion H0.

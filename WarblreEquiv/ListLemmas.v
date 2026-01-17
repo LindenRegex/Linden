@@ -29,7 +29,7 @@ Lemma skipn_ind_inv {A: Type}:
 Proof.
   intros i1 i2 l Hi1valid Hi2valid Hskipn.
   apply (f_equal (length (A := A))) in Hskipn.
-  do 2 rewrite skipn_length in Hskipn.
+  do 2 rewrite length_skipn in Hskipn.
   lia.
 Qed.
 
@@ -45,11 +45,11 @@ Proof.
   intros pref next str0 endInd1 Hconcat Hlenpref.
   apply (f_equal (skipn (Z.to_nat endInd1))) in Hconcat.
   rewrite skipn_app in Hconcat.
-  rewrite rev_length in Hconcat.
+  rewrite length_rev in Hconcat.
   replace (Z.to_nat endInd1 - length pref) with 0 in Hconcat by lia.
   simpl in Hconcat.
   replace (Z.to_nat endInd1) with (length pref) in Hconcat by lia.
-  rewrite <- rev_length in Hconcat at 1.
+  rewrite <- length_rev in Hconcat at 1.
   rewrite skipn_all in Hconcat.
   now replace (Z.to_nat endInd1) with (length pref) by lia.
 Qed.

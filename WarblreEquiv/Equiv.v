@@ -120,7 +120,7 @@ Section Equiv.
 
       (* About mc ms *)
       unfold equiv_cont in Hequivcont. specialize (Hequivcont gm ms inp).
-      
+
       (* Deduplicate Linden part *)
       set (topt := (match compute_tree rer _ inp _ dir fueltree with | Some titer => _ | None => None end)).
       replace (match delta with | NoI.N n => _ | +∞ => _ end) with topt.
@@ -151,7 +151,7 @@ Section Equiv.
         destruct resloop as [resloopms|]; simpl in *.
         + injection Hres as <-. inversion Hequiv. simpl. unfold gmreset in H. rewrite <- H. simpl. constructor; assumption.
         + inversion Hequiv. simpl. unfold gmreset in H0. rewrite <- H0. simpl. eapply Hequivcont; eauto using ms_valid_wrt_checks_tail.
-      
+
       - destruct (mc ms) as [resskip|] eqn:Hresskipsucc; simpl; try discriminate.
         (* Probably similar to greedy case *)
         specialize (Hequivcont resskip fueltree tskip Hinpcompat Hgmms Hgmgl Hmsinp).
@@ -426,7 +426,7 @@ Section Equiv.
              unfold equiv_cont in Hequivcont.
              (*rewrite <- Hfirstn_next_substr.*)
              replace (length (List.firstn _ next)) with (Z.to_nat rlen).
-             2: { symmetry in Hoobiff. rewrite Nat.leb_gt in Hoobiff. rewrite List.firstn_length. lia. }
+             2: { symmetry in Hoobiff. rewrite Nat.leb_gt in Hoobiff. rewrite List.length_firstn. lia. }
              fold inp'.
              apply Hequivcont with (ms := ms') (fuel := fuel); auto.
              (* Remains to prove that the new MatchState remains valid with respect to the checks in act *)
@@ -435,7 +435,7 @@ Section Equiv.
              specialize (Hmschecks inpcheck Hcheckin). inversion Hmschecks as [ms0 inpcheck0 Hendge |]. subst ms0 inpcheck0.
              constructor.
              assert (MatchState.endIndex ms' >= MatchState.endIndex ms)%Z. {
-               unfold ms', endMatch. simpl. lia. 
+               unfold ms', endMatch. simpl. lia.
              }
              lia.
       + (* Backward *)
@@ -483,7 +483,7 @@ Section Equiv.
              intro H. injection H as <-. simpl.
              unfold equiv_cont in Hequivcont.
              replace (length (List.rev _)) with (Z.to_nat rlen).
-             2: { symmetry in Hoobiff. rewrite Nat.leb_gt in Hoobiff. rewrite List.rev_length, List.firstn_length. lia. }
+             2: { symmetry in Hoobiff. rewrite Nat.leb_gt in Hoobiff. rewrite List.length_rev, List.length_firstn. lia. }
              fold inp'.
              apply Hequivcont with (ms := ms') (fuel := fuel); auto.
              (* Remains to prove that the new MatchState remains valid with respect to the checks in act *)
@@ -492,7 +492,7 @@ Section Equiv.
              specialize (Hmschecks inpcheck Hcheckin). inversion Hmschecks as [|ms0 inpcheck0 Hendge]. subst ms0 inpcheck0.
              constructor.
              assert (MatchState.endIndex ms' <= MatchState.endIndex ms)%Z. {
-               unfold ms'. simpl. lia. 
+               unfold ms'. simpl. lia.
              }
              lia.
     - (* Range is undefined *)
@@ -608,12 +608,12 @@ Section Equiv.
       simpl.
       intro Hsubtreesucc.
       eapply Hequivcont; eauto using ms_valid_wrt_checks_tail.
-  
+
     - (* Character *)
       intros ctx Hroot Heqn Heqnm m dir Hcompsucc.
       injection Hcompsucc as <-.
       apply charSetMatcher_equiv with (inv := false); auto. apply equiv_cd_single.
-    
+
     - (* Dot *)
       intros ctx Hroot Heqn Heqnm m dir Hcompsucc.
       injection Hcompsucc as <-.
@@ -639,15 +639,15 @@ Section Equiv.
       intro H. injection H as <-.
       rewrite <- (NonNegInt.to_positive_soundness gid gid' Hgidpos).
       auto using backref_equiv.
-    
+
     - (* AtomEsc (ACharacterClassEsc esc); idem *)
       intros ctx Hroot Heqn Heqnm m dir Hcompsucc.
       eapply characterClassEscape_equiv with (nm := nm); eauto. constructor. assumption.
-    
+
     - (* AtomEsc (ACharacterEsc esc); idem *)
       intros ctx Hroot Heqn Heqnm m dir Hcompsucc.
       eapply characterEscape_equiv; eauto.
-    
+
     - (* CharacterClass; idem *)
       intros ctx Hroot Heqn Heqnm m dir Hcompsucc.
       eapply characterClass_equiv; eauto.
@@ -878,10 +878,10 @@ Section Equiv.
         * eauto using ms_valid_wrt_checks_tail.
         * eauto using noforb_tail.
 
-      
+
     - (* Anchor *)
       intros ctx Hroot Heqn Heqnm m dir. inversion Hanchequiv as [Heqwr Heqlanchor | Heqwr Heqlanchor | Heqwr Heqlanchor | Heqwr Heqlanchor].
-      
+
       + (* Input start *)
         simpl. intro H. injection H as <-.
         unfold equiv_matcher. intros str0 mc gl forbgroups act Hequivcont Hgldisj Hdef_forbid_disj.
@@ -917,7 +917,7 @@ Section Equiv.
                 simpl in *. auto. (* Copy-pasted... *)
              ++ intros H H0. injection H as <-. injection H0 as <-. simpl. constructor.
           -- intro H. injection H as <-. intro H. injection H as <-. simpl. constructor.
-      
+
       + (* Input end *)
         simpl. intro H. injection H as <-.
         unfold equiv_matcher. intros str0 mc gl forbgroups act Hequivcont Hgldisj Hdef_forbid_disj.
@@ -949,7 +949,7 @@ Section Equiv.
                 simpl in *. auto. (* Copy-pasted... *)
              ++ intros H H0. injection H as <-. injection H0 as <-. simpl. constructor.
           -- intro H. injection H as <-. intro H. injection H as <-. simpl. constructor.
-        
+
       + (* Word boundary *)
         simpl. intro H. injection H as <-.
         unfold equiv_matcher. intros str0 mc gl forbgroups act Hequivcont Hgldisj Hdef_forbid_disj.
@@ -970,7 +970,7 @@ Section Equiv.
           intro Hres. injection Hres as <-.
           unfold anchor_satisfied. destruct inp as [next pref].
           setoid_rewrite <- Hisboundary. intro H. injection H as <-. simpl. constructor.
-        
+
       + (* Non word boundary *)
         simpl. intro H. injection H as <-.
         unfold equiv_matcher. intros str0 mc gl forbgroups act Hequivcont Hgldisj Hdef_forbid_disj.

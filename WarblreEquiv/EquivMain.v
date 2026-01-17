@@ -26,7 +26,7 @@ Section EquivMain.
     Definition init_match_state (str0: string) (idx: nat) (rer: RegExpRecord): MatchState :=
       let cap := List.repeat undefined (RegExpRecord.capturingGroupsCount rer) in
       match_state str0 (Z.of_nat idx) cap.
-    
+
     (* Such an initial match state is equivalent to the empty group map... *)
     Lemma init_ms_equiv_empty:
       forall str0 idx rer, equiv_groupmap_ms GroupMap.empty (init_match_state str0 idx rer).
@@ -61,7 +61,7 @@ Section EquivMain.
     Qed.
 
   End InitState.
-  
+
 
   (** ** Plugging the identity MatcherContinuation into a Matcher compiled from some root regexp *)
   Theorem equiv_matcher_idmcont_compsucc:
@@ -93,7 +93,7 @@ Section EquivMain.
       (idx inp <=? length (input_str inp)) = true.
   Proof.
     intros [next pref]. apply Nat.leb_le.
-    simpl. rewrite app_length, rev_length. lia.
+    simpl. rewrite length_app, length_rev. lia.
   Qed.
 
   Lemma input_compat_self:
