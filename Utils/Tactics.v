@@ -28,6 +28,18 @@ Ltac boolprop := repeat match goal with
   | [ H: (?p1 \/ ?p2) |- _ ] => destruct H
 end.
 
+(* splits an if statement *)
+Ltac case_if_impl T := match T with
+  | context[if ?E then _ else _] => destruct E eqn:?Heq
+  | _ => fail "case_if: no if statement found in" T
+  end.
+Ltac case_if_any_impl := match goal with
+  | |- ?T => case_if_impl T
+  | H: ?T |- _ => case_if_impl T
+  end.
+Tactic Notation "case_if" := case_if_any_impl.
+Tactic Notation "case_if" "in" hyp(H) := case_if_impl H.
+
 (* A tactic that, when given a hypothesis H: P -> Q, asks to prove P in one branch (running tactic tac first) and specializes H with the proven property in the other branch. *)
 Ltac specialize_prove_impl H tac :=
   lazymatch type of H with

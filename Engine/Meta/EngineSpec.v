@@ -3,14 +3,16 @@
 (* This module describes what it means to be a regex engine. *)
 (* We also show that our engines follow these definitions. *)
 
-Require Import List.
+Require Import List Bool.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Semantics Tree.
 From Linden Require Import Parameters LWParameters.
 From Linden Require Import PikeSubset SeenSets FunctionalPikeVM.
+From Linden Require Import FunctionalMemoBT.
 From Linden Require Import Prefix.
 From Linden Require Import Correctness.
+From Linden Require Import Tactics.
 From Warblre Require Import Base RegExpRecord.
 
 
@@ -27,10 +29,10 @@ Class AnchoredEngine := {
   supported_regex: regex -> bool;
 
   (* the execution follows the backtracking tree semantics *)
-  exec_correct: forall r inp tree ol,
+  exec_correct: forall r inp tree,
     supported_regex r = true ->
     is_tree rer [Areg r] inp Groups.GroupMap.empty forward tree ->
-    (first_leaf tree inp = ol <-> exec r inp = ol)
+    first_leaf tree inp = exec r inp
 }.
 
 Definition dot_star : regex :=
@@ -47,10 +49,10 @@ Class UnanchoredEngine := {
   un_supported_regex: regex -> bool;
 
   (* the execution follows the backtracking tree semantics *)
-  un_exec_correct: forall r inp tree ol,
+  un_exec_correct: forall r inp tree,
     un_supported_regex r = true ->
     is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
-    (first_leaf tree inp = ol <-> un_exec r inp = ol)
+    first_leaf tree inp = un_exec r inp
 }.
 End Engines.
 
@@ -78,42 +80,78 @@ Qed.
 #[export] #[refine]
 Instance PikeVMAnchoredEngine: AnchoredEngine rer := {
   exec r inp := match pike_vm_match rer r inp with
-                | OutOfFuel => None
-                | Finished res => res
+                | FunctionalPikeVM.OutOfFuel => None
+                | FunctionalPikeVM.Finished res => res
                 end;
   supported_regex := is_pike_regex;
 }.
   (* exec_correct *)
-  intros r inp tree ol Hsubset Htree.
+  intros r inp tree Hsubset Htree.
   rewrite is_pike_regex_correct in Hsubset.
   pose proof (pike_vm_match_terminates rer r inp Hsubset) as [res Hmatch].
   rewrite Hmatch.
-  split.
-  - intros Hleaf.
-    subst. eauto using pike_vm_match_correct, pike_vm_correct.
-  - intros <-.
-    symmetry. eauto using pike_vm_match_correct, pike_vm_correct.
+  symmetry. eauto using pike_vm_match_correct, pike_vm_correct.
 Qed.
 
 (* we show that the PikeVM fits the scheme of an unanchored engine *)
 #[export] #[refine]
 Instance PikeVMUnanchoredEngine {strs:StrSearch}: UnanchoredEngine rer := {
   un_exec r inp := match pike_vm_match_unanchored rer r inp with
-                | OutOfFuel => None
-                | Finished res => res
+                | FunctionalPikeVM.OutOfFuel => None
+                | FunctionalPikeVM.Finished res => res
                 end;
   un_supported_regex := is_pike_regex;
 }.
   (* un_exec_correct *)
-  intros r inp tree ol Hsubset Htree.
+  intros r inp tree Hsubset Htree.
   rewrite is_pike_regex_correct in Hsubset.
   pose proof (pike_vm_match_terminates_unanchored rer r inp Hsubset) as [res Hmatch].
   rewrite Hmatch.
-  split.
-  - intros Hleaf.
-    subst. eauto using pike_vm_match_correct_unanchored, pike_vm_correct_unanchored.
-  - intros <-.
-    symmetry. eauto using pike_vm_match_correct_unanchored, pike_vm_correct_unanchored.
+  symmetry. eauto using pike_vm_match_correct_unanchored, pike_vm_correct_unanchored.
 Qed.
+
+(* we show that the MemoBT fits the scheme of an anchored engine *)
+#[export] #[refine]
+Instance MemoBTAnchoredEngine: AnchoredEngine rer := {
+  exec r inp := match memobt_match rer r inp with
+                | FunctionalMemoBT.OutOfFuel => None
+                | FunctionalMemoBT.Finished res => res
+                end;
+  supported_regex := is_pike_regex;
+}.
+  (* exec_correct *)
+  intros r inp tree Hsubset Htree.
+  rewrite is_pike_regex_correct in Hsubset.
+  pose proof (memobt_match_terminates rer r inp Hsubset) as [res Hmatch].
+  rewrite Hmatch.
+  symmetry. eauto using memobt_match_correct, memobt_correct.
+Qed.
+
+(* #[export] #[refine]
+Instance StartsWithAnchoredEngine: AnchoredEngine rer := {
+  exec r inp :=
+    match extract_literal rer r with
+    | Exact s =>
+        if starts_with_dec s (next_str inp) then
+          Some (advance_input_n inp (length s) forward, Groups.GroupMap.empty)
+        else None
+    | _ => None
+    end;
+  supported_regex r :=
+    match extract_literal rer r with
+    | Exact _ => (negb (has_asserts r)) && (negb (has_groups r))
+    | _ => false
+    end
+}.
+  (* exec_correct *)
+  intros r inp tree Hsubset Htree.
+  destruct extract_literal as [s| |] eqn:Hextract; try discriminate.
+  boolprop.
+  destruct starts_with_dec as [Hsw|Hnsw]; subst.
+  - split; intros <-; [symmetry|].
+    admit. admit.
+  - split; intros <-; [symmetry|]; eapply extract_literal_prefix_contra; rewrite ?Hextract; eauto.
+Admitted. *)
+
 
 End Instances.

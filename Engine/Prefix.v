@@ -80,15 +80,23 @@ Qed.
 (** * Substring search *)
 
 (* Typeclass describing a substring search routine and its specification *)
+(* FIXME: consider an abstraction of this interface that talks about skipping the input where the engine does not match. This would allow for non-prefix acceleration *)
+(* LATER: consider removing the `starts_with_ss` axiom and weakening StrSearch. This would allow substring procs that don't return matching positions (such as SIMD algs that don't support all needle sizes) *)
 Class StrSearch := {
   str_search : string -> string -> option nat;
 
   (* the found position starts with the searched substring *)
-  starts_with_ss: forall s ss i, str_search ss s = Some i -> starts_with ss (List.skipn i s);
+  starts_with_ss: forall s ss i,
+    str_search ss s = Some i ->
+    starts_with ss (List.skipn i s);
   (* there is no earlier position that starts with the searched substring *)
-  no_earlier: forall s ss i, str_search ss s = Some i -> forall i', i' < i -> ~ (starts_with ss (List.skipn i' s));
+  no_earlier: forall s ss i,
+    str_search ss s = Some i ->
+    forall i', i' < i -> ~ (starts_with ss (List.skipn i' s));
   (* if the substring is not found, it cannot appear at any position of the haystack *)
-  not_found: forall s ss, str_search ss s = None -> forall i, i <= length s -> ~ (starts_with ss (List.skipn i s))
+  not_found: forall s ss,
+    str_search ss s = None ->
+    forall i, i <= length s -> ~ (starts_with ss (List.skipn i s))
 }.
 
 Lemma str_search_bound {strs: StrSearch}:
@@ -729,7 +737,7 @@ Proof.
     destruct rest; simpl; eauto with prefix.
   (* CdUnion *)
   - unfold_match Hmatch no_i_flag. simpl in Hmatch.
-    apply Bool.orb_prop in Hmatch. destruct Hmatch; simpl.
+    boolprop.
     + etransitivity.
       * eapply starts_with_chain_merge_literals.
         intro. eapply extract_literal_char_impossible_no_match; eauto.
@@ -764,7 +772,7 @@ Proof.
     try discriminate Hleaf.
   (* tree_char *)
   - (* there is a character to read *)
-    unfold read_char in READ; destruct inp; destruct next; try discriminate READ; subst;
+    unfold read_char in READ; destruct inp; destruct next; try discriminate READ; subst.
     (* the character matches *)
     destruct char_match eqn:Heqmatch; try discriminate READ; injection READ; intros; subst.
     apply chain_literals_extract_char; eauto.
@@ -777,7 +785,7 @@ Proof.
       pose proof (tree_res_cannot_be_impossible_literal _ _ _ _ _ _ _ Htree2 Hleaf).
       etransitivity; eauto using starts_with_chain_merge_literals.
   (* tree_sequence *)
-  - simpl. rewrite <-chain_literals_assoc.
+  - rewrite <-chain_literals_assoc.
     eauto.
   (* tree_quant_forced *)
   - simpl in IHHtree |- *. rewrite no_i_flag in IHHtree.
@@ -795,8 +803,7 @@ Proof.
     + destruct plus. destruct n.
       all: rewrite <- chain_literals_assoc; eapply IHHtree; eauto.
   (* tree_quant_free *)
-  - simpl.
-    destruct plus; destruct extract_actions_literal; constructor.
+  - destruct plus; destruct extract_actions_literal; constructor.
 Qed.
 
 (* main theorem: every match starts with the extracted literal *)
@@ -892,6 +899,29 @@ Proof.
   unfold first_leaf in *. simpl.
   now rewrite Hnotfound, ISTREE1.
 Qed.
+
+
+(** * Exact literals matching *)
+
+
+(* whether a regex has assertions that do not contribute to the match range *)
+Fixpoint has_asserts (r:regex) : bool :=
+  match r with
+  | Lookaround _ _ | Anchor _ => true
+  | Sequence r1 r2 | Disjunction r1 r2 => has_asserts r1 || has_asserts r2
+  | Group _ r' | Quantified _ _ _ r' => has_asserts r'
+  | Regex.Character _ | Epsilon | Backreference _ => false
+  end.
+
+Lemma no_asserts_exact_literal {strs:StrSearch}:
+  forall r inp p inp' tree gm,
+    has_asserts r = false ->
+    extract_literal r = Exact p ->
+    is_tree rer [Areg (lazy_prefix r)] inp gm forward tree ->
+    input_search p inp = Some inp' ->
+    exists gm', first_leaf tree inp = Some (advance_input_n inp' (length p) forward, gm').
+Proof.
+Admitted.
 
 
 (** * Extracted literals size *)
