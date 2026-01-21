@@ -3,7 +3,7 @@
 (* The PikeVM algorithm, expressed as small-step semantics on the bytecode NFA *)
 (* It records the code labels it has already handled to avoid doing work twice *)
 
-(* 
+(*
 Anchored vs unanchored PikeVM:
 
 The PikeVM can operate in two modes: anchored and unanchored. Which mode we operate
@@ -136,18 +136,18 @@ Definition epsilon_step (t:thread) (c:code) (i:input): epsilon_result :=
 
 (* semantic states of the PikeVM algorithm *)
 Inductive pike_vm_state : Type :=
-| PVS (inp:input) (active: list thread) (best: option leaf) (blocked: list thread) (nextprefix: option (nat * literal)) (seen: seenpcs)
+| PVS (inp:input) (active: list thread) (best: option leaf) (blocked: list thread) (nextprefix: option (nat * literal * StrSearch)) (seen: seenpcs)
 | PVS_final (best: option leaf).
 
 (* given an input and literal, we compute the next prefix counter *)
 (* since the counter is always offset by one, we first try to advance the input before performing a prefix search *)
-Definition next_prefix_counter {strs:StrSearch} (inp: input) (lit: literal) : option (nat * literal) :=
+Definition next_prefix_counter {strs:StrSearch} (inp: input) (lit: literal) : option (nat * literal * StrSearch) :=
   match advance_input inp forward with
   | None => None
   | Some (Input next pref) =>
       match str_search (prefix lit) next with
       | None => None
-      | Some n => Some (n, lit)
+      | Some n => Some (n, lit, strs)
       end
   end.
 
@@ -162,7 +162,7 @@ Definition pike_vm_initial_state (inp:input) : pike_vm_state :=
 
 
 (* small-step semantics for the PikeVM algorithm *)
-Inductive pike_vm_step {strs:StrSearch} (c:code): pike_vm_state -> pike_vm_state -> Prop :=
+Inductive pike_vm_step (c:code): pike_vm_state -> pike_vm_state -> Prop :=
 | pvs_final:
 (* moving to a final state when there are no more active or blocked threads *)
   forall inp best seen,
@@ -170,9 +170,9 @@ Inductive pike_vm_step {strs:StrSearch} (c:code): pike_vm_state -> pike_vm_state
 | pvs_acc:
 (* if there are no more active or blocked threads and we know where the next prefix matches, *)
 (* we accelerate to that point *)
-  forall inp best n lit nextinp seen
+  forall inp best n lit strs nextinp seen
     (ADVANCE: advance_input_n inp (S n) forward = nextinp),
-    pike_vm_step c (PVS inp [] best [] (Some (n, lit)) seen) (PVS nextinp [pike_vm_initial_thread] best [] (next_prefix_counter nextinp lit) initial_seenpcs)
+    pike_vm_step c (PVS inp [] best [] (Some (n, lit, strs)) seen) (PVS nextinp [pike_vm_initial_thread] best [] (next_prefix_counter nextinp lit) initial_seenpcs)
 | pvs_end:
   (* when the list of active is empty and we've reached the end of string *)
   (* in practice, this rule is never used because we can have no blocked threads *)
@@ -191,16 +191,16 @@ Inductive pike_vm_step {strs:StrSearch} (c:code): pike_vm_state -> pike_vm_state
   (* when the list of active threads is empty (but not blocked), restart from the blocked ones, proceeding to the next character *)
   (* since the nextprefix counter reached zero, we must also append as lowest priority the initial thread *)
   (* reset the set of seen pcs *)
-  forall inp1 inp2 best lit thr blocked seen
+  forall inp1 inp2 best lit strs thr blocked seen
     (ADVANCE: advance_input inp1 forward = Some inp2),
-    pike_vm_step c (PVS inp1 [] best (thr::blocked) (Some (0, lit)) seen) (PVS inp2 ((thr::blocked) ++ [pike_vm_initial_thread]) best [] (next_prefix_counter inp2 lit) initial_seenpcs)
+    pike_vm_step c (PVS inp1 [] best (thr::blocked) (Some (0, lit, strs)) seen) (PVS inp2 ((thr::blocked) ++ [pike_vm_initial_thread]) best [] (next_prefix_counter inp2 lit) initial_seenpcs)
 | pvs_nextchar_filter:
   (* when the list of active threads is empty (but not blocked), restart from the blocked ones, proceeding to the next character *)
   (* since the nextprefix counter is nonzero, we do not append the initial thread *)
   (* reset the set of seen pcs *)
-  forall inp1 inp2 best n lit thr blocked seen
+  forall inp1 inp2 best n lit strs thr blocked seen
     (ADVANCE: advance_input inp1 forward = Some inp2),
-    pike_vm_step c (PVS inp1 [] best (thr::blocked) (Some (S n, lit)) seen) (PVS inp2 (thr::blocked) best [] (Some (n, lit)) initial_seenpcs)
+    pike_vm_step c (PVS inp1 [] best (thr::blocked) (Some (S n, lit, strs)) seen) (PVS inp2 (thr::blocked) best [] (Some (n, lit, strs)) initial_seenpcs)
 | pvs_skip:
   (* when the pc has already been seen at this current index, we skip it entirely *)
   forall inp t active best blocked nextprefix seen
@@ -227,7 +227,7 @@ Inductive pike_vm_step {strs:StrSearch} (c:code): pike_vm_state -> pike_vm_state
 
 (** * PikeVM properties  *)
 
-Theorem pikevm_deterministic {strs:StrSearch}:
+Theorem pikevm_deterministic:
   forall c pvso pvs1 pvs2
     (STEP1: pike_vm_step c pvso pvs1)
     (STEP2: pike_vm_step c pvso pvs2),
@@ -252,7 +252,7 @@ Proof.
     subst. auto.
 Qed.
 
-Theorem pikevm_progress {strs:StrSearch}:
+Theorem pikevm_progress:
   forall c inp active best blocked nextprefix seen,
   exists pvs_next,
     pike_vm_step c (PVS inp active best blocked nextprefix seen) pvs_next.
@@ -261,11 +261,11 @@ Proof.
   destruct active as [|[[pc gm] b] active].
   - destruct blocked as [|t blocked].
     + destruct nextprefix.
-      * destruct p. eexists. now apply pvs_acc.
+      * destruct p as [[n lit] strs]. eexists. now apply pvs_acc.
       * eexists. apply pvs_final.
     + destruct (advance_input inp forward) eqn:INP.
       * destruct nextprefix.
-        -- destruct p as [n lit], n.
+        -- destruct p as [[n lit] strs], n.
           ++ eexists. apply pvs_nextchar_generate. eauto.
           ++ eexists. apply pvs_nextchar_filter. eauto.
         -- eexists. apply pvs_nextchar. eauto.

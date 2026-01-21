@@ -15,7 +15,6 @@ From Linden Require Import FunctionalUtils FunctionalSemantics.
 Section FunctionalPikeVM.
   Context {params: LindenParameters}.
   Context {VMS: VMSeen}.
-  Context {strs:StrSearch}.
   Context (rer: RegExpRecord).
 (** * Functional Definition  *)
 
@@ -29,7 +28,7 @@ Definition pike_vm_func_step (c:code) (pvs:pike_vm_state) : pike_vm_state :=
           match blocked with
           | [] =>
               match nextprefix with
-              | Some (n, lit) =>
+              | Some (n, lit, strs) =>
                 let nextinp := advance_input_n inp (S n) forward in
                 PVS nextinp [pike_vm_initial_thread] best [] (next_prefix_counter nextinp lit) initial_seenpcs (* pvs_acc *)
               | None => PVS_final best (* pvs_final *)
@@ -40,8 +39,8 @@ Definition pike_vm_func_step (c:code) (pvs:pike_vm_state) : pike_vm_state :=
               | Some nextinp =>
                   match nextprefix with
                   | None => PVS nextinp (thr::blocked) best [] None initial_seenpcs (* pvs_nextchar *)
-                  | Some (0, lit) => PVS nextinp (thr::blocked ++ [pike_vm_initial_thread]) best [] (next_prefix_counter nextinp lit) initial_seenpcs (* pvs_nextchar_generate *)
-                  | Some (S n, lit) => PVS nextinp (thr::blocked) best [] (Some (n, lit)) initial_seenpcs (* pvs_nextchar_filter *)
+                  | Some (0, lit, strs) => PVS nextinp (thr::blocked ++ [pike_vm_initial_thread]) best [] (next_prefix_counter nextinp lit) initial_seenpcs (* pvs_nextchar_generate *)
+                  | Some (S n, lit, strs) => PVS nextinp (thr::blocked) best [] (Some (n, lit, strs)) initial_seenpcs (* pvs_nextchar_filter *)
                   end
               end
           end
@@ -76,7 +75,7 @@ Fixpoint pike_vm_loop (c:code) (pvs:pike_vm_state) (fuel:nat) : pike_vm_state :=
 
 (* an upper bound for the fuel necessary to compute a result *)
 Definition vm_fuel (r:regex) (inp:input) : nat :=
-  complexity r inp. 
+  complexity r inp.
 
 Inductive matchres : Type :=
 | OutOfFuel
@@ -96,7 +95,7 @@ Definition pike_vm_match (r:regex) (inp:input) : matchres :=
   getres (pike_vm_loop code pvsinit fuel).
 
 (* Functional version of the unanchored PikeVM *)
-Definition pike_vm_match_unanchored (r:regex) (inp:input) : matchres :=
+Definition pike_vm_match_unanchored {strs:StrSearch} (r:regex) (inp:input) : matchres :=
   let code := compilation r in
   let fuel := vm_fuel r inp in
   let pvsinit := pike_vm_initial_state_unanchored (extract_literal rer r) inp in
@@ -179,7 +178,7 @@ Proof.
 Qed.
 
 (* when the function finishes, it returns the correct result *)
-Theorem pike_vm_match_correct_unanchored:
+Theorem pike_vm_match_correct_unanchored {strs:StrSearch}:
   forall r inp result,
     pike_vm_match_unanchored r inp = Finished result ->
     trc_pike_vm rer (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (PVS_final result).
@@ -196,7 +195,7 @@ Theorem pike_vm_match_terminates:
     exists result, pike_vm_match r inp = Finished result.
 Proof.
   intros r inp SUBSET. unfold pike_vm_match, vm_fuel.
-  apply pikevm_complexity with (strs:=strs) (VMS:=VMS) (rer:=rer) (inp:=inp) in SUBSET as [result TERM].
+  apply pikevm_complexity with (VMS:=VMS) (rer:=rer) (inp:=inp) in SUBSET as [result TERM].
   exists result. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
@@ -210,8 +209,6 @@ Require Import Coq.Strings.Ascii Coq.Strings.String.
 Open Scope string_scope.
 
 Section Example.
-  Context {strs: StrSearch}.
-
   (** * Nullable Quantifier Example *)
   (* Matching ((a|epsilon)(epsilon|b))* on string "ab" matches "ab", a specificity of Javascript semantics *)
 

@@ -40,7 +40,6 @@ Qed.
 Section Correctness.
   Context {params: LindenParameters}.
   Context {VMS: VMSeen}.
-  Context {strs: StrSearch}.
   Context (rer: RegExpRecord).
 
 Definition trc_pike_tree := @trc pike_tree_state pike_tree_step.
@@ -80,7 +79,7 @@ Proof.
   - eapply compilation_stutter_wf; eauto.
 Qed.
 
-Theorem pike_vm_to_pike_tree_unanchored:
+Theorem pike_vm_to_pike_tree_unanchored {strs:StrSearch}:
   forall r inp tree result future_tree,
     pike_regex r ->
     bool_tree rer [Areg r] inp CanExit tree ->
@@ -133,7 +132,7 @@ Proof.
   inversion FINALINV. subst. auto.
 Qed.
 
-Theorem pike_vm_correct_unanchored:
+Theorem pike_vm_correct_unanchored {strs:StrSearch}:
   forall r inp tree result,
     (* the regex `r` is in the supported subset *)
     pike_regex r ->
@@ -254,7 +253,7 @@ Qed.
 (* Any execution of MemoBT to a final state corresponds to an execution of MemoTree *)
 Theorem memobt_to_memotree:
   forall r inp tree result,
-    pike_regex r -> 
+    pike_regex r ->
     bool_tree rer [Areg r] inp CanExit tree ->
     trc_memo_bt (compilation r) (MemoBT.initial_state inp) (MBT_final result) ->
     trc_memo_tree (initial_tree_state tree inp) (MTree_final result).
@@ -279,7 +278,7 @@ Proof.
   apply IHTRC. eapply memotree_preservation; eauto.
 Qed.
 
-  
+
 (** * Correctness Theorem of the PikeVM result  *)
 
 Theorem memobt_correct:
