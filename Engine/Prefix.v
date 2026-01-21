@@ -913,16 +913,13 @@ Fixpoint has_asserts (r:regex) : bool :=
   | Regex.Character _ | Epsilon | Backreference _ => false
   end.
 
-Lemma no_asserts_exact_literal {strs:StrSearch}:
-  forall r inp p inp' tree gm,
+Conjecture no_asserts_exact_literal :
+  forall r inp p inp' tree gm {strs:StrSearch},
     has_asserts r = false ->
     extract_literal r = Exact p ->
     is_tree rer [Areg (lazy_prefix r)] inp gm forward tree ->
     input_search p inp = Some inp' ->
     exists gm', first_leaf tree inp = Some (advance_input_n inp' (length p) forward, gm').
-Proof.
-Admitted.
-
 
 (** * Extracted literals size *)
 

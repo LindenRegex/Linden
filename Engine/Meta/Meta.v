@@ -46,7 +46,6 @@ Definition meta_search_anchored (config:meta_config) (r:regex) (inp:input) : opt
     | None => true
   end in
   if can_use_memobt then
-    (* FIXME: how come we do not need to provide the MemoSet instance? *)
     @exec _ _ (@MemoBTAnchoredEngine _ rer) r inp
   else
     @exec _ _ (@PikeVMAnchoredEngine VMSlist _ rer) r inp.
