@@ -74,7 +74,7 @@ Instance UnanchorEngine {engine:AnchoredEngine rer} (lazy_prefix_supp: lazy_pref
 }.
   (* un_exec_correct *)
   eauto using exec_correct.
-Qed.
+Defined.
 
 (* we show that the PikeVM fits the scheme of an anchored engine *)
 #[export] #[refine]
@@ -91,7 +91,7 @@ Instance PikeVMAnchoredEngine: AnchoredEngine rer := {
   pose proof (pike_vm_match_terminates rer r inp Hsubset) as [res Hmatch].
   rewrite Hmatch.
   symmetry. eauto using pike_vm_match_correct, pike_vm_correct.
-Qed.
+Defined.
 
 (* we show that the PikeVM fits the scheme of an unanchored engine *)
 #[export] #[refine]
@@ -108,7 +108,7 @@ Instance PikeVMUnanchoredEngine {strs:StrSearch}: UnanchoredEngine rer := {
   pose proof (pike_vm_match_terminates_unanchored rer r inp Hsubset) as [res Hmatch].
   rewrite Hmatch.
   symmetry. eauto using pike_vm_match_correct_unanchored, pike_vm_correct_unanchored.
-Qed.
+Defined.
 
 (* we show that the MemoBT fits the scheme of an anchored engine *)
 #[export] #[refine]
@@ -125,7 +125,7 @@ Instance MemoBTAnchoredEngine: AnchoredEngine rer := {
   pose proof (memobt_match_terminates rer r inp Hsubset) as [res Hmatch].
   rewrite Hmatch.
   symmetry. eauto using memobt_match_correct, memobt_correct.
-Qed.
+Defined.
 
 (* #[export] #[refine]
 Instance StartsWithAnchoredEngine: AnchoredEngine rer := {
