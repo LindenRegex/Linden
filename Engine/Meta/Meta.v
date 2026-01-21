@@ -60,13 +60,11 @@ Proof.
   intros r inp tree Hsup Htree.
   unfold meta_search_anchored.
   case_if.
-  - eapply exec_correct; eauto.
-    (* FIXME: we forgot that the supported regex is the one from pikevm? *)
-    admit.
-  - eapply exec_correct; eauto.
-    (* FIXME: we forgot that the supported regex is the one from pikevm? *)
-    admit.
-Admitted.
+  - (* use tha MemoBT engine *)
+    eauto using exec_correct.
+  - (* use tha PikeVM engine *)
+    eauto using exec_correct.
+Qed.
 
 Instance MetaSearchAnchored (config:meta_config): AnchoredEngine rer := {
   exec := meta_search_anchored config;
@@ -77,11 +75,7 @@ Instance MetaSearchAnchored (config:meta_config): AnchoredEngine rer := {
 (* MemoBT supports lazy_prefix *)
 Lemma lazy_prefix_supported_memobt:
   @lazy_prefix_supported _ rer (MemoBTAnchoredEngine rer).
-Proof.
-  intros r Hsup.
-  (* FIXME: we forgot that the supported regex is the one from memobt? *)
-  admit.
-Admitted.
+Proof. intro r. eauto. Qed.
 
 Definition search (config:meta_config) (r:regex) (inp:input) : option leaf :=
   match @try_lit_search _ rer BruteForceStrSearch r inp with
@@ -121,15 +115,10 @@ Proof.
     + (* anchored search not applicable, fall back to unanchored search *)
       case_if.
       * (* use tha MemoBT engine *)
-        eapply un_exec_correct; eauto.
-        (* FIXME: we forgot that the supported regex is the one from pikevm? *)
-        admit.
+        eauto using un_exec_correct.
       * (* use tha PikeVM engine *)
-        eapply un_exec_correct; eauto.
-        (* FIXME: we forgot that the supported regex is the one from pikevm? *)
-        admit.
-Admitted.
-
+        eauto using un_exec_correct.
+Qed.
 
 Instance MetaEngine (config:meta_config): UnanchoredEngine rer := {
   un_exec := search config;
