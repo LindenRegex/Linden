@@ -83,7 +83,6 @@ Proof.
   admit.
 Admitted.
 
-(* FIXME: support the MemoBT *)
 Definition search (config:meta_config) (r:regex) (inp:input) : option leaf :=
   match @try_lit_search _ rer BruteForceStrSearch r inp with
   | Some ol => ol
@@ -96,9 +95,9 @@ Definition search (config:meta_config) (r:regex) (inp:input) : option leaf :=
           | None => true
         end in
         if can_use_memobt then
-          @un_exec _ _ (@UnanchorEngine _ rer (@MemoBTAnchoredEngine _ rer) lazy_prefix_supported_memobt) r inp
+          @un_exec _ _ (@SearchAccOnceEngine _ rer BruteForceStrSearch (@UnanchorEngine _ rer (@MemoBTAnchoredEngine _ rer) lazy_prefix_supported_memobt)) r inp
         else
-          @un_exec _ _ (@PikeVMUnanchoredEngine VMSlist _ rer BruteForceStrSearch) r inp
+          @un_exec _ _ (@SearchAccOnceEngine _ rer BruteForceStrSearch (@PikeVMUnanchoredEngine VMSlist _ rer BruteForceStrSearch)) r inp
     end
   end.
 

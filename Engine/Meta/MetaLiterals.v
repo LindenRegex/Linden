@@ -146,6 +146,73 @@ Proof.
     eapply extract_literal_impossible; eauto.
 Qed.
 
+(* unanchored search where we first perform a single prefix acceleration *)
+Definition search_acc_once {strs:StrSearch} {engine:UnanchoredEngine rer} (r:regex) (inp:input) : option leaf :=
+  let p := prefix (extract_literal rer r) in
+  (* we skip the initial input that does not match the prefix *)
+  match (input_search p inp) with
+  | None => None (* if prefix is not present anywhere, then we cannot match *)
+  | Some inp' => un_exec rer r inp'
+  end.
+
+(* the result of unanchored matching is the same for all inputs between inp *)
+(* and the next occurrence of the prefix after inp *)
+Lemma un_exec_all_between_str_search_eq {strs:StrSearch} {engine:UnanchoredEngine rer}:
+  forall i r inp inp',
+    un_supported_regex rer r = true ->
+    input_search (prefix (extract_literal rer r)) inp = Some inp' ->
+    input_prefix i inp' forward ->
+    input_prefix inp i forward ->
+    un_exec rer r i = un_exec rer r inp'.
+Proof.
+  intros i r inp inp' Hsupported Hsearch Hprefix Hlow.
+  remember forward as dir.
+  induction Hprefix; subst.
+  - reflexivity.
+  - erewrite <-IHHprefix; eauto using ip_prev'.
+    destruct inp1 as [next pref], next as [|c next]; [discriminate|inversion H]; subst.
+    pose proof (is_tree_productivity rer [Areg (lazy_prefix r)] (Input (c :: next) pref) Groups.GroupMap.empty forward) as [tree Htree].
+    pose proof (is_tree_productivity rer [Areg (lazy_prefix r)] (Input next (c::pref)) Groups.GroupMap.empty forward) as [tree' Htree'].
+    erewrite <-!un_exec_correct; eauto.
+    inversion Htree. inversion CONT. destruct plus; [discriminate|]. inversion ISTREE1; [|discriminate]. injection READ as <-.
+    unfold first_leaf. subst. simpl. unfold advance_input'. simpl.
+    assert (Hnoskip: tree_res tskip Groups.GroupMap.empty (Input (c :: next) pref) forward = None). {
+      eapply extract_literal_prefix_contra, input_search_no_earlier; eauto.
+      rewrite input_prefix_strict_suffix in Hprefix, Hlow.
+      split; destruct Hprefix, Hlow; subst; eauto using ss_next', ss_advance.
+    }
+    rewrite Hnoskip. simpl.
+    inversion Htree'. inversion TREECONT.
+    + erewrite is_tree_determ with (t1:=tree') (t2:=treecont); eauto.
+    + exfalso. now apply CHECKFAIL, read_suffix.
+Qed.
+
+Theorem search_acc_once_correct {strs:StrSearch} {engine:UnanchoredEngine rer}:
+  forall r inp tree,
+    un_supported_regex rer r = true ->
+    is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
+    first_leaf tree inp = search_acc_once r inp.
+Proof.
+  unfold search_acc_once.
+  intros r inp tree Hsupported Htree.
+  destruct input_search eqn:Hsearch.
+  (* we found a position to start at *)
+  - erewrite un_exec_correct; eauto.
+    assert (input_prefix inp i forward). {
+      apply input_search_strict_suffix in Hsearch.
+      now rewrite <-input_prefix_strict_suffix in Hsearch.
+    }
+    eapply un_exec_all_between_str_search_eq; eauto using ip_eq.
+  (* there is no occurrence of the literal *)
+  - rewrite input_search_none_str_search in Hsearch.
+    eauto using str_search_none_nores_unanchored.
+Qed.
+
+Instance SearchAccOnceEngine {strs:StrSearch} {engine:UnanchoredEngine rer}: UnanchoredEngine rer := {
+  un_exec := search_acc_once;
+  un_supported_regex := un_supported_regex rer;
+  un_exec_correct := search_acc_once_correct
+}.
 
 (** * Bruteforce search *)
 (* We define a search routine which attempts to run an anchored engine at each position *)
@@ -235,29 +302,6 @@ Proof.
   - simpl in *.
     erewrite IHnext. erewrite input_search_exec_none.
     all: eauto using ip_prev'.
-Qed.
-
-Lemma input_search_exec_impossible {strs:StrSearch} {engine:AnchoredEngine rer}:
-  forall inp r,
-    supported_regex rer r = true ->
-    extract_literal rer r = Impossible ->
-    exec rer r inp = None.
-Proof.
-  intros inp r Hsubset Hextract.
-  pose proof (is_tree_productivity rer [Areg r] inp Groups.GroupMap.empty forward) as [tree Htree].
-  erewrite <-exec_correct; eauto.
-  eauto using extract_literal_impossible.
-Qed.
-
-Lemma search_from_impossible_prefix {strs:StrSearch} {engine:AnchoredEngine rer}:
-  forall inp r,
-    supported_regex rer r = true ->
-    extract_literal rer r = Impossible ->
-    search_from r (next_str inp) (pref_str inp) = None.
-Proof.
-  intros [next pref] r Hsubset Hextract.
-  generalize dependent pref.
-  induction next; intros pref; simpl; erewrite input_search_exec_impossible; eauto.
 Qed.
 
 Theorem builtin_exec_equiv {strs:StrSearch} {engine:AnchoredEngine rer}:
