@@ -1,7 +1,119 @@
 From Linden Require Import ProofSetup.
-From Linden.Rewriting Require Import Examples FlatMap ForcedQuant Associativity.
+From Linden.Rewriting Require Import Examples FlatMap ForcedQuant Associativity Distributivity.
 
 Coercion nat_to_N (n: nat) := NoI.N n.
+
+Section UnAmbiguity.
+  Context {params: LindenParameters}.
+  Context (rer: RegExpRecord).
+
+  (* An unambiguous tree is a tree that has at most one matching leaf *)
+  Definition unamb_tree (t:tree): Prop :=
+    forall (i:input) (gm:group_map) (d:Direction),
+      length (tree_leaves t gm i d) <= 1.  
+  
+  Definition unamb (l:list action): Prop:=
+    forall (i:input) (gm:group_map) (d:Direction) (t:tree),
+      is_tree rer l i gm d t ->
+      unamb_tree t.
+
+  (* a naive analyis of non-ambiguity *)
+  Fixpoint na (r:regex) : bool :=
+    match r with
+    | Epsilon | Character _ | Anchor _ | Backreference _ => true
+    | Disjunction _ _ => false
+    | Sequence r1 r2 => andb (na r1) (na r2)
+    | Lookaround _ r1 | Group _ r1 => na r1
+    | Quantified _ min (NoI.N 0) r1 => na r1
+    | Quantified _ _ _ _ => false
+    end.
+
+  Fixpoint na_list (l:list action) : bool :=
+    match l with
+    | [] => true
+    | (Areg r) :: l' => andb (na r) (na_list l')
+    | (Acheck _) :: l' | (Aclose _) :: l' => na_list l'
+    end.
+
+  (* This naive analysis is correct: it only accepts regexes whose trees are unambiguous *)
+  Theorem naive_analysis_correctness:
+    forall l d i gm t,
+      na_list l = true ->
+      is_tree rer l i gm d t ->
+      unamb_tree t.
+  Proof.
+    intros l d i gm t NA TREE.
+    unfold unamb_tree. intros i0 gm0 d0.
+    generalize dependent i0. generalize dependent gm0. generalize dependent d0.
+    induction TREE; intros; simpl; simpl in NA; try lia; auto.
+    - apply andb_true_iff in NA as [NA NAC].
+      apply andb_true_iff in NA as [NA1 NA2].
+      apply IHTREE. destruct dir; simpl; rewrite NA1, NA2, NAC; auto.
+    - destruct plus; try destruct n; inversion NA.
+      apply IHTREE. simpl. apply andb_true_iff in NA as [NA1 NAC].
+      rewrite NA1. rewrite NAC. auto.
+    - apply andb_true_iff in NA as [NA1 NAC]. auto.
+    - destruct plus; try destruct n; inversion NA.
+    - apply andb_true_iff in NA as [NA1 NAC].
+      destruct positivity eqn:POS; destruct tree_leaves as [|[i gm']]; simpl; try lia; auto.
+  Qed.
+
+  Corollary naive_unambiguity:
+    forall r, na r = true -> unamb [Areg r].
+  Proof.
+    unfold unamb. intros r NA i gm d t TREE. eapply naive_analysis_correctness; eauto.
+    simpl. rewrite NA. auto.
+  Qed.
+
+  Lemma FlatMap_one_leaf:
+    forall X Y (x:X) f (y:list Y),
+      FlatMap [x] f y ->
+      f x y.
+  Proof.
+    intros X Y x f y H. inversion H; inversion FM; subst.
+    rewrite app_nil_r. auto.
+  Qed.
+  
+  (* you can distribute an unambiguous regex *)
+  Theorem unamb_distribute:
+    forall r1 r2 r3,
+      def_groups r1 = [] ->
+      unamb [Areg r1] ->
+      (Sequence r1 (Disjunction r2 r3)) ≅[rer] (Disjunction (Sequence r1 r2) (Sequence r1 r3)).
+  Proof.
+    unfold unamb. intros r1 r2 r3 NOGROUP UA.
+    split. { simpl. rewrite NOGROUP. auto. }
+    destruct dir.
+    (* the backward case is true even without unambiguity *)
+    2: { apply Distributivity.LeftBackward.factored_expanded_left_equiv. auto. }
+    (* forward case *)
+    unfold actions_equiv_dir. intros inp gm t1 t2 TREE1 TREE2.
+    inversion TREE2; inversion TREE1; inversion ISTREE1; inversion ISTREE2; subst.
+    clear TREE1 TREE2 ISTREE1 ISTREE2. simpl in *.
+    rename t0 into t12. rename t3 into t13. rename t1 into t123.
+    rename CONT into T123. rename CONT0 into T12. rename CONT1 into T13.
+    specialize (is_tree_productivity rer [Areg r1] inp gm forward) as [t1 TREER1].
+    rewrite app_cons in T123, T12, T13.
+    (* the leaves of t123, t12 and t13 can be expressed as a FlatMap *)
+    eapply leaves_concat with (act1:=[Areg r1]) in T123, T12, T13; eauto.
+    unfold tree_equiv_tr_dir.  simpl.
+    destruct (tree_leaves t1 gm inp forward) as [|[i1 gm1] l] eqn:LEAVES1.
+    (* no leaf in r1: no leaf everywhere *)
+    { inversion T123; inversion T12; inversion T13; subst. constructor. }
+    destruct l as [|].
+    (* there can't be more than one leaf *)
+    2: { apply UA in TREER1. specialize (TREER1 inp gm forward).
+         rewrite LEAVES1 in TREER1. simpl in TREER1. lia. }
+    (* r1 has exactly one leaf: the FlatMaps are simply trees starting from that leaf *)
+    apply FlatMap_one_leaf in T123, T12, T13.
+    inversion T123; inversion TREE; inversion T12; inversion T13; subst.
+    simpl.
+    specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE1 TREE0) as H.
+    specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE2 TREE1) as H1. subst.
+    apply leaves_equiv_refl.
+Qed.
+  
+End UnAmbiguity.
 
 (*|
 # Regexp-tree
