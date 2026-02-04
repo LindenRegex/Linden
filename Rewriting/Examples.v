@@ -45,6 +45,18 @@ Section Utilities.
       all: eauto with is_tree.
   Qed.
 
+    Lemma is_tree_skip_zero_r a i gm dir tr r b:
+    is_tree rer a i gm dir tr ->
+    is_tree rer (a ++ [Areg (Quantified b 0 (NoI.N 0) r)]) i gm dir tr.
+  Proof.
+    induction 1; subst; simpl; eauto with is_tree.
+    - rewrite <- app_assoc in IHis_tree; eauto with is_tree.
+    - destruct greedy, plus; simpl.
+      all: try change (NoI.N (S n)) with (NoI.N 1 + NoI.N n)%NoI.
+      all: try change (NoI.Inf) with (NoI.N 1 + NoI.Inf)%NoI.
+      all: eauto with is_tree.
+  Qed.
+
   Lemma seq_equiv_dir: forall x x' y y' dir, x ≅[rer][dir] x' -> y ≅[rer][dir] y' -> Sequence x y ≅[rer][dir] Sequence x' y'.
   Proof.
     intros x x' y y' [] EQUIV_x EQUIV_y.
@@ -146,4 +158,14 @@ Section Examples.
     2: { destruct plus; discriminate. }
     replace t2 with t1 by eauto using is_tree_determ. reflexivity.
   Qed.
+
+  Lemma quantified_one_equiv r:
+    def_groups r = [] ->
+    forall greedy, Quantified greedy 1 (NoI.N 0) r ≅[rer] r.
+  Proof.
+    tree_equiv_inv; try rewrite H; simpl; eauto.
+    2: { apply (is_tree_skip_zero_r rer [Areg r]). eauto. }
+    apply leaves_equiv_refl.
+  Qed.
+
 End Examples.
