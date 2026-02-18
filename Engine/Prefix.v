@@ -913,7 +913,63 @@ Fixpoint has_asserts (r:regex) : bool :=
   | Regex.Character _ | Epsilon | Backreference _ => false
   end.
 
-Conjecture no_asserts_exact_literal :
+Fixpoint has_asserts_actions (acts: list action) : bool :=
+  match acts with
+  | [] => false
+  | Areg r :: rest => has_asserts r || has_asserts_actions rest
+  | Acheck _ :: rest => has_asserts_actions rest
+  | Aclose _ :: rest => has_asserts_actions rest
+  end.
+
+Lemma no_asserts_exact_literal_general :
+  forall acts tree inp gm p,
+    is_tree rer acts inp gm forward tree ->
+    has_asserts_actions acts = false ->
+    extract_actions_literal acts = Exact p ->
+    starts_with p (next_str inp) ->
+    (exists gm', tree_res tree gm inp forward = Some (advance_input_n inp (length p) forward, gm')).
+Proof.
+  intros acts tree inp gm p Htree.
+  generalize dependent p.
+  remember (forward) as dir.
+  induction Htree; intros; subst.
+  - inversion H0. subst. simpl. rewrite advance_input_n_0. eauto.
+  - simpl in *. destruct extract_actions_literal; try easy. eapply IHHtree; eauto.
+  - admit. (* Maybe Acheck should be deemed as an assertion? *)
+  - simpl in *. destruct extract_actions_literal; try easy. eapply IHHtree; eauto.
+  - simpl in *. destruct RegExpRecord.ignoreCase, extract_actions_literal; try easy. inversion H0; subst. eapply IHHtree; eauto.
+  - admit. (* char match *)
+  - admit. (* char mismatch *)
+  - simpl in *. boolprop. admit. (* disjunction *)
+  - admit. (* sequence *)
+Admitted.
+
+
+Lemma no_asserts_exact_literal :
+  forall r tree inp gm p,
+    is_tree rer [Areg r] inp gm forward tree ->
+    has_asserts r = false ->
+    extract_literal r = Exact p ->
+    starts_with p (next_str inp) ->
+    (exists gm', tree_res tree gm inp forward = Some (advance_input_n inp (length p) forward, gm')).
+Proof.
+  intros.
+  eapply no_asserts_exact_literal_general; eauto.
+  - simpl. now boolprop.
+  - simpl. destruct extract_literal; simpl; now rewrite ?app_nil_r.
+Qed.
+
+Lemma no_asserts_exact_literal_unanchored_bounded {strs:StrSearch} :
+  forall r inp p inp' tree gm,
+    has_asserts r = false ->
+    extract_literal r = Exact p ->
+    is_tree rer [Areg (lazy_prefix r)] inp gm forward tree ->
+    input_search p inp = Some inp' ->
+    exists gm', first_leaf tree inp = Some (advance_input_n inp' (length p) forward, gm').
+Proof.
+Admitted.
+
+Conjecture no_asserts_exact_literal_unanchored :
   forall r inp p inp' tree gm {strs:StrSearch},
     has_asserts r = false ->
     extract_literal r = Exact p ->

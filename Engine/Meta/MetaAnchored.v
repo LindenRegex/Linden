@@ -112,7 +112,7 @@ Proof.
 		+	erewrite res_group_map_indep; eauto.
 	(* tree_lk *)
 	- boolprop.
-		+	destruct lk; try discriminate.
+		+ destruct lk; try discriminate.
 			erewrite IHHtree1; eauto.
 		+ destruct positivity, (tree_res treelk); eauto.
 			destruct l.

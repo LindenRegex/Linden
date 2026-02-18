@@ -124,9 +124,9 @@ Proof.
     (* we found a match *)
     + destruct has_groups eqn:Hgroups; [discriminate|].
       injection Htry as <-.
-      eapply no_asserts_exact_literal in Hsearch as [gm' Hleaf]; eauto.
-      eapply no_groups_empty_gm in Htree; simpl; boolprop; eauto. simpl in Htree. subst.
-      now rewrite Hleaf.
+      eapply no_asserts_exact_literal_unanchored in Hsearch as [gm' Hleaf]; eauto.
+      eapply no_groups_empty_gm in Htree; simpl; boolprop; eauto. simpl in Htree.
+      now subst.
     (* we did not find a match *)
     + injection Htry as <-.
       rewrite input_search_none_str_search in Hsearch.

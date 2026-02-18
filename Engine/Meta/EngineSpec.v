@@ -127,31 +127,4 @@ Instance MemoBTAnchoredEngine: AnchoredEngine rer := {
   symmetry. eauto using memobt_match_correct, memobt_correct.
 Defined.
 
-(* #[export] #[refine]
-Instance StartsWithAnchoredEngine: AnchoredEngine rer := {
-  exec r inp :=
-    match extract_literal rer r with
-    | Exact s =>
-        if starts_with_dec s (next_str inp) then
-          Some (advance_input_n inp (length s) forward, Groups.GroupMap.empty)
-        else None
-    | _ => None
-    end;
-  supported_regex r :=
-    match extract_literal rer r with
-    | Exact _ => (negb (has_asserts r)) && (negb (has_groups r))
-    | _ => false
-    end
-}.
-  (* exec_correct *)
-  intros r inp tree Hsubset Htree.
-  destruct extract_literal as [s| |] eqn:Hextract; try discriminate.
-  boolprop.
-  destruct starts_with_dec as [Hsw|Hnsw]; subst.
-  - split; intros <-; [symmetry|].
-    admit. admit.
-  - split; intros <-; [symmetry|]; eapply extract_literal_prefix_contra; rewrite ?Hextract; eauto.
-Admitted. *)
-
-
 End Instances.
