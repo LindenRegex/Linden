@@ -651,6 +651,25 @@ Proof.
     rewrite free_initial. simpl. lia.
 Qed.
 
+Theorem initial_measure_unanchored {strs:StrSearch}:
+  forall inp r,
+    pike_regex r ->
+    vm_inv (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (complexity r inp).
+Proof.
+  intros inp r SUBSET.
+  replace (complexity r inp) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp).
+  - unfold pike_vm_initial_state_unanchored. rewrite <- compilation_size; auto.
+    constructor; auto.
+    + intros t H. destruct H. 2: inversion H.
+      subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite app_length.
+      simpl. lia.
+    + intros t H. inversion H.
+    + constructor.
+    + intros n lit' strs' H; eapply search_in_range with (strs:=strs); eauto.
+  - unfold complexity, measure. rewrite <- compilation_size; auto. simpl.
+    rewrite free_initial. simpl. lia.
+Qed.
+
 (** * Bounding the number of PikeVM steps  *)
 
 (* A counted transitive reflexive cloture relation *)
@@ -736,6 +755,21 @@ Proof.
   - apply initial_measure. auto.
 Qed.
 
+Theorem pikevm_complexity_unanchored {strs:StrSearch}:
+  forall (r:regex) (inp:input),
+    (* for any supported regex r and input inp *)
+    pike_regex r ->
+    (* The initial state reaches a final state in at most (complexity r inp) steps. *)
+    exists result, steps (pike_vm_step rer (compilation r))
+                (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (complexity r inp) (PVS_final result).
+Proof.
+  intros r inp SUBSET.
+  apply pike_vm_bound.
+  - apply compiled_wf.
+  - apply compilation_nonempty.
+  - apply initial_measure_unanchored; auto.
+Qed.
+
 
 (** * Termination of the PikeVM algorithm  *)
 
@@ -746,6 +780,15 @@ Theorem pike_vm_terminates:
     exists result, trc_pike_vm rer (compilation r) (pike_vm_initial_state inp) (PVS_final result).
 Proof.
   intros r inp H. eapply pikevm_complexity in H as [result STEPS]; eauto.
+  exists result. eapply steps_trc; eauto.
+Qed.
+
+Theorem pike_vm_terminates_unanchored {strs:StrSearch}:
+  forall r inp,
+    pike_regex r ->
+    exists result, trc_pike_vm rer (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (PVS_final result).
+Proof.
+  intros r inp H. eapply pikevm_complexity_unanchored in H as [result STEPS]; eauto.
   exists result. eapply steps_trc; eauto.
 Qed.
 

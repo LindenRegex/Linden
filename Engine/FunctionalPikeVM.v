@@ -199,6 +199,17 @@ Proof.
   exists result. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
+(* the function always terminates *)
+Theorem pike_vm_match_terminates_unanchored {strs:StrSearch}:
+  forall r inp,
+    pike_regex r ->
+    exists result, pike_vm_match_unanchored r inp = Finished result.
+Proof.
+  intros r inp SUBSET. unfold pike_vm_match_unanchored, vm_fuel.
+  apply pikevm_complexity_unanchored with (strs:=strs) (VMS:=VMS) (rer:=rer) (inp:=inp) in SUBSET as [result TERM]; auto.
+  exists result. apply steps_loop in TERM. rewrite TERM. auto.
+Qed.
+
 End FunctionalPikeVM.
 
 (** * Execution Examples  *)
