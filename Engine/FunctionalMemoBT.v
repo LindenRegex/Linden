@@ -148,7 +148,7 @@ Proof.
     erewrite step_loop; eauto.
 Qed.
 
-(* when the function finishes, it retruns the correct result *)
+(* when the function finishes, it returns the correct result *)
 Theorem memobt_match_correct:
   forall r inp result,
     memobt_match r inp = Finished result ->

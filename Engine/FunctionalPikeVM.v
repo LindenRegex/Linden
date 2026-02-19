@@ -166,7 +166,7 @@ Proof.
     erewrite step_loop; eauto.
 Qed.
 
-(* when the function finishes, it retruns the correct result *)
+(* when the function finishes, it returns the correct result *)
 Theorem pike_vm_match_correct:
   forall r inp result,
     pike_vm_match r inp = Finished result ->
