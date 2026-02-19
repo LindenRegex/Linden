@@ -311,6 +311,15 @@ Section Lemmas.
         destruct H as [[HS|HI]|HL]; auto. }
   Qed.
 
+  Lemma leaves_equiv_app_right:
+    forall seen l1 l2 e,
+      leaves_equiv seen l1 l2 ->
+      leaves_equiv seen (l1 ++ e) (l2 ++ e).
+  Proof.
+    intros seen l1 l2 e H. induction H; try solve[constructor; auto].
+    apply leaves_equiv_refl.
+  Qed.
+  
   
   (* Two equivalent lists of leaves either have the same first element or are both empty. *)
   Lemma equiv_head:
