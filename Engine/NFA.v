@@ -405,7 +405,7 @@ Section NFA.
     - being at a BeginLoop instruction, inserted for a quantifier
   *)
 
-  (* With the definitions below, we provide ways to kow when is a state going to stutter *)
+  (* With the definitions below, we provide ways to know when a state is going to stutter *)
 
   (* returns true if that state will stutter *)
   (* or if we are at an unsupported feature *)

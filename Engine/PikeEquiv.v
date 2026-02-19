@@ -588,27 +588,27 @@ Definition head_pc (threadactive:list thread) : label :=
   Only when `n>0` do we know for sure that the tree of the next input position
   has no result.
  *)
-Inductive future_nextprefix (code:code): input -> option tree -> option (nat * literal) -> Prop :=
+Inductive future_nextprefix (code:code): input -> option tree -> option (nat * literal * StrSearch) -> Prop :=
 | nnp_none: forall inp, future_nextprefix code inp None None
 | nnp_filter:
-  forall c next pref future t1 t2 n r lit
+  forall c next pref future t1 t2 n r lit strs
     (FUTURE: future = lazy_iter c t1 t2)
     (COMPILE: compilation r = code)
     (SUBSET: pike_regex r)
     (SHAPE: future_tree_shape rer r (Input (c::next) pref) future)
     (LIT: extract_literal rer r = lit)
     (LEAF: first_leaf t1 (Input next (c::pref)) = None)
-    (REST: future_nextprefix code (Input next (c::pref)) (Some t2) (Some (n, lit))),
-    future_nextprefix code (Input (c::next) pref) (Some future) (Some (S n, lit))
+    (REST: future_nextprefix code (Input next (c::pref)) (Some t2) (Some (n, lit, strs))),
+    future_nextprefix code (Input (c::next) pref) (Some future) (Some (S n, lit, strs))
 | nnp_generate:
-  forall c next pref future t1 t2 r lit
+  forall c next pref future t1 t2 r lit strs
     (FUTURE: future = lazy_iter c t1 t2)
     (COMPILE: compilation r = code)
     (SUBSET: pike_regex r)
     (T1: bool_tree rer [Areg r] (Input next (c::pref)) CanExit t1)
     (T2: future_tree_shape rer r (Input next (c::pref)) t2)
     (LIT: extract_literal rer r = lit),
-    future_nextprefix code (Input (c::next) pref) (Some future) (Some (0, lit)).
+    future_nextprefix code (Input (c::next) pref) (Some future) (Some (0, lit, strs)).
 
 (** * Simulation Invariant *)
 
@@ -619,7 +619,7 @@ Inductive pike_inv (code:code): pike_tree_state -> pike_vm_state -> Prop :=
     (* blocked threads should be equivalent for the next input *)
     (* nothing to say if there is no next input *)
     (BLOCKED: forall nextinp, advance_input inp forward = Some nextinp -> list_tree_thread code nextinp treeblocked threadblocked)
-    (* these two properties are needed to ensure the two algorithms stop at he same time *)
+    (* these two properties are needed to ensure the two algorithms stop at the same time *)
     (ENDVM: advance_input inp forward = None -> threadblocked = [])
     (ENDTREE: advance_input inp forward = None -> treeblocked = [])
     (* any pc in threadseen must correspond to a tree in treeseen *)
@@ -807,14 +807,14 @@ Qed.
 
 (** * Future/Nextprefix invariant lemmas *)
 Lemma future_nextprefix_acceleration:
-  forall code inp future n lit
-    (FUTUREPREFIX: future_nextprefix code inp (Some future) (Some (n, lit))),
+  forall code inp future n lit strs
+    (FUTUREPREFIX: future_nextprefix code inp (Some future) (Some (n, lit, strs))),
     exists acc t: tree, tree_acceleration inp future (advance_input_n inp (S n) forward) acc t.
 Proof.
   destruct inp as [next pref].
   generalize dependent pref.
   induction next; intros; inversion FUTUREPREFIX; subst.
-  - pose proof (IHnext _ _ _ _ REST) as [? [? ?]].
+  - pose proof (IHnext _ _ _ _ _ REST) as [? [? ?]].
     replace (advance_input_n (Input (a::next) pref) (S (S n0)) forward) with (advance_input_n (Input next (a::pref)) (S n0) forward).
     eauto using acc_skip.
     simpl; now rewrite <-app_assoc.
@@ -833,7 +833,7 @@ Proof.
   intros [next pref].
   generalize dependent pref.
   induction next; try discriminate.
-  intros pref r code [n lit] future Hsubset Hcompile Hcounter Hshape.
+  intros pref r code [[n lit] ?] future Hsubset Hcompile Hcounter Hshape.
   (* future has the lazy_iter structure *)
   inversion Hshape; [|discriminate]. inversion TREECONT. inversion TREECONT0. inversion READ.
   destruct plus; [discriminate|]. subst. simpl.
@@ -859,7 +859,7 @@ Qed.
 Lemma next_prefix_counter_none_nores {strs:StrSearch}:
   forall r inp future,
     pike_regex r ->
-    future_tree_shape rer r inp future -> 
+    future_tree_shape rer r inp future ->
     next_prefix_counter inp (extract_literal rer r) = None ->
     first_leaf future inp = None.
 Proof.
@@ -889,8 +889,8 @@ Qed.
 (* when accelerating from a position where the future_nextprefix invariant holds, *)
 (* we maintain the future tree shape *)
 Lemma future_nextprefix_tree_acceleration:
-  forall code inp n lit future t acc,
-    future_nextprefix code inp (Some future) (Some (n, lit)) ->
+  forall code inp n lit strs future t acc,
+    future_nextprefix code inp (Some future) (Some (n, lit, strs)) ->
     tree_acceleration inp future (advance_input_n inp (S n) forward) acc t ->
     (* LATER: try to get rid of the existential *)
     exists r,
@@ -900,7 +900,7 @@ Lemma future_nextprefix_tree_acceleration:
       bool_tree rer [Areg r] (advance_input_n inp (S n) forward) CanExit t /\
       future_tree_shape rer r (advance_input_n inp (S n) forward) acc.
 Proof.
-  intros code inp n lit future t acc FUTUREPREFIX TREEACC.
+  intros code inp n lit strs future t acc FUTUREPREFIX TREEACC.
   inversion FUTUREPREFIX; subst.
   - eexists; eauto using tree_acceleration_bool_tree.
   - assert (t1 = t /\ t2 = acc) as [? ?]. {
@@ -913,7 +913,7 @@ Qed.
 
 
 (** * Code Stuttering Well-formedness *)
-(* to show that a stuttering step cannot lead the PikeVM to immediately memoize something that was not memoized by the PikeTree, we need to show that stutteing instructions always point to a greater pc *)
+(* to show that a stuttering step cannot lead the PikeVM to immediately memoize something that was not memoized by the PikeTree, we need to show that stuttering instructions always point to a greater pc *)
 
 Definition stutter_wf (code:code) : Prop :=
   forall pc gm b nextpc nextgm nextb inp,
@@ -1119,7 +1119,7 @@ Definition skip_state (pvs:pike_vm_state) : bool :=
   end.
 
 
-Theorem invariant_preservation {strs:StrSearch}:
+Theorem invariant_preservation:
   forall code pts1 pvs1 pvs2
     (STWF: stutter_wf code)
     (INV: pike_inv code pts1 pvs1)
@@ -1175,8 +1175,8 @@ Proof.
       (* accelerate step *)
       + inversion VMSTEP; subst.
         destruct future as [future|]; [|now inversion FUTUREPREFIX].
-        pose proof (future_nextprefix_acceleration _ _ _ _ _ FUTUREPREFIX) as [acc [t TREEACC]].
-        pose proof (future_nextprefix_tree_acceleration _ _ _ _ _ _ _ FUTUREPREFIX TREEACC) as [r [Hcompile [Hregex [Hlit [BOOLTREE SHAPE]]]]].
+        pose proof (future_nextprefix_acceleration _ _ _ _ _ _ FUTUREPREFIX) as [acc [t TREEACC]].
+        pose proof (future_nextprefix_tree_acceleration _ _ _ _ _ _ _ _ FUTUREPREFIX TREEACC) as [r [Hcompile [Hregex [Hlit [BOOLTREE SHAPE]]]]].
         left. subst.
         destruct next_prefix_counter eqn:COUNTER.
         * eexists. split.
@@ -1195,7 +1195,7 @@ Proof.
       (* we are not at the end of the input *)
       destruct inp as [next pref], next as [|c next]; [discriminate|].
       (* do we have the nextprefix if so, with what counter? *)
-      destruct nextprefix as [[nextprefix lit]|]; [destruct nextprefix|].
+      destruct nextprefix as [[[nextprefix lit] strs]|]; [destruct nextprefix|].
       (* nextchar_generate *)
       + assert (pvs2 = PVS (Input next (c::pref)) (((pc,gmblocked,b)::threadlist) ++ [pike_vm_initial_thread]) best [] (next_prefix_counter (Input next (c::pref)) lit) initial_seenpcs)
           by eauto using pikevm_deterministic, pvs_nextchar_generate.
@@ -1207,9 +1207,9 @@ Proof.
             -- eapply pikeinv; eauto using initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, future_nextprefix_some.
           * eexists. split.
             -- eapply pts_nextchar_generate; eauto using erases, next_prefix_counter_none_nores.
-            -- eauto using pikeinv, initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, nnp_none. 
+            -- eauto using pikeinv, initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, nnp_none.
       (* nextchar_filter *)
-      + assert (pvs2 = PVS (Input next (c::pref)) ((pc,gmblocked,b)::threadlist) best [] (Some (nextprefix, lit)) initial_seenpcs)
+      + assert (pvs2 = PVS (Input next (c::pref)) ((pc,gmblocked,b)::threadlist) best [] (Some (nextprefix, lit, strs)) initial_seenpcs)
            by eauto using pikevm_deterministic, pvs_nextchar_filter.
         apply advance_next in ADV.
         inversion FUTUREPREFIX; subst. left.

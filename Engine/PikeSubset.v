@@ -145,8 +145,8 @@ Section PikeSubset.
   Qed.
 
   (** * Lists of trees and gm  *)
-  (* For some algorithms like MemoTree, we might want to manipulate lists of (tree * group_map * iput).
-     But some algorithms lie PikeTree manipulate lists of (tree * group_map), all at the same input.
+  (* For some algorithms like MemoTree, we might want to manipulate lists of (tree * group_map * input).
+     But some algorithms like PikeTree manipulate lists of (tree * group_map), all at the same input.
      We provide a function to supplement a list of (tree * group_map) with a constant input.
    *)
 
