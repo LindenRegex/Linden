@@ -773,7 +773,7 @@ Qed.
 
 (** * Termination of the PikeVM algorithm  *)
 
-(* As a corollary, we can deduce that the PikeVM always terminate *)
+(* As a corollary, we can deduce that the PikeVM always terminates *)
 Theorem pike_vm_terminates:
   forall r inp,
     pike_regex r ->

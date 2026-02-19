@@ -619,7 +619,7 @@ Inductive pike_inv (code:code): pike_tree_state -> pike_vm_state -> Prop :=
     (* blocked threads should be equivalent for the next input *)
     (* nothing to say if there is no next input *)
     (BLOCKED: forall nextinp, advance_input inp forward = Some nextinp -> list_tree_thread code nextinp treeblocked threadblocked)
-    (* these two properties are needed to ensure the two algorithms stop at he same time *)
+    (* these two properties are needed to ensure the two algorithms stop at the same time *)
     (ENDVM: advance_input inp forward = None -> threadblocked = [])
     (ENDTREE: advance_input inp forward = None -> treeblocked = [])
     (* any pc in threadseen must correspond to a tree in treeseen *)
@@ -913,7 +913,7 @@ Qed.
 
 
 (** * Code Stuttering Well-formedness *)
-(* to show that a stuttering step cannot lead the PikeVM to immediately memoize something that was not memoized by the PikeTree, we need to show that stutteing instructions always point to a greater pc *)
+(* to show that a stuttering step cannot lead the PikeVM to immediately memoize something that was not memoized by the PikeTree, we need to show that stuttering instructions always point to a greater pc *)
 
 Definition stutter_wf (code:code) : Prop :=
   forall pc gm b nextpc nextgm nextb inp,

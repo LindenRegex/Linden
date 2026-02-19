@@ -1,4 +1,4 @@
-(* The PikeVm algorithm, expressed as a fuel-based function *)
+(* The PikeVM algorithm, expressed as a fuel-based function *)
 
 Require Import List Lia.
 Import ListNotations.
