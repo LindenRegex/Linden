@@ -3,7 +3,7 @@ From Linden Require Import LWParameters Parameters Regex RegexpTranslation.
 Import Notation.
 Import Result.Notations.
 Import Patterns.
-From Coq Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 
 Local Open Scope result_flow.

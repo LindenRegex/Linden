@@ -1,8 +1,8 @@
-Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups Parameters LWParameters.
-From Coq Require Import PeanoNat.
+From Stdlib Require Import PeanoNat.
 From Warblre Require Import Typeclasses Parameters Base.
 
 (** * Backtracking trees *)
@@ -34,7 +34,7 @@ Proof. intros X Y l. induction l; intros; simpl; auto. Qed.
 
 Lemma seqop_list_head_some:
   forall X Y (h:X) l f (r:Y),
-    f h = Some r -> 
+    f h = Some r ->
     seqop_list (h::l) f = Some r.
 Proof.
   intros X Y h l f r H. unfold seqop_list.
@@ -44,7 +44,7 @@ Qed.
 
 Lemma seqop_list_head_none:
   forall X Y (h:X) l (f:X -> option Y),
-    f h = None -> 
+    f h = None ->
     seqop_list (h::l) f = seqop_list l f.
 Proof. intros. unfold seqop_list. simpl. rewrite H. auto. Qed.
 
@@ -64,7 +64,7 @@ Definition option_flat_map {A B: Type} (f: A -> option B) (o: option A) : option
 
 Section Tree.
   Context {params: LindenParameters}.
-  
+
   Inductive tree : Type :=
   | Mismatch
   | Match
@@ -87,7 +87,7 @@ Section Tree.
 
   Definition tree_eqb (t1 t2:tree) : bool :=
   match tree_eq_dec t1 t2 with | left _ => true | _ => false end.
-  
+
   (** ** Maximum group ID of a tree *)
   (* Maximum group ID of a list of group IDs *)
   Fixpoint max_gid_list (gl: list group_id) :=
@@ -153,7 +153,7 @@ Section Tree.
     | GroupAction a t1 => tree_res t1 (GroupMap.update (idx inp) a gm) inp dir
     | LK lk tlk t1 =>
         match (positivity lk) with
-        | true => 
+        | true =>
             match tree_res tlk gm inp (lk_dir lk) with
             | None => None
             (* using the captures defined in the first branch of the lookahead *)

@@ -1,6 +1,6 @@
 From Linden Require Import Chars Parameters LWParameters.
 From Warblre Require Import Base Parameters.
-From Coq Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 
@@ -99,7 +99,7 @@ Section StrictSuffix.
           apply ss_next with (inp2 := Input (a::next1) (rev (x :: diff'') ++ pref2)).
           * simpl. f_equal. f_equal. rewrite Hpref12. simpl.
             rewrite rev_app_distr, <- app_assoc, <- app_assoc, <- app_assoc. reflexivity.
-          * simpl in *. rewrite app_length in Hlendiff. simpl in *. apply IH with (diff := x :: diff'').
+          * simpl in *. rewrite length_app in Hlendiff. simpl in *. apply IH with (diff := x :: diff'').
             -- simpl. lia.
             -- lia.
             -- rewrite <- app_comm_cons. rewrite <- app_assoc in Hnext12. auto.
@@ -144,8 +144,8 @@ Section StrictSuffix.
           apply ss_next with (inp2 := Input (diff'' ++ a :: next2) (x :: pref1)).
           * simpl. f_equal. f_equal. rewrite Hnext12. simpl.
             rewrite <- app_assoc. reflexivity.
-          * simpl in *. rewrite app_length in Hlendiff. simpl in *. apply IH with (diff := diff'' ++ [a]).
-            -- rewrite app_length. simpl. lia.
+          * simpl in *. rewrite length_app in Hlendiff. simpl in *. apply IH with (diff := diff'' ++ [a]).
+            -- rewrite length_app. simpl. lia.
             -- lia.
             -- rewrite <- app_assoc. auto.
             -- rewrite <- app_assoc in Hpref12. auto.

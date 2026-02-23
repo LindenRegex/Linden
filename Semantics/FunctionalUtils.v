@@ -1,4 +1,4 @@
-From Coq Require Import List.
+From Stdlib Require Import List.
 From Warblre Require Import Base RegExpRecord.
 From Linden Require Import Regex Chars Groups Tree Semantics FunctionalSemantics ComputeIsTree Parameters.
 Import ListNotations.

@@ -1,7 +1,7 @@
 (** * Termination of the PikeTree and PïkeVM algorithm *)
 (* Archived: now completely subsumed by the PikeVM complexity proof in Engine/Complexity.v *)
 
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Require Import Init.Wf.
 Import ListNotations.
 
@@ -133,7 +133,7 @@ Qed.
 (* Note that this does not mean that all executions of PikeTree terminate (it is non-deterministic) *)
 (* but that a terminating execution can be started from any state *)
 Theorem piketree_weak_termination:
-  forall pts, 
+  forall pts,
   exists res, trc_pike_tree pts (PTSS_final res).
 Proof.
   intros pts. eapply piketree_can_finish. eauto.
@@ -168,7 +168,7 @@ Qed.
 (* Decreasing lexicographic order on the PikeVM execution *)
 Theorem pikevm_decreases:
   forall code pts1 pvs1 pvs2 m1,
-    stutter_wf rer code -> 
+    stutter_wf rer code ->
     pike_inv rer code pts1 pvs1 m1 ->
     pike_vm_seen_step rer code pvs1 pvs2 ->
     exists pts2, exists m2,

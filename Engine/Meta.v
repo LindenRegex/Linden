@@ -8,7 +8,7 @@
 (* encapsulating heuristics that look for matches using strategies it deems *)
 (* to be the most efficient. *)
 
-Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Semantics Tree.

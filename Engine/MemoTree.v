@@ -1,7 +1,7 @@
 (** * MemoTree algorithm  *)
 (* A backtracking algorithm, with memoization, on trees *)
 
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
@@ -19,7 +19,7 @@ Section MemoTree.
   (* configurations to be explored by the memoized backtracking engine *)
   Definition tree_config: Type := tree * group_map * input.
   Definition tree_stack: Type := list tree_config.
-  
+
   (* states of the MemoBT algorithm *)
   Inductive mtree_state : Type :=
   | MTree (stk:tree_stack) (ts: seentrees): mtree_state
@@ -70,7 +70,7 @@ Section MemoTree.
     forall ts t gm i nextconfs stk
       (EXPLORE: exec_tree (t,gm,i) = TExplore nextconfs),
       memotree_step (MTree ((t,gm,i)::stk) ts) (MTree (nextconfs++stk) (add_seentrees ts t)).
-  
+
   (** * MemoTree properties  *)
 
   Theorem memotree_progress:
@@ -102,17 +102,17 @@ Section MemoTree.
 
   (* This uses the non-deterministic results of the stack, just like the PikeTree proof. *)
   (* Such results can non-deteterministically skip any subtree in the seen set *)
-  
+
   (** * Initialization  *)
   (* In the initial state, the invariant holds *)
 
   Lemma init_memotree_inv:
     forall t inp,
-      pike_subtree t -> 
+      pike_subtree t ->
       memotree_inv (initial_tree_state t inp) (first_leaf t inp).
   Proof.
     intros t. unfold first_leaf. unfold initial_tree_state. constructor; simpl; pike_subset; auto.
-    intros res LISTND. 
+    intros res LISTND.
     simpl. apply tree_nd_initial; auto.
     inversion LISTND; subst. inversion TLR; subst. rewrite seqop_none. auto.
   Qed.
@@ -225,5 +225,5 @@ Section MemoTree.
       + econstructor; eauto.
         eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
   Qed.
-  
+
 End MemoTree.

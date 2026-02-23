@@ -7,9 +7,9 @@
 (* all the trees it has already started to explore *)
 (* Non-deterministically, it can decide not to explore a tree it has already seen *)
 
-Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
-Require Import Lia.
+From Stdlib Require Import Lia.
 
 From Linden Require Import Regex Chars Groups Tree.
 From Linden Require Import PikeSubset SeenSets.
@@ -259,7 +259,7 @@ Section PikeTree.
     - pike_subset. specialize (IHtree_nd1 H3 (@eq_refl _ _)).
       specialize (IHtree_nd2 H4 (@eq_refl _ _)). subst. auto.
   Qed.
-  
+
   (** * List Results  *)
   (* first possible result in a list of trees - deterministic and non-deterministic versions *)
 
@@ -301,7 +301,7 @@ Section PikeTree.
   (* the normal result for a list, without skipping anything, is a possible result *)
   Lemma list_result_nd:
     forall active seen,
-      pike_list active -> 
+      pike_list active ->
       list_nd active seen (list_result active).
   Proof.
     intros active. induction active; try destruct a as [[t gm] i]; intros; pike_subset; try constructor.
@@ -370,8 +370,8 @@ Section PikeTree.
     eapply state_nd_future_none; eauto using res_group_map_indep.
   Qed.
 
-    
-  
+
+
   (** * Initialization  *)
 
   (* In the initial state, the invariant holds *)
@@ -662,7 +662,7 @@ Section PikeTree.
       2:{ simpl; pike_subset. }
       2:{ destruct next_future; auto. inversion ERASE; subst; pike_subset. }
       econstructor; try econstructor. unfold next_inp, advance_input', advance_input.
-      simpl. subst. 
+      simpl. subst.
       rewrite suppl_app, list_result_app, <-seqop_assoc.
       unfold list_result at 2, seqop_list. simpl.
       inversion ERASE; subst; simpl.

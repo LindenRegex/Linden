@@ -1,6 +1,6 @@
 (** * Complexity of the PikeVM algorithm *)
 
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
@@ -245,7 +245,7 @@ Lemma compilation_nonempty:
   forall r, nonempty (compilation r).
 Proof.
   intros. unfold compilation. destruct compile. unfold nonempty, size.
-  rewrite app_length. simpl. lia.
+  rewrite length_app. simpl. lia.
 Qed.
 
 (* Some bytecode is well-formed if every target label belongs in some range *)
@@ -361,7 +361,7 @@ Proof.
   intros pc i next GET IN.
   assert (HL: pc < length (c ++ [Accept])).
   { eapply nth_error_Some. unfold get_pc in GET. rewrite GET. intros HI. inversion HI. }
-  rewrite app_length in HL. simpl in HL.
+  rewrite length_app in HL. simpl in HL.
   assert (pc = length c \/ pc < length c) as [ACC|H1] by lia.
   (* accept *)
   { subst. assert (get_pc (c ++ [Accept]) (length c) = get_pc [Accept] 0).
@@ -373,7 +373,7 @@ Proof.
   { unfold get_pc in GET. rewrite nth_error_app1 in GET; auto. }
   assert (POS: pc >= 0) by lia.
   specialize (nfa_wf r c 0 (length c) pc next i REP POS H1 GETI IN) as WF.
-  unfold size. rewrite app_length. simpl. lia.
+  unfold size. rewrite length_app. simpl. lia.
 Qed.
 
 Lemma eps_step_blocked_wf:
@@ -498,7 +498,7 @@ Proof.
     + intros n lit0 H. eapply search_in_range; eauto.
     + unfold measure. simpl. rewrite free_initial. apply advance_input_decreases in ADVANCE.
       apply increase_mult with (x:= 4 * size code) in ADVANCE as NEXT. simpl in NEXT.
-      rewrite app_length. simpl. lia.
+      rewrite length_app. simpl. lia.
   (* nextchar_filter: we might add (2*codesize) free slots, but we lose an input length *)
   - exists (measure (size code) [] (thr::blocked) [] inp2). split; [constructor|]; auto.
     + constructor.
@@ -520,7 +520,7 @@ Proof.
     + unfold add_thread. apply wf_new; auto.
     + specialize (free_add seen (size code) dist (pc,gm,b) SEENWF UNSEEN) as FREE.
       apply wf_size in FREE; auto. apply eps_step_active in STEP0.
-      unfold measure, free. rewrite app_length. simpl. simpl in FREE. lia.
+      unfold measure, free. rewrite length_app. simpl. simpl in FREE. lia.
   (* match: we lose a thread and a free slot *)
   - assert (RANGE: pc < size code).
     { specialize (ACTIVEWF (pc,gm,b) ltac:(simpl;left;auto)). simpl in ACTIVEWF. auto. }
@@ -541,7 +541,7 @@ Proof.
          eapply eps_step_blocked_wf in STEP0 as [i [GET IN]]; eauto.
      + unfold add_thread. apply wf_new; auto.
      + specialize (free_add seen (size code) dist (pc,gm,b) SEENWF UNSEEN RANGE) as FREE.
-       apply wf_size in FREE. unfold measure, free. rewrite app_length. simpl. simpl in FREE. lia.
+       apply wf_size in FREE. unfold measure, free. rewrite length_app. simpl. simpl in FREE. lia.
 Qed.
 
 (** * Code Size  *)
@@ -579,23 +579,23 @@ Proof.
   - destruct (compile r1 (S start)) eqn:C1. destruct (compile r2 (S l)) eqn:C2.
     erewrite <- IHr1; eauto. 2: pike_subset.
     erewrite <- IHr2; eauto. 2: pike_subset.
-    inversion COMP. subst. simpl. rewrite app_length. simpl. lia.
+    inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
   - destruct (compile r1 start) eqn:C1. destruct (compile r2 l) eqn:C2.
     erewrite <- IHr1; eauto. 2: pike_subset.
     erewrite <- IHr2; eauto. 2: pike_subset.
-    inversion COMP. subst. simpl. rewrite app_length. simpl. lia.
+    inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
   - destruct min; destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst; try solve[pike_subset].
     + inversion COMP. auto.
     + destruct (compile r (S (S (S start)))) eqn:C1.
       erewrite <- IHr; eauto. 2: pike_subset.
-      inversion COMP. subst. simpl. rewrite app_length. simpl. lia.
+      inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
     + destruct (compile r (S (S (S start)))) eqn:C1.
       erewrite <- IHr; eauto. 2: pike_subset.
-      inversion COMP. subst. simpl. rewrite app_length. simpl. lia.
+      inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
     + inversion SUBSET; subst; lia.
   - destruct (compile r (S start)) eqn:C1.
     erewrite <- IHr; eauto. 2: pike_subset.
-    inversion COMP. subst. simpl. rewrite app_length. simpl. lia.
+    inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
 Qed.
 
 Theorem compilation_size:
@@ -604,7 +604,7 @@ Theorem compilation_size:
     size (compilation r) = codesize r.
 Proof.
   unfold codesize, size, compilation. intros r H. destruct (compile r 0) eqn:COMP.
-  apply compile_size in COMP; auto. rewrite <- COMP. rewrite app_length. simpl. lia.
+  apply compile_size in COMP; auto. rewrite <- COMP. rewrite length_app. simpl. lia.
 Qed.
 
 (* relating this compilation size to the size of the regex *)
@@ -642,7 +642,7 @@ Proof.
   - unfold pike_vm_initial_state. rewrite <- compilation_size; auto.
     constructor; auto.
     + intros t H. destruct H. 2: inversion H.
-      subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite app_length.
+      subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
       simpl. lia.
     + intros t H. inversion H.
     + constructor.
@@ -661,7 +661,7 @@ Proof.
   - unfold pike_vm_initial_state_unanchored. rewrite <- compilation_size; auto.
     constructor; auto.
     + intros t H. destruct H. 2: inversion H.
-      subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite app_length.
+      subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
       simpl. lia.
     + intros t H. inversion H.
     + constructor.

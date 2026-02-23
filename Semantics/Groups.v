@@ -1,9 +1,9 @@
 (* Defining Capture Group Registers *)
 (* Keeping an index of when a group was opened and closed *)
 
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
-Require Import MSetList OrdersAlt PeanoNat FMapList.
+From Stdlib Require Import MSetList OrdersAlt PeanoNat FMapList.
 
 From Linden Require Import Chars.
 From Warblre Require Import Typeclasses.

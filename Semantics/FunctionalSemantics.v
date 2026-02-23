@@ -1,4 +1,4 @@
-Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars.
@@ -9,7 +9,7 @@ From Linden Require Import StrictSuffix.
 From Linden Require Import Parameters.
 From Warblre Require Import Numeric Base RegExpRecord.
 
-From Coq Require Import Lia DecidableClass.
+From Stdlib Require Import Lia DecidableClass.
 
 (** * Functional version of the inductive semantics *)
 
@@ -327,7 +327,7 @@ Section FunctionalSemantics.
   Proof.
     intros n l x q Hskipn.
     pose proof firstn_skipn n l. rewrite Hskipn in H.
-    pose proof skipn_length n l. rewrite Hskipn in H0.
+    pose proof length_skipn n l. rewrite Hskipn in H0.
     simpl in H0. lia.
   Qed.
 
@@ -342,7 +342,7 @@ Section FunctionalSemantics.
       destruct (skipn n next) as [|h next'] eqn:Hskipn; try discriminate.
       injection Hadv as <-.
       pose proof firstn_skipn n next. rewrite Hskipn in H. rewrite <- H.
-      pose proof skipn_length n next. rewrite Hskipn in H0.
+      pose proof length_skipn n next. rewrite Hskipn in H0.
       assert (Hlen: length (firstn n next) = n). {
         simpl in *.
         assert (length next > n) by lia.
@@ -360,7 +360,7 @@ Section FunctionalSemantics.
       destruct (skipn n pref) as [|h pref'] eqn:Hskipn; try discriminate.
       injection Hadv as <-.
       pose proof firstn_skipn n pref. rewrite Hskipn in H. rewrite <- H.
-      pose proof skipn_length n pref. rewrite Hskipn in H0.
+      pose proof length_skipn n pref. rewrite Hskipn in H0.
       assert (Hlen: length (firstn n pref) = n). {
         simpl in *.
         assert (length pref > n) by lia.
@@ -382,7 +382,7 @@ Section FunctionalSemantics.
   Proof.
     intros n l Hskipn.
     pose proof firstn_skipn n l. rewrite Hskipn in H.
-    apply (f_equal (length (A := A))) in H. rewrite app_length in H.
+    apply (f_equal (length (A := A))) in H. rewrite length_app in H.
     simpl in H. rewrite <- plus_n_O in H. rewrite <- H. apply firstn_le_length.
   Qed.
 
@@ -470,7 +470,7 @@ Section FunctionalSemantics.
   Fixpoint compute_tree (act: actions) (inp: input) (gm: group_map) (dir: Direction) (fuel:nat): option tree :=
     match fuel with
     | 0 => None
-    | S fuel => 
+    | S fuel =>
         match act with
         (* tree_done *)
         | [] => Some Match
@@ -481,13 +481,13 @@ Section FunctionalSemantics.
               | Some treecont => Some (Progress treecont)
               | None => None
               end
-            else Some Mismatch            
+            else Some Mismatch
         (* tree_close *)
         | Aclose gid :: cont =>
             match (compute_tree cont inp (GroupMap.close (idx inp) gid gm) dir fuel) with
             | Some treecont => Some (GroupAction (Close gid) treecont)
             | None => None
-            end          
+            end
         (* tree_epsilon *)
         | Areg Epsilon::cont => compute_tree cont inp gm dir fuel
         (* tree_char, tree_char_fail *)
@@ -515,7 +515,7 @@ Section FunctionalSemantics.
             match compute_tree (Areg r1 :: Areg (Quantified greedy min delta r1) :: cont) inp (GroupMap.reset gidl gm) dir fuel with
             | Some titer => Some (GroupAction (Reset gidl) titer)
             | None => None
-            end          
+            end
         (* tree_quant_done *)
         | Areg (Quantified greedy 0 (NoI.N 0) r1)::cont =>
             compute_tree cont inp gm dir fuel
@@ -531,7 +531,7 @@ Section FunctionalSemantics.
             match compute_tree (Areg r1 :: Aclose gid :: cont) inp (GroupMap.open (idx inp) gid gm) dir fuel with
             | Some treecont => Some (GroupAction (Open gid) treecont)
             | _ => None
-            end          
+            end
         (* tree_lk, tree_lk_fail *)
         | Areg (Lookaround lk r1)::cont =>
             let treelk := compute_tree [Areg r1] inp gm (lk_dir lk) fuel in
@@ -569,7 +569,7 @@ Section FunctionalSemantics.
           end
         end
     end.
-    
+
   (** * Functional Semantics Termination  *)
 
   Lemma somenone:
@@ -594,7 +594,7 @@ Section FunctionalSemantics.
       compute_tree act inp gm dir fuel <> None.
   Proof.
     intros act inp gm dir fuel H.
-    generalize dependent act. generalize dependent inp. 
+    generalize dependent act. generalize dependent inp.
     generalize dependent gm. generalize dependent dir.
     induction fuel; intros.
     { inversion H. }
@@ -675,7 +675,7 @@ Section FunctionalSemantics.
         assert (ENOUGH: fuel > actions_fuel act inp dir). { pose proof anchor_termination act inp dir a. lia. }
         apply IHfuel with (gm := gm) in ENOUGH.
         destruct compute_tree; [apply somenone|contradiction].
-      + simpl.    (* Backreferences *) 
+      + simpl.    (* Backreferences *)
         destruct read_backref as [[br_str nextinp]|] eqn:Hreadbr; try apply somenone.
         apply backref_termination with (cont := act) in Hreadbr.
         assert (ENOUGH: fuel > actions_fuel act nextinp dir) by lia.

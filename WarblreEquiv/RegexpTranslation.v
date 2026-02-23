@@ -6,9 +6,9 @@ Import Notation.
 Import Result.
 Import Result.Notations.
 Local Open Scope result_flow.
-Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
-Require Import PeanoNat Lia.
+From Stdlib Require Import PeanoNat Lia.
 
 (** * Syntactic equivalence between Warblre regexes and Linden regexes
 and translation from Warblre to Linden regexes *)
@@ -44,7 +44,7 @@ Section RegexpTranslation.
 
   Definition buildnm (wr:Patterns.Regex) : namedmap :=
     fst (buildnm' wr [] 0).
-  
+
   (* Computes the number of capture groups of the regex r. *)
   Fixpoint num_groups (r: regex): nat := (* actually len (def_groups r); TODO replace later or prove lemma *)
     match r with
@@ -173,7 +173,7 @@ Section RegexpTranslation.
   | Equiv_backref: forall (n: nat) (gid: positive_integer) nm,
       equiv_regex' (Patterns.AtomEsc (Patterns.DecimalEsc gid)) (Backreference (positive_to_nat gid)) n nm
   | Equiv_named_backref: forall n nm name gid,
-      nameidx nm name = Some gid -> 
+      nameidx nm name = Some gid ->
       equiv_regex' (Patterns.AtomEsc (Patterns.GroupEsc name)) (Backreference gid) n nm
   | Equiv_atom_CharacterClassEscape:
     forall (esc: Patterns.CharacterClassEscape) (cd: char_descr) (n: nat) nm,
@@ -420,7 +420,7 @@ Section RegexpTranslation.
       remember ((map (fun '(fst, snd) => countLeftCapturingParensBefore fst snd)
             (groupSpecifiersThatMatch _ ctx name))) as l0 in *.
       apply in_len1_eq with (l := l0); auto.
-      rewrite Heql0, map_length. auto.
+      rewrite Heql0, length_map. auto.
     Qed.
   End Buildnm_GSMatch.
 
@@ -453,7 +453,7 @@ Section RegexpTranslation.
 
     Definition asciiEsc_singleCharacter_numValue (l: AsciiLetter): nat :=
       NonNegInt.modulo (AsciiLetter.numeric_value l) 32.
-    
+
     Definition characterEscape_singleCharacter_numValue (esc: Patterns.CharacterEscape): nat :=
       match esc with
       | Patterns.ControlEsc esc => controlEsc_singleCharacter_numValue esc
@@ -473,10 +473,10 @@ Section RegexpTranslation.
     Definition atomesc_to_linden (ae: Patterns.AtomEscape) (nm:namedmap): Result regex wl_transl_error :=
       match ae with
       | Patterns.DecimalEsc gid => Success (Backreference (positive_to_nat gid))
-      | Patterns.ACharacterClassEsc esc => 
+      | Patterns.ACharacterClassEsc esc =>
           let cd := characterClassEsc_to_linden esc in
           Success (Character cd)
-      | Patterns.ACharacterEsc esc => 
+      | Patterns.ACharacterEsc esc =>
           let cd := characterEscape_to_linden esc in
           Success (Character cd)
       | Patterns.GroupEsc gn =>
@@ -501,7 +501,7 @@ Section RegexpTranslation.
       | Patterns.CCharacterClassEsc esc => Error WlMalformed
       | Patterns.CCharacterEsc esc => Success (characterEscape_singleCharacter_numValue esc)
       end.
-    
+
     Definition classAtom_to_linden (ca: Patterns.ClassAtom): char_descr :=
       match ca with
       | Patterns.SourceCharacter c => CdSingle c
@@ -517,11 +517,11 @@ Section RegexpTranslation.
     Fixpoint classRanges_to_linden (cr: Patterns.ClassRanges): Result char_descr wl_transl_error :=
       match cr with
       | Patterns.EmptyCR => Success CdEmpty
-      | Patterns.ClassAtomCR ca t => 
+      | Patterns.ClassAtomCR ca t =>
           let cda := classAtom_to_linden ca in
           let! cdt =<< classRanges_to_linden t in
           Success (CdUnion cda cdt)
-      | Patterns.RangeCR l h t => 
+      | Patterns.RangeCR l h t =>
           let! cl =<< classAtom_singleCharacter_numValue l in
           let! ch =<< classAtom_singleCharacter_numValue h in
           let! cdt =<< classRanges_to_linden t in
@@ -530,11 +530,11 @@ Section RegexpTranslation.
           else
             Error WlMalformed
       end.
-    
+
     Definition charclass_to_linden (cc: Patterns.CharClass): Result char_descr wl_transl_error :=
       match cc with
       | Patterns.NoninvertedCC crs => classRanges_to_linden crs
-      | Patterns.InvertedCC crs => 
+      | Patterns.InvertedCC crs =>
           let! cd =<< classRanges_to_linden crs in
           Success (CdInv cd)
       end.
@@ -546,7 +546,7 @@ Section RegexpTranslation.
       | Patterns.Question => Success (fun greedy => Quantified greedy 0 (NoI.N 1))
       | Patterns.RepExact n => Success (fun greedy => Quantified greedy n (NoI.N 0))
       | Patterns.RepPartialRange n => Success (fun greedy => Quantified greedy n +∞)
-      | Patterns.RepRange mini maxi => 
+      | Patterns.RepRange mini maxi =>
           if mini <=? maxi then
             Success (fun greedy => Quantified greedy mini (NoI.N (maxi-mini)))
           else
@@ -563,7 +563,7 @@ Section RegexpTranslation.
       | Patterns.Char chr => Success (Character (CdSingle chr))
       | Patterns.Dot => Success (Character CdDot)
       | Patterns.AtomEsc ae => atomesc_to_linden ae nm
-      | Patterns.CharacterClass cc => 
+      | Patterns.CharacterClass cc =>
           let! cd =<< charclass_to_linden cc in
           Success (Character cd)
       | Patterns.Disjunction wr1 wr2 =>
@@ -1052,7 +1052,7 @@ Section RegexpTranslation.
         destruct IHwr as [lrsub IHwr]. simpl in *.
         rewrite Nat.add_0_r in IHwr. setoid_rewrite IHwr. eexists. reflexivity.
     Qed.
-    
+
     Theorem earlyErrors_pass_translation:
       forall wr: Patterns.Regex,
         earlyErrors wr nil = Success false ->

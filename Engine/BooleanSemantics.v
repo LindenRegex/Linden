@@ -1,4 +1,4 @@
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
@@ -138,7 +138,7 @@ Inductive bool_encoding: LoopBool -> input -> actions -> Prop :=
     (ENCODE: bool_encoding b str cont),
     bool_encoding b str (Aclose gid::cont)
 | cons_true:
-  forall stk str head 
+  forall stk str head
     (ENCODE: bool_encoding CanExit str stk)
     (STRICT: strict_suffix str head forward),
     bool_encoding CanExit str (Acheck head::stk)
@@ -191,7 +191,7 @@ Proof.
   intros b str cont H.
   remember (Acheck str::cont) as prevcont.
   induction H; intros; auto; inversion Heqprevcont.
-  subst. apply ss_neq in STRICT. contradiction. 
+  subst. apply ss_neq in STRICT. contradiction.
 Qed.
 
 Lemma encode_next:
@@ -321,7 +321,7 @@ Proof.
   intros r str t PIKE H.
   eapply encode_equal; eauto.
   { constructor; constructor; auto. }
-  constructor. constructor. 
+  constructor. constructor.
 Qed.
 
 

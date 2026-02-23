@@ -1,5 +1,5 @@
 From Linden Require Import Groups Tactics.
-From Coq Require Import List DecidableClass Lia PeanoNat.
+From Stdlib Require Import List DecidableClass Lia PeanoNat.
 
 (** * Lemmas related to group maps *)
 

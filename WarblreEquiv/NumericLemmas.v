@@ -1,5 +1,5 @@
 From Warblre Require Import Numeric.
-From Coq Require Import Lia.
+From Stdlib Require Import Lia.
 
 (** * Lemmas about Warblre's `non_neg_integer_or_inf` (NoI) *)
 

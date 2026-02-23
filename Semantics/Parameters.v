@@ -1,5 +1,5 @@
 From Warblre Require Import Parameters RegExpRecord.
-From Coq Require Import List.
+From Stdlib Require Import List.
 
 (** * Typeclass containing parameters which our development depends on *)
 
