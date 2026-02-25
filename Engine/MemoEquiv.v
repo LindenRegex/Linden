@@ -132,20 +132,20 @@ Section MemoEquiv.
   (* this happens during stuttering steps: such pcs are always stuttering, equivalent to the current active tree, *)
   (* but these pcs are not equal to the current pc : they're smaller *)
   (* the relation is then indexed by the current pc *)
-  Definition seen_inclusion (c:code) (treeseen:seentrees) (memoset:memoset) (current:option (tree*group_map*input)) (currentpc:label): Prop :=
+  Definition seen_inclusion (c:code) (treeseen:seentrees) (memoset:memoset) (current:option (tree*group_map*input)) (currentpc:option label): Prop :=
     forall pc b inp
       (SEEN: is_memo memoset pc b inp = true),
       (exists t gm,
           inseen treeseen t = true /\
             tree_config c (t, gm, inp) (pc, gm, b, inp))
       \/
-        (stutters pc c = true /\
-           exists t gm, pc < currentpc /\ current = Some (t,gm,inp) /\
+        (stutters pc c = true /\ exists cur, currentpc = Some cur /\
+           exists t gm, pc < cur /\ current = Some (t,gm,inp) /\
                      tree_config c (t,gm,inp) (pc,gm,b,inp)).
 
   Lemma add_inclusion:
     forall treeseen memoset code inp tree pc gm b nextcurrent nextpc
-      (INCL: seen_inclusion code treeseen memoset (Some (tree,gm,inp)) pc)
+      (INCL: seen_inclusion code treeseen memoset (Some (tree,gm,inp)) (Some pc))
       (TT: tree_config code (tree,gm,inp) (pc,gm,b,inp)),
       seen_inclusion code (add_seentrees treeseen tree) (memoize memoset pc b inp) nextcurrent nextpc.
   Proof.
@@ -154,7 +154,7 @@ Section MemoEquiv.
     intros pc0 b0 inp0 SEEN. apply is_memo_add in SEEN. destruct SEEN as [EQ|SEEN].
     - inversion EQ. subst. left. exists tree. exists gm. split; auto. apply in_add. left. auto.
     - specialize (INCL pc0 b0 inp0 SEEN).      
-      destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
+      destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [cur [Hcur [ts [gms [GEQ [EQ TTS]]]]]]]].
       + left. exists ts. exists gms. split; auto. apply in_add. right; auto.
       + left. exists ts. exists gms. split; auto.
         apply in_add. left; auto. inversion EQ. auto.
@@ -172,7 +172,7 @@ Section MemoEquiv.
     unfold seen_inclusion in *.
     intros pc b inp0 SEENPC.
     specialize (INCL pc b inp0 SEENPC).
-    destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
+    destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [cur [Hcur [ts [gms [GEQ [EQ TTS]]]]]]]].
     - left. exists ts. exists gms. split; auto.
     - left. exists ts. exists gms. split; auto. inversion EQ. subst. auto.
   Qed.
@@ -180,28 +180,28 @@ Section MemoEquiv.
   Lemma stutter_inclusion:
     forall code inp treeseen memoset t gm pc b nextpc
       (GT: pc < nextpc )
-      (INCL: seen_inclusion code treeseen memoset (Some (t, gm, inp)) pc)
+      (INCL: seen_inclusion code treeseen memoset (Some (t, gm, inp)) (Some pc))
       (STUTTERS: stutters pc code = true)
       (TT: tree_config code (t,gm,inp) (pc,gm,b,inp)),
-      seen_inclusion code treeseen (memoize memoset pc b inp) (Some (t,gm,inp)) nextpc.
+      seen_inclusion code treeseen (memoize memoset pc b inp) (Some (t,gm,inp)) (Some nextpc).
   Proof.
     intros code inp treeseen memoset t gm pc b nextpc GT INCL STUTTERS TT.
     unfold seen_inclusion in *.
     intros pc0 b0 inp0 SEEN.
     apply is_memo_add in SEEN. destruct SEEN as [EQ | SEEN].
     { inversion EQ. subst. right. split; auto.
-      exists t. exists gm. split; auto. }
+      exists nextpc. split; auto. exists t. exists gm. split; auto. }
     specialize (INCL pc0 b0 inp0 SEEN).
-    destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
+    destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [cur [Hcur [ts [gms [GEQ [EQ TTS]]]]]]]].
     - left. exists ts. exists gms. split; auto.
-    - right. split; auto. exists ts. exists gms. split; auto. lia.
+    - right. split; auto. exists nextpc. split; auto. exists ts. exists gms. split; auto. inversion Hcur. lia.
   Qed.
 
   
-  Definition head_pc (stk:list config) : label :=
+  Definition head_pc (stk:list config) : option label :=
     match stk with
-    | [] => 0
-    | (pc,_,_,_)::_ => pc
+    | [] => None
+    | (pc,_,_,_)::_ => Some pc
     end.
 
   (* Simulation Invariant *)
@@ -751,8 +751,8 @@ Section MemoEquiv.
       { inversion SKIP. }
       inversion MEMOSTEP; try (rewrite UNSEEN in SKIP; inversion SKIP); subst.
       inversion STACK; subst.
-      apply INCL in SKIP as [[teq [gmeq [SEENEQ TTEQ]]] | [STUTTER [t' [gm' [GEQ [EQ TTS]]]]]].
-      2: { lia. }
+      apply INCL in SKIP as [[teq [gmeq [SEENEQ TTEQ]]] | [STUTTER [cur [Hcur [t' [gm' [GEQ [EQ TTS]]]]]]]].
+      2: { inversion Hcur. lia. }
       assert (teq = tree); subst.
       { eapply tc_same_tree; eauto. }
       exists (MTree treelist treeseen). split; constructor; auto.
