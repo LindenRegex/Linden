@@ -23,9 +23,9 @@ Section MemoTree.
   (* states of the MemoBT algorithm *)
   Inductive mtree_state : Type :=
   | MTree (stk:tree_stack) (ts: seentrees): mtree_state
-  | MTree_final (res:option leaf) : mtree_state.
+  | MTree_final (res:option leaf) (ts:seentrees) : mtree_state.
 
-  Definition initial_tree_state (t:tree) (i:input) : mtree_state :=
+  Definition initial_tree_state (t:tree) (i:input) (ts:seentrees): mtree_state :=
     MTree [(t, GroupMap.empty, i)] initial_seentrees.
 
   (** * MemoTree small-step semantics *)
@@ -54,7 +54,7 @@ Section MemoTree.
   Inductive memotree_step: mtree_state -> mtree_state -> Prop :=
   (* we exhausted all configurations, there is no match *)
   | mtree_nomatch: forall ts,
-      memotree_step (MTree [] ts) (MTree_final None)
+      memotree_step (MTree [] ts) (MTree_final None ts)
   (* the memoization allows to skip the current configuration *)
   | mtree_skip:
     forall ts t gm i stk
@@ -64,7 +64,7 @@ Section MemoTree.
   | mtree_match:
     forall ts t gm i leaf stk
       (MATCH: exec_tree (t,gm,i) = TMatch leaf),
-      memotree_step (MTree ((t,gm,i)::stk) ts) (MTree_final (Some leaf))
+      memotree_step (MTree ((t,gm,i)::stk) ts) (MTree_final (Some leaf) ts)
   (* we keep exploring, and add each handled tree to the treeseen set *)
   | mtree_explore:
     forall ts t gm i nextconfs stk
@@ -97,8 +97,8 @@ Section MemoTree.
       (SUBSET: pike_list stk),
       memotree_inv (MTree stk seen) result
   | mi_final:
-    forall result,
-      memotree_inv (MTree_final result) result.
+    forall result ts,
+      memotree_inv (MTree_final result ts) result.
 
   (* This uses the non-deterministic results of the stack, just like the PikeTree proof. *)
   (* Such results can non-deteterministically skip any subtree in the seen set *)
@@ -109,7 +109,7 @@ Section MemoTree.
   Lemma init_memotree_inv:
     forall t inp,
       pike_subtree t -> 
-      memotree_inv (initial_tree_state t inp) (first_leaf t inp).
+      memotree_inv (initial_tree_state t inp initial_seentrees) (first_leaf t inp).
   Proof.
     intros t. unfold first_leaf. unfold initial_tree_state. constructor; simpl; pike_subset; auto.
     intros res LISTND. 
