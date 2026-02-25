@@ -264,23 +264,23 @@ Section Tree.
     - destruct (positivity lk) eqn:Hlkpos. + now apply first_tree_leaf_poslk. + now apply first_tree_leaf_neglk.
   Qed.
 
-  (** * Group Map irrelevance  *)
-  (* finding a match does not depend on the initial group map *)
+  (** * No Result - argument irrelevance  *)
+  (* finding no leaves in a tree does not depend on the initial group map, the initial input, and the initial direction *)
   (* we could phrase a stronger theorem about how to relate the two results *)
   (* but for now we only need to differentiate when there is no results from when there is one *)
 
-  (* Group map irrelevance property for a given tree. *)
-  Definition leaves_group_map_indep_prop (t: tree): Prop :=
+  (* irrelevance property for a given tree. *)
+  Definition leaves_indep_prop (t: tree): Prop :=
     forall gm1 gm2 inp1 inp2 dir1 dir2,
       tree_leaves t gm1 inp1 dir1 = [] -> tree_leaves t gm2 inp2 dir2 = [].
 
   (* Intermediate lemma for positive lookarounds *)
-  Lemma leaves_group_map_indep_poslk:
+  Lemma leaves_indep_poslk:
     forall lk tlk t1,
-      positivity lk = true -> leaves_group_map_indep_prop tlk -> leaves_group_map_indep_prop t1 ->
-      leaves_group_map_indep_prop (LK lk tlk t1).
+      positivity lk = true -> leaves_indep_prop tlk -> leaves_indep_prop t1 ->
+      leaves_indep_prop (LK lk tlk t1).
   Proof.
-    intros lk tlk t1 Hposlk IHtlk IHt1; unfold leaves_group_map_indep_prop in *; simpl.
+    intros lk tlk t1 Hposlk IHtlk IHt1; unfold leaves_indep_prop in *; simpl.
     rewrite Hposlk. intros gm1 gm2 inp1 inp2 dir1 dir2 Hnil1.
     specialize (IHtlk gm1 gm2 inp1 inp2 (lk_dir lk) (lk_dir lk)). destruct (tree_leaves tlk gm1 inp1 _) as [|[inp' gm'] q]; simpl in *.
     1: { specialize (IHtlk eq_refl). now rewrite IHtlk. }
@@ -289,12 +289,12 @@ Section Tree.
   Qed.
 
   (* Intermediate lemma for negative lookarounds *)
-  Lemma leaves_group_map_indep_neglk:
+  Lemma leaves_indep_neglk:
     forall lk tlk t1,
-      positivity lk = false -> leaves_group_map_indep_prop tlk -> leaves_group_map_indep_prop t1 ->
-      leaves_group_map_indep_prop (LK lk tlk t1).
+      positivity lk = false -> leaves_indep_prop tlk -> leaves_indep_prop t1 ->
+      leaves_indep_prop (LK lk tlk t1).
   Proof.
-    intros lk tlk t1 Hposlk IHtlk IHt1; unfold leaves_group_map_indep_prop in *; simpl.
+    intros lk tlk t1 Hposlk IHtlk IHt1; unfold leaves_indep_prop in *; simpl.
     rewrite Hposlk. intros gm1 gm2 inp1 inp2 dir1 dir2 Hnil1.
     destruct (tree_leaves tlk gm1 inp1 _) as [|[inp' gm'] q] eqn:Hnilsub1; simpl in *.
     1: { specialize (IHtlk gm1 gm2 inp1 inp2 (lk_dir lk) (lk_dir lk) Hnilsub1). rewrite IHtlk. eapply IHt1; eauto. }
@@ -303,7 +303,7 @@ Section Tree.
   Qed.
 
 
-  Lemma leaves_group_map_indep:
+  Lemma leaves_indep:
     forall t gm1 gm2 inp1 inp2 dir1 dir2,
       tree_leaves t gm1 inp1 dir1 = [] -> tree_leaves t gm2 inp2 dir2 = [].
   Proof.
@@ -314,12 +314,12 @@ Section Tree.
       apply IHt1 with (gm2:=gm2) (inp2:=inp2) (dir2:=dir2) in NIL1. apply IHt2 with (gm2:=gm2) (inp2:=inp2) (dir2:=dir2) in NIL2.
       rewrite NIL1. rewrite NIL2. auto.
     - destruct (positivity lk) eqn:Hlkpos.
-      + eapply leaves_group_map_indep_poslk; eauto.
-      + eapply leaves_group_map_indep_neglk; eauto.
+      + eapply leaves_indep_poslk; eauto.
+      + eapply leaves_indep_neglk; eauto.
   Qed.
 
 
-  (* Corollary: group map irrelevance in terms of tree_res *)
+  (* Corollary: argument irrelevance in terms of tree_res *)
   (* A lemma about hd_error *)
   Lemma hd_error_none_nil {A}:
     forall l: list A, hd_error l = None <-> l = [].
@@ -329,11 +329,11 @@ Section Tree.
     - subst l. reflexivity.
   Qed.
 
-  Lemma res_group_map_indep:
+  Lemma res_indep:
     forall t gm1 gm2 inp1 inp2 dir1 dir2,
       tree_res t gm1 inp1 dir1 = None -> tree_res t gm2 inp2 dir2 = None.
   Proof.
-    intros. rewrite first_tree_leaf, hd_error_none_nil in *. eauto using leaves_group_map_indep.
+    intros. rewrite first_tree_leaf, hd_error_none_nil in *. eauto using leaves_indep.
   Qed.
 
   Lemma leaf_eq_dec (l1 l2: leaf): {l1 = l2} + {l1 <> l2}.
