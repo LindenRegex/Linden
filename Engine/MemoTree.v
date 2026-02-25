@@ -26,7 +26,7 @@ Section MemoTree.
   | MTree_final (res:option leaf) (ts:seentrees) : mtree_state.
 
   Definition initial_tree_state (t:tree) (i:input) (ts:seentrees): mtree_state :=
-    MTree [(t, GroupMap.empty, i)] initial_seentrees.
+    MTree [(t, GroupMap.empty, i)] ts.
 
   (** * MemoTree small-step semantics *)
 
@@ -102,6 +102,47 @@ Section MemoTree.
 
   (* This uses the non-deterministic results of the stack, just like the PikeTree proof. *)
   (* Such results can non-deteterministically skip any subtree in the seen set *)
+
+  (** * Seentrees without results  *)
+
+  Fixpoint noleaftree (t:tree) :=
+    match t with
+    | Mismatch | LKFail _ _ => true
+    | Match => false
+    | Choice t1 t2 => andb (noleaftree t1) (noleaftree t2)
+    | Read _ t1 | ReadBackRef _ t1 | Progress t1 | AnchorPass _ t1 | GroupAction _ t1 | LK _ _ t1 => noleaftree t1
+    end.
+  
+  (* tree without matching leaves *)
+  Lemma noleaf_tree:
+    forall t i gm d, noleaftree t = true -> tree_leaves t i gm d = [].
+  Proof.
+    intros t i gm d H. induction t; simpl; simpl in H; auto;
+      try solve[specialize (IHt H); eapply leaves_indep; eauto].
+    - inversion H.
+    - apply Bool.andb_true_iff in H as [H1 H2]. rewrite IHt1; try rewrite IHt2; auto.
+    - specialize (IHt2 H). destruct positivity; destruct (tree_leaves t1 i gm (lk_dir lk)) as [|[i' gm']]; auto.
+      eapply leaves_indep; eauto.
+  Qed.
+
+  (* set of trees without matching leaves *)
+  Definition noleaf (ts:seentrees) : Prop :=
+    forall t, inseen ts t = true -> noleaftree t = true.
+
+  Lemma noleaf_initial:
+    noleaf initial_seentrees.
+  Proof.
+    intros t IN. rewrite initial_nothing in IN. inversion IN.
+  Qed.
+
+  Lemma add_noleaf:
+    forall ts t, noleaf ts -> noleaftree t = true ->
+            noleaf (add_seentrees ts t).
+  Proof.
+    intros ts t H H0 t0 H1. apply in_add in H1 as [IS|IN].
+    - subst. auto.
+    - apply H. auto.
+  Qed.
   
   (** * Initialization  *)
   (* In the initial state, the invariant holds *)
@@ -115,6 +156,46 @@ Section MemoTree.
     intros res LISTND. 
     simpl. apply tree_nd_initial; auto.
     inversion LISTND; subst. inversion TLR; subst. rewrite seqop_none. auto.
+  Qed.
+
+  Lemma noleaftree_nd:
+    forall t gm inp,
+      pike_subtree t ->
+      noleaftree t = true ->
+      tree_nd t gm inp initial_seentrees None.
+  Proof.
+    intros t gm inp SUB H.
+    generalize dependent inp. generalize dependent gm.
+    induction t; intros; simpl in H; try solve[pike_subset].
+    - inversion H.
+    - assert (pike_subtree t1) by pike_subset.
+      assert (pike_subtree t2) by pike_subset.
+      apply Bool.andb_true_iff in H as [N1 N2].
+      rewrite <- seqop_none. apply tr_choice; auto.
+  Qed.
+
+  Lemma noleaf_nd:
+    forall t gm inp ts res,
+      pike_subtree t ->
+      noleaf ts ->
+      tree_nd t gm inp ts res ->
+      tree_nd t gm inp initial_seentrees res.
+  Proof.
+    intros t gm inp ts res SUB NL ND. induction ND; try solve[constructor; auto; pike_subset].
+    - apply NL in SEEN. apply noleaftree_nd; auto.
+  Qed.
+  
+  Lemma init_memotree_inv_noleaf:
+    forall t inp ts,
+      pike_subtree t ->
+      noleaf ts ->
+      memotree_inv (initial_tree_state t inp ts) (first_leaf t inp).
+  Proof.
+    intros t. unfold first_leaf. unfold initial_tree_state.
+    intros inp ts SUB NOLEAF; constructor; simpl; pike_subset; auto.
+    intros res LISTND.
+    inversion LISTND; subst. inversion TLR; subst. rewrite seqop_none.
+    apply noleaf_nd in TR; auto. apply tree_nd_initial; auto.
   Qed.
 
   (** * Invariant Preservation  *)
