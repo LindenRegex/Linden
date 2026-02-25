@@ -768,7 +768,7 @@ Section Congruence.
       + unfold lk_result in RES_LK. rewrite Hpos in RES_LK.
         destruct (tree_res treelk gm inp (lk_dir lk)) eqn:TREERES; inversion RES_LK. subst.
         assert (tree_leaves treelk gmlk inp (lk_dir lk) = []).
-        { apply leaves_group_map_indep with (gm1 := gmlk) (inp1 := inp) (dir1 := lk_dir lk).
+        { apply leaves_indep with (gm1 := gmlk) (inp1 := inp) (dir1 := lk_dir lk).
           apply hd_error_none_nil. rewrite <- first_tree_leaf. auto. }
         simpl. rewrite Hpos, H. auto.
   

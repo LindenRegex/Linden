@@ -367,7 +367,7 @@ Section PikeTree.
   Proof.
     intros inp active best blocked future seen res erased ERASE ND.
     inversion ERASE; subst; auto.
-    eapply state_nd_future_none; eauto using res_group_map_indep.
+    eapply state_nd_future_none; eauto using res_indep.
   Qed.
 
     
@@ -425,7 +425,7 @@ Section PikeTree.
         inversion TREE. inversion CONT. destruct plus; [discriminate|subst].
         replace titer with t0 by eauto using bool_tree_determ.
         replace tskip with t by eauto using bool_tree_determ.
-        unfold first_leaf in *. simpl. apply res_group_map_indep with (inp2:=inp) (gm2:=GroupMap.empty) (dir2:=forward) in NORES as ->. now destruct (tree_res t).
+        unfold first_leaf in *. simpl. apply res_indep with (inp2:=inp) (gm2:=GroupMap.empty) (dir2:=forward) in NORES as ->. now destruct (tree_res t).
       } rewrite Heq.
       now eapply init_piketree_inv.
     }
@@ -442,7 +442,7 @@ Section PikeTree.
     intros. rewrite first_tree_leaf. rewrite first_tree_leaf in NORES.
     destruct (tree_leaves t gm1 inp1 forward) eqn:HTL.
     2: { inversion NORES. }
-    eapply leaves_group_map_indep in HTL. rewrite HTL. auto.
+    eapply leaves_indep in HTL. rewrite HTL. auto.
   Qed.
 
   (* the same is true for a non-deterministic result *)
@@ -671,7 +671,7 @@ Section PikeTree.
         now rewrite <-seqop_assoc.
       (* we erased `future` *)
       + unfold first_leaf in NORES |- *.
-        eapply res_group_map_indep in NORES.
+        eapply res_indep in NORES.
         simpl. unfold advance_input', advance_input. rewrite NORES.
         now destruct (tree_res t1).
     (* nextchar_filter *)
