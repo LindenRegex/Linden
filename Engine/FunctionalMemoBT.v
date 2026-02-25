@@ -21,17 +21,17 @@ Section FunctionMemoBT.
 (* a functional version of the small step *)
 Definition memobt_func_step (c:code) (mbt:mbt_state) : mbt_state :=
   match mbt with
-  | MBT_final _ => mbt
+  | MBT_final _ _ => mbt
   | MBT stk ms =>
       match stk with
-      | [] => MBT_final None (* mbt_nomatch *)
+      | [] => MBT_final None ms (* mbt_nomatch *)
       | (pc,gm,b,i)::stk =>
           match (is_memo ms pc b i) with
           | true => MBT stk ms (* mbt_skip *)
           | false =>
               let nextms := memoize ms pc b i in
               match exec_instr rer c (pc, gm, b, i) with
-              | FoundMatch leaf => MBT_final (Some leaf) (* mbt_match *)
+              | FoundMatch leaf => MBT_final (Some leaf) ms (* mbt_match *)
               | Explore nextconfs => MBT (nextconfs ++ stk) nextms (* mbt_explore *)
               end
           end
@@ -41,7 +41,7 @@ Definition memobt_func_step (c:code) (mbt:mbt_state) : mbt_state :=
 (* looping the small step function until fuel runs out or a final state is reached *)
 Fixpoint memobt_loop (c:code) (mbt:mbt_state) (fuel:nat) : mbt_state :=
   match mbt with
-  | MBT_final _ => mbt
+  | MBT_final _ _ => mbt
   | _ =>
       match fuel with
       | 0 => mbt
@@ -60,8 +60,8 @@ Axiom memobt_complexity:
     (* for any supported regex r and input inp *)
     pike_regex r ->
     (* The initial state reaches a final state in at most (complexity r inp) steps. *)
-    exists result, steps (memobt_step rer (compilation r))
-                (initial_state inp) (complexity r inp) (MBT_final result).
+    exists result ms, steps (memobt_step rer (compilation r))
+                (initial_state inp initial_memoset) (complexity r inp) (MBT_final result ms).
 
 (* an upper bound for the fuel necessary to compute a result *)
 Definition memobt_fuel (r:regex) (inp:input) : nat :=
@@ -73,7 +73,7 @@ Inductive matchres : Type :=
 
 Definition getres (mbt:mbt_state) : matchres :=
   match mbt with
-  | MBT_final best => Finished best
+  | MBT_final best _ => Finished best
   | _ => OutOfFuel
   end.
 
@@ -82,12 +82,12 @@ Definition memobt_match (r:regex) (inp:input) : matchres :=
   let code := compilation r in
   let fuel := memobt_fuel r inp in
   let mbtinit := initial_state inp in
-  getres (memobt_loop code mbtinit fuel).
+  getres (memobt_loop code (mbtinit initial_memoset) fuel).
 
 (** * Smallstep correspondence  *)
 
 Inductive final_state: mbt_state -> Prop :=
-| mfinal: forall best, final_state (MBT_final best).
+| mfinal: forall best ms, final_state (MBT_final best ms).
 
 Ltac match_destr:=
   match goal with
@@ -136,11 +136,11 @@ Proof.
 Qed.
 
 Theorem steps_loop:
-  forall c mbt1 mbt2 fuel,
-    steps (memobt_step rer c) mbt1 fuel (MBT_final mbt2) ->
-    memobt_loop c mbt1 fuel = (MBT_final mbt2).
+  forall c mbt1 mbt2 fuel ms,
+    steps (memobt_step rer c) mbt1 fuel (MBT_final mbt2 ms) ->
+    memobt_loop c mbt1 fuel = (MBT_final mbt2 ms).
 Proof.
-  intros c mbt1 mbt2 fuel H. remember (MBT_final mbt2) as result.
+  intros c mbt1 mbt2 fuel ms H. remember (MBT_final mbt2 ms) as result.
   induction H; subst.
   - destruct n; simpl; auto.
   - destruct x.
@@ -152,11 +152,11 @@ Qed.
 Theorem memobt_match_correct:
   forall r inp result,
     memobt_match r inp = Finished result ->
-    trc_memo_bt rer (compilation r) (initial_state inp) (MBT_final result).
+    exists ms, trc_memo_bt rer (compilation r) (initial_state inp initial_memoset) (MBT_final result ms).
 Proof.
   unfold memobt_match, getres. intros r inp result H.
   match_destr; inversion H; subst.
-  eapply loop_trc; eauto.
+  eexists. eapply loop_trc; eauto.
 Qed.
 
 
@@ -167,7 +167,7 @@ Theorem memobt_match_terminates:
     exists result, memobt_match r inp = Finished result.
 Proof.
   intros r inp SUBSET. unfold memobt_match, memobt_fuel.
-  apply memobt_complexity with (r:=r) (inp:=inp) in SUBSET as [result TERM].
+  apply memobt_complexity with (r:=r) (inp:=inp) in SUBSET as [result [ms TERM]].
   exists result. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 

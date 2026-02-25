@@ -29,9 +29,9 @@ Section MemoBT.
   (* states of the MemoBT algorithm *)
   Inductive mbt_state : Type :=
   | MBT (stk:stack) (ms: memoset)
-  | MBT_final (res:option leaf) : mbt_state.
+  | MBT_final (res:option leaf) (ms:memoset): mbt_state.
 
-  Definition initial_state (inp:input) : mbt_state :=
+  Definition initial_state (inp:input) (ms:memoset): mbt_state :=
     MBT [(0, GroupMap.empty, CanExit, inp)] initial_memoset.
 
   (** * MemoBT small-step semantics *)
@@ -81,7 +81,7 @@ Section MemoBT.
   Inductive memobt_step (c:code) : mbt_state -> mbt_state -> Prop :=
   (* we exhausted all configurations, there is no match *)
   | mbt_nomatch: forall ms,
-      memobt_step c (MBT [] ms) (MBT_final None)
+      memobt_step c (MBT [] ms) (MBT_final None ms)
   (* the memoization allows to skip the current configuration *)
   | mbt_skip:
     forall ms pc gm b i stk
@@ -92,7 +92,7 @@ Section MemoBT.
     forall pc gm b i stk ms leaf
       (UNSEEN: is_memo ms pc b i = false)
       (MATCH: exec_instr c (pc, gm, b, i) = FoundMatch leaf),
-      memobt_step c (MBT ((pc,gm,b,i)::stk) ms) (MBT_final (Some leaf))
+      memobt_step c (MBT ((pc,gm,b,i)::stk) ms) (MBT_final (Some leaf) ms)
   (* we keep exploring, and add each handled configuration to the memoization set *)
   | mbt_explore:
     forall pc gm b i stk ms nextconfs
@@ -122,12 +122,12 @@ Section MemoBT.
       memobt_step c (MBT stk ms) mbts.
   Proof.
     intros c stk ms. destruct stk.
-    { exists (MBT_final None). constructor. }
+    { exists (MBT_final None ms). constructor. }
     destruct c0 as [[[pc gm] b] i].
     destruct (is_memo ms pc b i) eqn:SEEN.
     { exists (MBT stk ms). constructor. auto. }
     destruct (exec_instr c (pc,gm,b,i)) eqn:EXEC.
-    - exists (MBT_final (Some l)). constructor; auto.
+    - exists (MBT_final (Some l) ms). constructor; auto.
     - exists (MBT (s++stk) (memoize ms pc b i)). constructor; auto.
   Qed.
 

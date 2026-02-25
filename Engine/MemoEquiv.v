@@ -212,8 +212,8 @@ Section MemoEquiv.
       (INCL: seen_inclusion code treeseen memoset (hd_error treestk) (head_pc stk)),
       memo_inv code (MTree treestk treeseen) (MBT stk memoset)
   | memoinv_final:
-    forall result,
-      memo_inv code (MTree_final result) (MBT_final result).
+    forall result ts ms,
+      memo_inv code (MTree_final result ts) (MBT_final result ms).
 
 
   (** * Invariant Initialization  *)
@@ -233,7 +233,7 @@ Section MemoEquiv.
       (TREE: bool_tree rer [Areg r] inp CanExit tree)
       (COMPILE: compilation r = code)
       (SUBSET: pike_regex r),
-      memo_inv code (initial_tree_state tree inp) (MemoBT.initial_state inp).
+      memo_inv code (initial_tree_state tree inp initial_seentrees) (MemoBT.initial_state inp initial_memoset).
   Proof.
     intros r inp tree code TREE COMPILE SUBSET.
     unfold compilation in COMPILE. destruct (compile r 0) as [c fresh] eqn:COMP.
@@ -257,7 +257,7 @@ Section MemoEquiv.
   (* identifying states of MemoBT that are going to take a skip step *)
   Definition skip_state (mbs:mbt_state) : bool :=
     match mbs with
-    | MBT_final _ => false
+    | MBT_final _ _ => false
     | MBT stk memoset =>
         match stk with
         | [] => false
@@ -761,7 +761,7 @@ Section MemoEquiv.
     destruct treestk as [|[[t gm] inp] treestk].
     (* no more active trees or configs: no match found *)
     { inversion STACK. subst.
-      left. inversion MEMOSTEP. subst. exists (MTree_final None). split; constructor; auto.
+      left. inversion MEMOSTEP. subst. exists (MTree_final None treeseen). split; constructor; auto.
     }
     (* there is an active tree/config *)
     destruct stk as [|[[[pc gm'] b] inp'] stk]; inversion STACK; subst.
@@ -779,9 +779,9 @@ Section MemoEquiv.
     left. simpl in SKIP. destruct (exec_tree (t, gm, inp)) eqn:EXEC.
     (* Match is found *)
     { eapply exec_match in EXEC as EXEC_INSTR; eauto.
-      assert (mbs2 = MBT_final (Some l)); subst.
+      assert (mbs2 = MBT_final (Some l) memoset); subst.
       { eapply memobt_deterministic; eauto. constructor; auto. }
-      exists (MTree_final (Some l)). split; constructor; auto.
+      exists (MTree_final (Some l) treeseen). split; constructor; auto.
     }
     (* We keep exploring *)
     specialize (exec_explore _ _ _ _ _ _ _ EXEC STUTTERS TC) as [expconfig [EXECBT LTCNEXT]].

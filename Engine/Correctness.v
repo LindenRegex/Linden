@@ -252,17 +252,17 @@ Qed.
 
 (* Any execution of MemoBT to a final state corresponds to an execution of MemoTree *)
 Theorem memobt_to_memotree:
-  forall r inp tree result,
+  forall r inp tree result ms,
     pike_regex r ->
     bool_tree rer [Areg r] inp CanExit tree ->
-    trc_memo_bt (compilation r) (MemoBT.initial_state inp) (MBT_final result) ->
-    trc_memo_tree (initial_tree_state tree inp) (MTree_final result).
+    trc_memo_bt (compilation r) (MemoBT.initial_state inp initial_memoset) (MBT_final result ms) ->
+    exists ts, trc_memo_tree (initial_tree_state tree inp initial_seentrees) (MTree_final result ts).
 Proof.
-  intros r inp tree result SUBSET TREE TRCBT.
+  intros r inp tree result ms SUBSET TREE TRCBT.
   generalize (initial_memo_inv rer r inp tree (compilation r) TREE (@eq_refl _ _) SUBSET).
   intros INIT.
   eapply memobt_to_tree in TRCBT as [btfinal [TRCTREE INV]]; eauto.
-  - inversion INV; subst. auto.
+  - inversion INV; subst. eauto.
   - eapply compilation_stutter_wf; eauto.
 Qed.
 
@@ -282,19 +282,19 @@ Qed.
 (** * Correctness Theorem of the PikeVM result  *)
 
 Theorem memobt_correct:
-  forall r inp tree result,
+  forall r inp tree result ms,
     (* the regex `r` is in the supported subset *)
     pike_regex r ->
     (* `tree` is the tree of the regex `r` for the input `inp` *)
     is_tree rer [Areg r] inp GroupMap.empty forward tree ->
     (* the result of MemoBT is `result` *)
-    trc_memo_bt (compilation r) (MemoBT.initial_state inp) (MBT_final result) ->
+    trc_memo_bt (compilation r) (MemoBT.initial_state inp initial_memoset) (MBT_final result ms) ->
     (* This `result` is the priority result of the `tree` *)
     result = first_leaf tree inp.
 Proof.
-  intros r inp tree result SUBSET TREE TRC.
+  intros r inp tree result ms SUBSET TREE TRC.
   eapply encode_equal with (b:=CanExit) in TREE as BOOLTREE; pike_subset.
-  eapply memobt_to_memotree in TRC; eauto.
+  eapply memobt_to_memotree in TRC as [ts TRC]; eauto.
   assert (SUBTREE: pike_subtree tree).
   { eapply pike_actions_pike_tree with (cont:=[Areg r]); eauto.
     pike_subset. }
@@ -306,23 +306,23 @@ Qed.
 
 (* Equivalence of PikeVM to Warblre backtracking algorithm *)
 Theorem memobt_same_warblre:
-  forall lr wr inp,
+  forall lr wr inp ms,
     pike_regex lr ->
     equiv_regex wr lr ->
     RegExpRecord.capturingGroupsCount rer = StaticSemantics.countLeftCapturingParensWithin wr nil ->
     EarlyErrors.Pass_Regex wr nil ->
     forall result,
-      trc_memo_bt (compilation lr) (MemoBT.initial_state inp) (MBT_final result) ->
+      trc_memo_bt (compilation lr) (MemoBT.initial_state inp initial_memoset) (MBT_final result ms) ->
       EquivDef.equiv_res result ((EquivMain.compilePattern wr rer) (input_str inp) (idx inp)).
 Proof.
-  intros lr wr inp Hpike Hequiv Hcapcount HearlyErrors.
+  intros lr wr inp ms Hpike Hequiv Hcapcount HearlyErrors.
   pose proof equiv_main wr lr rer inp Hequiv Hcapcount HearlyErrors as HequivMain.
   destruct HequivMain as [m [res [Hcompsucc [Hexecsucc Hsameresult]]]].
   unfold compilePattern. rewrite Hcompsucc, Hexecsucc.
   set (tree := FunctionalUtils.compute_tr rer [Areg lr] inp GroupMap.empty forward).
   specialize (Hsameresult tree eq_refl). destruct Hsameresult as [His_tree Hsameresult].
   intros result Hpikeresult.
-  pose proof memobt_correct lr inp tree result Hpike His_tree Hpikeresult as Hsameresult'.
+  pose proof memobt_correct lr inp tree result ms Hpike His_tree Hpikeresult as Hsameresult'.
   rewrite Hsameresult'. assumption.
 Qed.
 
