@@ -410,6 +410,16 @@ Proof.
     + destruct l1; easy.
 Qed.
 
+(* if chaining of literals is exact, chaining is the concatenation of exacts *)
+Lemma chain_literals_exact:
+  forall l1 l2 p,
+    chain_literals l1 l2 = Exact p ->
+    exists p1 p2, l1 = Exact p1 /\ l2 = Exact p2 /\ p = p1 ++ p2.
+Proof.
+  destruct l1, l2; try discriminate.
+  intros p [=]; eauto.
+Qed.
+
 (* the longest string that is a prefix of both strings *)
 Fixpoint common_prefix (s1 s2 : string) : string :=
   match s1, s2 with
@@ -474,6 +484,21 @@ Proof.
   unfold merge_literals; intros. split; intros.
   - destruct l1, l2; now eqdec.
   - destruct H; eqdec; subst; easy.
+Qed.
+
+(* if merging is exact, there are three possible cases *)
+Lemma merge_literals_exact:
+  forall l1 l2 p,
+    merge_literals l1 l2 = Exact p ->
+    l1 = Exact p /\ l2 = Exact p \/
+    l1 = Impossible /\ l2 = Exact p \/
+    l1 = Exact p /\ l2 = Impossible.
+Proof.
+  destruct l1, l2; simpl; try discriminate; eauto.
+  - case_if; eqdec.
+    + injection Heq as <-. intros p [=<-]; eauto.
+    + easy.
+  - now case_if.
 Qed.
 
 (* extracting literals from a character description *)
@@ -559,6 +584,21 @@ Proof.
   } subst.
   repeat rewrite (canonicalize_casesenst rer _ no_i_flag) in H2.
   symmetry. apply EqDec.inversion_true. assumption.
+Qed.
+
+(* a character is in range of itself *)
+Lemma char_match_range_refl: forall c,
+  char_match rer c (CdRange c c) = true.
+Proof.
+  unfold char_match, char_match'. intros c.
+  rewrite
+    Character.numeric_pseudo_bij,
+    CharSet.exist_canonicalized_equiv,
+    CharSet.exist_spec.
+  unfold CharSet.Exists.
+  exists c. split.
+  - rewrite CharSet.range_spec. now constructor.
+  - now eqdec.
 Qed.
 
 Lemma extract_actions_literal_regex:
@@ -911,7 +951,130 @@ Fixpoint has_asserts (r:regex) : bool :=
   | Regex.Character _ | Epsilon | Backreference _ => false
   end.
 
-Conjecture no_asserts_exact_literal :
+(* generalization of checking for assertions in actions *)
+Fixpoint has_asserts_actions (acts: list action) : bool :=
+  match acts with
+  | [] => false
+  | Areg r :: rest => has_asserts r || has_asserts_actions rest
+  | Acheck _ :: rest => true
+  | Aclose _ :: rest => has_asserts_actions rest
+  end.
+
+(* if a literal of a character descriptor is exact, it is a singleton *)
+Lemma extract_literal_char_exact_single:
+  forall cd s,
+    extract_literal_char cd = Exact s ->
+    exists c, s = [c].
+Proof.
+  induction cd; simpl; try discriminate; intros s H.
+  - injection H as <-. eauto.
+  - case_if; eqdec.
+    + injection H as <-. eauto.
+    + discriminate.
+  - apply merge_literals_exact in H. boolprop; eauto.
+Qed.
+
+(* if a character descriptor is exact, it matches the extracted character *)
+Lemma extract_literal_char_exact_char_match:
+  forall cd c,
+    extract_literal_char cd = Exact [c] ->
+    char_match rer c cd = true.
+Proof.
+  unfold char_match.
+  induction cd; try discriminate; simpl; intros c' H.
+  - injection H as <-. now eqdec.
+  - case_if; eqdec.
+    + injection H as <-. apply char_match_range_refl.
+    + discriminate.
+  - apply merge_literals_exact in H. boolprop; eauto.
+Qed.
+
+(* if a list of actions has no assertions, the extracted literal is exact, and the input
+  starts with that extracted literal, then the result of the tree is that literal *)
+Lemma exact_literal_result_general :
+  forall acts tree inp gm p,
+    is_tree rer acts inp gm forward tree ->
+    has_asserts_actions acts = false ->
+    extract_actions_literal acts = Exact p ->
+    starts_with p (next_str inp) ->
+    (exists gm', tree_res tree gm inp forward = Some (advance_input_n inp (length p) forward, gm')).
+Proof.
+  intros acts tree inp gm p Htree.
+  generalize dependent p.
+  remember forward as dir.
+  induction Htree; intros p Hnoassert Hlit Hsw; subst; simpl in *;
+    (* constructs that do not return an Exact *)
+    try discriminate;
+    (* remove case where ignoreCase is true *)
+    try (destruct RegExpRecord.ignoreCase; [now destruct extract_actions_literal|]);
+    (* follows from IH *)
+    try solve[destruct extract_actions_literal; easy || eapply IHHtree; boolprop; eauto].
+  (* tree_match *)
+  - injection Hlit as <-. rewrite advance_input_n_0. eauto.
+  (* tree_char *)
+  - unfold read_char in READ; destruct inp, next as [|c' next']; [discriminate|].
+    destruct char_match eqn:Hmatch; [|discriminate]. injection READ as <-. subst.
+    destruct extract_literal_char eqn:Hchar, extract_actions_literal; try easy.
+    apply extract_literal_char_exact_single in Hchar as [c'' Hchar]. subst.
+    injection Hlit as <-.
+    inversion Hsw. subst.
+    replace (length (c' :: s0)) with (S (length s0)) by easy.
+    rewrite advance_input_n_succ_forward.
+    eapply IHHtree; eauto.
+  (* tree_char_fail *)
+  - destruct extract_literal_char eqn:Hchar, extract_actions_literal; try easy.
+    pose proof (extract_literal_char_exact_single _ _ Hchar) as [c ?]. subst.
+    injection Hlit as <-.
+    unfold read_char in READ. destruct inp, next as [|c' next']; inversion Hsw. subst.
+    destruct char_match eqn:Hmatch; [discriminate|].
+    now rewrite extract_literal_char_exact_char_match in Hmatch.
+  (* disjunction *)
+  - apply chain_literals_exact in Hlit as [p1 [p2 [Hact1 [Hact2 Hchain]]]]. subst. rewrite Hact2 in IHHtree1, IHHtree2.
+    apply merge_literals_exact in Hact1 as [[Hex1 Hex2] | [[Himp1 Hex2] | [Hex1 Himp2]]].
+    + rewrite Hex1 in IHHtree1.
+      specialize (IHHtree1 ltac:(eauto) (p1 ++ p2)). boolprop. repeat specialize_prove IHHtree1 by eauto.
+      destruct IHHtree1 as [? IHHtree1].
+      erewrite IHHtree1. simpl. eauto.
+    + erewrite extract_literal_impossible_general; [simpl|eauto|simpl; now rewrite Himp1].
+      rewrite Hex2 in IHHtree2.
+      eapply IHHtree2; boolprop; eauto.
+    + rewrite Hex1 in IHHtree1.
+      specialize (IHHtree1 ltac:(eauto) (p1 ++ p2)). boolprop. repeat specialize_prove IHHtree1 by eauto.
+      destruct IHHtree1 as [? IHHtree1].
+      erewrite IHHtree1. simpl. eauto.
+  (* sequence *)
+  - rewrite <-chain_literals_assoc in Hlit.
+    eapply IHHtree; boolprop; eauto.
+  (* tree_quant_forced *)
+  - destruct plus as [[|n]|].
+    + rewrite <-chain_literals_assoc in Hlit.
+      eapply IHHtree; boolprop; eauto.
+    + destruct (extract_literal r1), extract_actions_literal, repeat_literal; try easy.
+      simpl in Hlit. rewrite <-app_assoc in Hlit.
+      eapply IHHtree; boolprop; eauto.
+    + destruct (extract_literal r1), extract_actions_literal, repeat_literal; try easy.
+      simpl in Hlit. rewrite <-app_assoc in Hlit.
+      eapply IHHtree; boolprop; eauto.
+  (* tree_quant_free *)
+  - destruct plus as [[|n]|]; now destruct extract_actions_literal.
+Qed.
+
+Lemma exact_literal_result :
+  forall r tree inp gm p,
+    is_tree rer [Areg r] inp gm forward tree ->
+    has_asserts r = false ->
+    extract_literal r = Exact p ->
+    starts_with p (next_str inp) ->
+    (exists gm', tree_res tree gm inp forward = Some (advance_input_n inp (length p) forward, gm')).
+Proof.
+  intros.
+  eapply exact_literal_result_general; eauto; simpl.
+  - now boolprop.
+  - destruct extract_literal; simpl; now rewrite ?app_nil_r.
+Qed.
+
+
+Conjecture no_asserts_exact_literal_unanchored :
   forall r inp p inp' tree gm {strs:StrSearch},
     has_asserts r = false ->
     extract_literal r = Exact p ->
