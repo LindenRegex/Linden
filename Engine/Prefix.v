@@ -84,11 +84,17 @@ Class StrSearch := {
   str_search : string -> string -> option nat;
 
   (* the found position starts with the searched substring *)
-  starts_with_ss: forall s ss i, str_search ss s = Some i -> starts_with ss (List.skipn i s);
+  starts_with_ss: forall s ss i,
+    str_search ss s = Some i ->
+    starts_with ss (List.skipn i s);
   (* there is no earlier position that starts with the searched substring *)
-  no_earlier: forall s ss i, str_search ss s = Some i -> forall i', i' < i -> ~ (starts_with ss (List.skipn i' s));
+  no_earlier: forall s ss i,
+    str_search ss s = Some i ->
+    forall i', i' < i -> ~ (starts_with ss (List.skipn i' s));
   (* if the substring is not found, it cannot appear at any position of the haystack *)
-  not_found: forall s ss, str_search ss s = None -> forall i, i <= length s -> ~ (starts_with ss (List.skipn i s))
+  not_found: forall s ss,
+    str_search ss s = None ->
+    forall i, i <= length s -> ~ (starts_with ss (List.skipn i s))
 }.
 
 Lemma str_search_bound {strs: StrSearch}:
@@ -729,7 +735,7 @@ Proof.
     destruct rest; simpl; eauto with prefix.
   (* CdUnion *)
   - unfold_match Hmatch no_i_flag. simpl in Hmatch.
-    apply Bool.orb_prop in Hmatch. destruct Hmatch; simpl.
+    boolprop.
     + etransitivity.
       * eapply starts_with_chain_merge_literals.
         intro. eapply extract_literal_char_impossible_no_match; eauto.
@@ -764,7 +770,7 @@ Proof.
     try discriminate Hleaf.
   (* tree_char *)
   - (* there is a character to read *)
-    unfold read_char in READ; destruct inp; destruct next; try discriminate READ; subst;
+    unfold read_char in READ; destruct inp; destruct next; try discriminate READ; subst.
     (* the character matches *)
     destruct char_match eqn:Heqmatch; try discriminate READ; injection READ; intros; subst.
     apply chain_literals_extract_char; eauto.
@@ -777,7 +783,7 @@ Proof.
       pose proof (tree_res_cannot_be_impossible_literal _ _ _ _ _ _ _ Htree2 Hleaf).
       etransitivity; eauto using starts_with_chain_merge_literals.
   (* tree_sequence *)
-  - simpl. rewrite <-chain_literals_assoc.
+  - rewrite <-chain_literals_assoc.
     eauto.
   (* tree_quant_forced *)
   - simpl in IHHtree |- *. rewrite no_i_flag in IHHtree.
@@ -795,8 +801,7 @@ Proof.
     + destruct plus. destruct n.
       all: rewrite <- chain_literals_assoc; eapply IHHtree; eauto.
   (* tree_quant_free *)
-  - simpl.
-    destruct plus; destruct extract_actions_literal; constructor.
+  - destruct plus; destruct extract_actions_literal; constructor.
 Qed.
 
 (* main theorem: every match starts with the extracted literal *)
