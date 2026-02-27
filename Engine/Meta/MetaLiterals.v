@@ -62,11 +62,9 @@ Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : search_result
         | Some inp' =>
             (* if it has groups we must reconstruct them *)
             (* LATER: do group reconstruction with an anchored engine *)
-            if has_groups r then Unsupported
-            (* LATER: return exact result *)
-            (* else Some (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty)) *)
-            else Unsupported
-        | None => Ok None
+            if has_groups r then None
+            else Some (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty))
+        | None => Some None
         end
   end.
 
@@ -127,7 +125,11 @@ Proof.
   - destruct has_asserts eqn:Hasserts; [discriminate|].
     destruct input_search eqn:Hsearch.
     (* we found a match *)
-    + destruct has_groups eqn:Hgroups; discriminate.
+    + destruct has_groups eqn:Hgroups; [discriminate|].
+      injection Htry as <-.
+      eapply no_asserts_exact_literal in Hsearch as [gm' Hleaf]; eauto.
+      eapply no_groups_empty_gm in Htree; simpl; boolprop; eauto. simpl in Htree. subst.
+      now rewrite Hleaf.
     (* we did not find a match *)
     + injection Htry as <-.
       rewrite input_search_none_str_search in Hsearch.

@@ -899,6 +899,26 @@ Proof.
 Qed.
 
 
+(** * Exact literals matching *)
+
+
+(* whether a regex has assertions that do not contribute to the match range *)
+Fixpoint has_asserts (r:regex) : bool :=
+  match r with
+  | Lookaround _ _ | Anchor _ => true
+  | Sequence r1 r2 | Disjunction r1 r2 => has_asserts r1 || has_asserts r2
+  | Group _ r' | Quantified _ _ _ r' => has_asserts r'
+  | Regex.Character _ | Epsilon | Backreference _ => false
+  end.
+
+Conjecture no_asserts_exact_literal :
+  forall r inp p inp' tree gm {strs:StrSearch},
+    has_asserts r = false ->
+    extract_literal r = Exact p ->
+    is_tree rer [Areg (lazy_prefix r)] inp gm forward tree ->
+    input_search p inp = Some inp' ->
+    exists gm', first_leaf tree inp = Some (advance_input_n inp' (length p) forward, gm').
+
 (** * Extracted literals size *)
 
 Lemma chain_literals_length:
