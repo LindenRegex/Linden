@@ -6,6 +6,8 @@ From Warblre Require Import Base.
 Ltac eqdec := repeat match goal with
   | [ H: (?x ==? ?y)%wt = true |- _ ] => rewrite EqDec.inversion_true in H; subst
   | [ H: (?x ==? ?y)%wt = false |- _ ] => rewrite EqDec.inversion_false in H
+  | [ |- (?x ==? ?y)%wt = true ] => rewrite EqDec.inversion_true
+  | [ |- (?x ==? ?y)%wt = false ] => rewrite EqDec.inversion_false
   | [ |- context[(?x ==? ?y)%wt] ] => destruct (x ==? y)%wt eqn:?Heq
   | [ H: context[(?x ==? ?y)%wt] |- _ ] => destruct (x ==? y)%wt eqn:?Heq
 end.

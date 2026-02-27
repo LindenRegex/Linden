@@ -319,6 +319,13 @@ Section FunctionalSemantics.
     intros [next pref] dir. simpl. now destruct dir.
   Qed.
 
+  (* advancing a cons input by n+1 is the same as advancing its tail by n *)
+  Lemma advance_input_n_succ_forward:
+    forall c next pref n, advance_input_n (Input (c :: next) pref) (S n) forward = advance_input_n (Input next (c::pref)) n forward.
+  Proof.
+    intros. simpl. now rewrite <-app_assoc.
+  Qed.
+
   (* May be used to simplify the lemma right after this one *)
   Lemma skipn_cons_length {A}:
     forall n (l: list A) x q,
@@ -470,7 +477,7 @@ Section FunctionalSemantics.
   Fixpoint compute_tree (act: actions) (inp: input) (gm: group_map) (dir: Direction) (fuel:nat): option tree :=
     match fuel with
     | 0 => None
-    | S fuel => 
+    | S fuel =>
         match act with
         (* tree_done *)
         | [] => Some Match
@@ -481,13 +488,13 @@ Section FunctionalSemantics.
               | Some treecont => Some (Progress treecont)
               | None => None
               end
-            else Some Mismatch            
+            else Some Mismatch
         (* tree_close *)
         | Aclose gid :: cont =>
             match (compute_tree cont inp (GroupMap.close (idx inp) gid gm) dir fuel) with
             | Some treecont => Some (GroupAction (Close gid) treecont)
             | None => None
-            end          
+            end
         (* tree_epsilon *)
         | Areg Epsilon::cont => compute_tree cont inp gm dir fuel
         (* tree_char, tree_char_fail *)
@@ -515,7 +522,7 @@ Section FunctionalSemantics.
             match compute_tree (Areg r1 :: Areg (Quantified greedy min delta r1) :: cont) inp (GroupMap.reset gidl gm) dir fuel with
             | Some titer => Some (GroupAction (Reset gidl) titer)
             | None => None
-            end          
+            end
         (* tree_quant_done *)
         | Areg (Quantified greedy 0 (NoI.N 0) r1)::cont =>
             compute_tree cont inp gm dir fuel
@@ -531,7 +538,7 @@ Section FunctionalSemantics.
             match compute_tree (Areg r1 :: Aclose gid :: cont) inp (GroupMap.open (idx inp) gid gm) dir fuel with
             | Some treecont => Some (GroupAction (Open gid) treecont)
             | _ => None
-            end          
+            end
         (* tree_lk, tree_lk_fail *)
         | Areg (Lookaround lk r1)::cont =>
             let treelk := compute_tree [Areg r1] inp gm (lk_dir lk) fuel in
@@ -569,7 +576,7 @@ Section FunctionalSemantics.
           end
         end
     end.
-    
+
   (** * Functional Semantics Termination  *)
 
   Lemma somenone:
@@ -594,7 +601,7 @@ Section FunctionalSemantics.
       compute_tree act inp gm dir fuel <> None.
   Proof.
     intros act inp gm dir fuel H.
-    generalize dependent act. generalize dependent inp. 
+    generalize dependent act. generalize dependent inp.
     generalize dependent gm. generalize dependent dir.
     induction fuel; intros.
     { inversion H. }
@@ -675,7 +682,7 @@ Section FunctionalSemantics.
         assert (ENOUGH: fuel > actions_fuel act inp dir). { pose proof anchor_termination act inp dir a. lia. }
         apply IHfuel with (gm := gm) in ENOUGH.
         destruct compute_tree; [apply somenone|contradiction].
-      + simpl.    (* Backreferences *) 
+      + simpl.    (* Backreferences *)
         destruct read_backref as [[br_str nextinp]|] eqn:Hreadbr; try apply somenone.
         apply backref_termination with (cont := act) in Hreadbr.
         assert (ENOUGH: fuel > actions_fuel act nextinp dir) by lia.
