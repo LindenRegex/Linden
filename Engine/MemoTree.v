@@ -91,19 +91,46 @@ Section MemoTree.
     | Mismatch | LKFail _ _ => true
     | Match => false
     | Choice t1 t2 => andb (noleaftree t1) (noleaftree t2)
-    | Read _ t1 | ReadBackRef _ t1 | Progress t1 | AnchorPass _ t1 | GroupAction _ t1 | LK _ _ t1 => noleaftree t1
+    | Read _ t1 | ReadBackRef _ t1 | Progress t1 | AnchorPass _ t1 | GroupAction _ t1 => noleaftree t1
+    | LK lk tlk t1 =>
+        match positivity lk with
+        | true => orb (noleaftree tlk) (noleaftree t1)
+        | false => orb (negb (noleaftree tlk)) (noleaftree t1)
+        end
     end.
   
   (* tree without matching leaves *)
   Lemma noleaf_tree:
-    forall t i gm d, noleaftree t = true -> tree_leaves t i gm d = [].
+    forall t i gm d, noleaftree t = true <-> tree_res t gm i d = None.
   Proof.
-    intros t i gm d H. induction t; simpl; simpl in H; auto;
-      try solve[specialize (IHt H); eapply leaves_indep; eauto].
-    - inversion H.
-    - apply Bool.andb_true_iff in H as [H1 H2]. rewrite IHt1; try rewrite IHt2; auto.
-    - specialize (IHt2 H). destruct positivity; destruct (tree_leaves t1 i gm (lk_dir lk)) as [|[i' gm']]; auto.
-      eapply leaves_indep; eauto.
+    intros t i gm d. induction t; simpl; split; intros H; auto;
+      try solve[inversion H];
+      try solve[apply IHt in H; eapply res_indep; eauto];
+      try solve[eapply res_indep in H; eapply IHt in H; auto].
+    - apply Bool.andb_true_iff in H as [H1 H2].
+      apply IHt1 in H1. apply IHt2 in H2. rewrite H1, H2. auto.
+    - destruct (tree_res t1 gm i d) eqn:TR1; simpl in H; inversion H.
+      apply Bool.andb_true_iff. split.
+      + apply IHt1. auto.
+      + apply IHt2. auto.
+    - destruct positivity eqn:POS.
+      + destruct (tree_res t1 gm i (lk_dir lk)) as [[i' gm']|]eqn:TL1; auto.
+        apply Bool.orb_true_iff in H as [H1 | H2].
+        * apply IHt1 in H1. eapply res_indep in H1. rewrite TL1 in H1. inversion H1.
+        * eapply res_indep. apply IHt2. auto.
+      + destruct (tree_res t1 gm i (lk_dir lk)) as [[i' gm']|]eqn:TL1; auto.
+        apply Bool.orb_true_iff in H as [H1 | H2].
+        * destruct (noleaftree t1) eqn:HN1; try inversion H1.
+          eapply res_indep in TL1. eapply IHt1 in TL1. inversion TL1.
+        * apply IHt2. auto.
+    - destruct positivity eqn:POS; apply Bool.orb_true_iff.
+      + destruct (tree_res t1 gm i (lk_dir lk)) as [[i' gm']|]eqn:TL1; auto.
+        * right. apply IHt2. eapply res_indep. eauto.
+        * left. apply IHt1. eapply res_indep. eauto.
+      + destruct (tree_res t1 gm i (lk_dir lk)) as [[i' gm']|]eqn:TL1; auto.
+        * left. apply Bool.eq_true_not_negb. intros H1. apply IHt1 in H1.
+          eapply res_indep in H1. rewrite TL1 in H1. inversion H1.
+        * right. apply IHt2. auto.
   Qed.
 
   (* set of trees without matching leaves *)
@@ -125,7 +152,7 @@ Section MemoTree.
     - apply H. auto.
   Qed.
 
-  (* We lift this definition to states, to have an execution invariant
+  (* We lift this definition to stacks, to have an execution invariant
      when the initial tree has no result. *)
   Definition noleaf_config (tc:tree_config) : Prop :=
     noleaftree (fst (fst tc)) = true.
@@ -136,15 +163,6 @@ Section MemoTree.
                 (NLS: noleaf_stack stk)
                 (NLT: noleaf_config tc),
       noleaf_stack (tc::stk).
-
-  Inductive noleaf_state : mtree_state -> Prop :=
-  | nlstate: forall tstk tseen
-               (NLSTK: noleaf_stack tstk)
-               (NLSEEN: noleaf tseen),
-      noleaf_state (MTree tstk tseen)
-  | nlstate_final: forall tseen
-                     (NLSEEN: noleaf tseen),
-      noleaf_state (MTree_final None tseen).
 
 
   (** * MemoTree Correctness  *)
@@ -157,10 +175,12 @@ Section MemoTree.
   | mi:
     forall result stk seen
       (SAMERES: forall res, list_nd stk seen res -> res = result)
-      (SUBSET: pike_list stk),
+      (SUBSET: pike_list stk)
+      (NOLEAF: result = None -> noleaf_stack stk /\ noleaf seen),
       memotree_inv (MTree stk seen) result
   | mi_final:
-    forall result ts,
+    forall result ts
+      (NOLEAF: result = None -> noleaf ts),
       memotree_inv (MTree_final result ts) result.
 
   (* This uses the non-deterministic results of the stack, just like the PikeTree proof. *)
@@ -176,9 +196,11 @@ Section MemoTree.
       memotree_inv (initial_tree_state t inp initial_seentrees) (first_leaf t inp).
   Proof.
     intros t. unfold first_leaf. unfold initial_tree_state. constructor; simpl; pike_subset; auto.
-    intros res LISTND.
-    simpl. apply tree_nd_initial; auto.
-    inversion LISTND; subst. inversion TLR; subst. rewrite seqop_none. auto.
+    - intros res LISTND. 
+      simpl. apply tree_nd_initial; auto.
+      inversion LISTND; subst. inversion TLR; subst. rewrite seqop_none. auto.
+    - unfold noleaf_config. simpl. eapply noleaf_tree; eauto.
+    - apply noleaf_initial.
   Qed.
 
   Lemma noleaftree_nd:
@@ -216,9 +238,10 @@ Section MemoTree.
   Proof.
     intros t. unfold first_leaf. unfold initial_tree_state.
     intros inp ts SUB NOLEAF; constructor; simpl; pike_subset; auto.
-    intros res LISTND.
-    inversion LISTND; subst. inversion TLR; subst. rewrite seqop_none.
-    apply noleaf_nd in TR; auto. apply tree_nd_initial; auto.
+    - intros res LISTND.
+      inversion LISTND; subst. inversion TLR; subst. rewrite seqop_none.
+      apply noleaf_nd in TR; auto. apply tree_nd_initial; auto.
+    - unfold noleaf_config. simpl. eapply noleaf_tree. eauto.
   Qed.
 
   (** * Invariant Preservation  *)
@@ -238,10 +261,14 @@ Section MemoTree.
     - assert (None = result).
       { apply SAMERES. constructor. }
       subst. constructor.
+      intros H. apply NOLEAF in H as [_ H]. auto.
     (* skipping *)
-    - constructor; pike_subset. intros res LISTND.
-      apply SAMERES. eapply tlr_cons with (l1:=None); eauto.
-      apply tr_skip. auto.
+    - constructor; pike_subset.
+      + intros res LISTND.
+        apply SAMERES. eapply tlr_cons with (l1:=None); eauto.
+        apply tr_skip. auto.
+      + admit.
+      + admit.
     (* match found *)
     - destruct t; inversion MATCH; subst.
       assert (Some (i,gm) = result).
