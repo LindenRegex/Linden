@@ -27,7 +27,7 @@ Section MemoTree.
 
   Definition initial_tree_state (t:tree) (i:input) (ts:seentrees): mtree_state :=
     MTree [(t, GroupMap.empty, i)] ts.
-
+  
   (** * MemoTree small-step semantics *)
 
   Inductive exec_tree_result : Type :=
@@ -84,25 +84,6 @@ Section MemoTree.
     - eexists. eapply mtree_explore. eauto.
   Qed.
 
-  (** * MemoTree Correctness  *)
-  (* This algorithm always returns the leftmost accepting result of the initial tree *)
-
-  (* Invariant of the MemoTree execution *)
-  (* at any moment, all the possible results of the current state are all equal (equal to the first result of the original tree) *)
-  (* at any moment, all trees manipulated by the algorithms are trees for the subset of regexes supported  *)
-  Inductive memotree_inv: mtree_state -> option leaf -> Prop :=
-  | mi:
-    forall result stk seen
-      (SAMERES: forall res, list_nd stk seen res -> res = result)
-      (SUBSET: pike_list stk),
-      memotree_inv (MTree stk seen) result
-  | mi_final:
-    forall result ts,
-      memotree_inv (MTree_final result ts) result.
-
-  (* This uses the non-deterministic results of the stack, just like the PikeTree proof. *)
-  (* Such results can non-deteterministically skip any subtree in the seen set *)
-
   (** * Seentrees without results  *)
 
   Fixpoint noleaftree (t:tree) :=
@@ -143,6 +124,48 @@ Section MemoTree.
     - subst. auto.
     - apply H. auto.
   Qed.
+
+  (* We lift this definition to states, to have an execution invariant
+     when the initial tree has no result. *)
+  Definition noleaf_config (tc:tree_config) : Prop :=
+    noleaftree (fst (fst tc)) = true.
+
+  Inductive noleaf_stack : tree_stack -> Prop :=
+  | nls_nil: noleaf_stack []
+  | nls_cons: forall tc stk
+                (NLS: noleaf_stack stk)
+                (NLT: noleaf_config tc),
+      noleaf_stack (tc::stk).
+
+  Inductive noleaf_state : mtree_state -> Prop :=
+  | nlstate: forall tstk tseen
+               (NLSTK: noleaf_stack tstk)
+               (NLSEEN: noleaf tseen),
+      noleaf_state (MTree tstk tseen)
+  | nlstate_final: forall tseen
+                     (NLSEEN: noleaf tseen),
+      noleaf_state (MTree_final None tseen).
+
+
+  (** * MemoTree Correctness  *)
+  (* This algorithm always returns the leftmost accepting result of the initial tree *)
+
+  (* Invariant of the MemoTree execution *)
+  (* at any moment, all the possible results of the current state are all equal (equal to the first result of the original tree) *)
+  (* at any moment, all trees manipulated by the algorithms are trees for the subset of regexes supported  *)
+  Inductive memotree_inv: mtree_state -> option leaf -> Prop :=
+  | mi:
+    forall result stk seen
+      (SAMERES: forall res, list_nd stk seen res -> res = result)
+      (SUBSET: pike_list stk),
+      memotree_inv (MTree stk seen) result
+  | mi_final:
+    forall result ts,
+      memotree_inv (MTree_final result ts) result.
+
+  (* This uses the non-deterministic results of the stack, just like the PikeTree proof. *)
+  (* Such results can non-deteterministically skip any subtree in the seen set *)
+
   
   (** * Initialization  *)
   (* In the initial state, the invariant holds *)
