@@ -199,7 +199,7 @@ Proof.
       }
       subst.
       pose proof (is_tree_productivity rer [Areg r] (Input (t :: s) pref1) Groups.GroupMap.empty forward) as [tree Htree].
-      rewrite <-exec_correct; eauto.
+      erewrite <-exec_correct; eauto.
       eauto using input_search_no_earlier, extract_literal_prefix_contra.
     }
     simpl.
@@ -217,7 +217,7 @@ Proof.
   intros i r inp Hsubset Hsearch Hlow.
   rewrite input_prefix_strict_suffix in Hlow.
   pose proof (is_tree_productivity rer [Areg r] i Groups.GroupMap.empty forward) as [tree Htree].
-  rewrite <-exec_correct; eauto.
+  erewrite <-exec_correct; eauto.
   eauto using input_search_not_found, extract_literal_prefix_contra.
 Qed.
 
@@ -245,7 +245,7 @@ Lemma input_search_exec_impossible {strs:StrSearch} {engine:AnchoredEngine rer}:
 Proof.
   intros inp r Hsubset Hextract.
   pose proof (is_tree_productivity rer [Areg r] inp Groups.GroupMap.empty forward) as [tree Htree].
-  rewrite <-exec_correct; eauto.
+  erewrite <-exec_correct; eauto.
   eauto using extract_literal_impossible.
 Qed.
 

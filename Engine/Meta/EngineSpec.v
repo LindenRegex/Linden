@@ -11,6 +11,7 @@ From Linden Require Import Parameters LWParameters.
 From Linden Require Import PikeSubset SeenSets FunctionalPikeVM.
 From Linden Require Import Prefix.
 From Linden Require Import Correctness.
+From Linden Require Import Tactics.
 From Warblre Require Import Base RegExpRecord.
 
 
@@ -27,10 +28,10 @@ Class AnchoredEngine := {
   supported_regex: regex -> bool;
 
   (* the execution follows the backtracking tree semantics *)
-  exec_correct: forall r inp tree ol,
+  exec_correct: forall r inp tree,
     supported_regex r = true ->
     is_tree rer [Areg r] inp Groups.GroupMap.empty forward tree ->
-    (first_leaf tree inp = ol <-> exec r inp = ol)
+    first_leaf tree inp = exec r inp
 }.
 
 Definition dot_star : regex :=
@@ -47,10 +48,10 @@ Class UnanchoredEngine := {
   un_supported_regex: regex -> bool;
 
   (* the execution follows the backtracking tree semantics *)
-  un_exec_correct: forall r inp tree ol,
+  un_exec_correct: forall r inp tree,
     un_supported_regex r = true ->
     is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
-    (first_leaf tree inp = ol <-> un_exec r inp = ol)
+    first_leaf tree inp = un_exec r inp
 }.
 End Engines.
 
@@ -84,15 +85,11 @@ Instance PikeVMAnchoredEngine: AnchoredEngine rer := {
   supported_regex := is_pike_regex;
 }.
   (* exec_correct *)
-  intros r inp tree ol Hsubset Htree.
+  intros r inp tree Hsubset Htree.
   rewrite is_pike_regex_correct in Hsubset.
   pose proof (pike_vm_match_terminates rer r inp Hsubset) as [res Hmatch].
   rewrite Hmatch.
-  split.
-  - intros Hleaf.
-    subst. eauto using pike_vm_match_correct, pike_vm_correct.
-  - intros <-.
-    symmetry. eauto using pike_vm_match_correct, pike_vm_correct.
+  symmetry. eauto using pike_vm_match_correct, pike_vm_correct.
 Qed.
 
 (* we show that the PikeVM fits the scheme of an unanchored engine *)
@@ -105,15 +102,11 @@ Instance PikeVMUnanchoredEngine {strs:StrSearch}: UnanchoredEngine rer := {
   un_supported_regex := is_pike_regex;
 }.
   (* un_exec_correct *)
-  intros r inp tree ol Hsubset Htree.
+  intros r inp tree Hsubset Htree.
   rewrite is_pike_regex_correct in Hsubset.
   pose proof (pike_vm_match_terminates_unanchored rer r inp Hsubset) as [res Hmatch].
   rewrite Hmatch.
-  split.
-  - intros Hleaf.
-    subst. eauto using pike_vm_match_correct_unanchored, pike_vm_correct_unanchored.
-  - intros <-.
-    symmetry. eauto using pike_vm_match_correct_unanchored, pike_vm_correct_unanchored.
+  symmetry. eauto using pike_vm_match_correct_unanchored, pike_vm_correct_unanchored.
 Qed.
 
 End Instances.
