@@ -2,7 +2,7 @@
 
 (* Different optimizations related to doing literal-based searches and acceleration. *)
 
-Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Semantics Tree.

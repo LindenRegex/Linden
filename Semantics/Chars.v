@@ -55,6 +55,10 @@ Section Chars.
     | Input next pref => List.rev pref ++ next
     end.
 
+  Definition total_length (inp: input) : nat :=
+    let '(Input next pref) := inp in
+    length next + length pref.
+
   (* Getting a substring from an input *)
   Definition substr (inp: input) (startIdx endIdx: nat): string :=
     List.firstn (endIdx-startIdx) (List.skipn startIdx (input_str inp)).

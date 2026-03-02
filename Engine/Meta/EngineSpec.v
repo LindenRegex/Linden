@@ -3,7 +3,7 @@
 (* This module describes what it means to be a regex engine. *)
 (* We also show that our engines follow these definitions. *)
 
-Require Import List Bool.
+From Stdlib Require Import List Bool.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Semantics Tree.

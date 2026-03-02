@@ -5,7 +5,7 @@
 (* This allows us to not run a full unanchored search, but just perform an anchored search *)
 (* once at the very beginning. *)
 
-Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Semantics Tree.
@@ -112,7 +112,7 @@ Proof.
 		+	erewrite res_group_map_indep; eauto.
 	(* tree_lk *)
 	- boolprop.
-		+	destruct lk; try discriminate.
+		+ destruct lk; try discriminate.
 			erewrite IHHtree1; eauto.
 		+ destruct positivity, (tree_res treelk); eauto.
 			destruct l.
