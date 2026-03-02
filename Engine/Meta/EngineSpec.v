@@ -35,11 +35,6 @@ Class AnchoredEngine := {
     first_leaf tree inp = exec r inp
 }.
 
-Definition dot_star : regex :=
-  Quantified false 0 NoI.Inf (Regex.Character CdAll).
-Definition lazy_prefix (r:regex) : regex :=
-  Sequence dot_star r.
-
 (* interface of an unanchored, executable engine *)
 (* an unanchored engine finds matches anywhere in the input *)
 Class UnanchoredEngine := {
