@@ -43,7 +43,7 @@ Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : option (optio
   | Prefix s => None
   | Impossible => Some None
   | Exact s =>
-  		(* if it has asserts doing a string search is not enough *)
+      (* if it has asserts doing a string search is not enough *)
       if has_asserts r then None
       else
         match input_search s inp with
@@ -121,13 +121,13 @@ Qed.
 
 (* if the try_lit_search returned a leaf, it is the first_leaf *)
 Theorem try_lit_search_correct {strs:StrSearch}:
-	forall r inp tree ol,
-		is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
-		try_lit_search r inp = Some ol ->
-		first_leaf tree inp = ol.
+  forall r inp tree ol,
+    is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
+    try_lit_search r inp = Some ol ->
+    first_leaf tree inp = ol.
 Proof.
-	unfold try_lit_search.
-	intros r inp tree ol Htree Htry.
+  unfold try_lit_search.
+  intros r inp tree ol Htree Htry.
   destruct extract_literal eqn:Heq.
   (* Exact *)
   - destruct has_asserts eqn:Hasserts; [discriminate|].

@@ -759,7 +759,7 @@ Proof.
   generalize dependent result.
   generalize dependent gm.
   induction Htree; intros; subst;
-  	(* eliminated cases when ignoreCase flag is true *)
+    (* eliminated cases when ignoreCase flag is true *)
     try (simpl; destruct_i; [destruct extract_actions_literal|]);
     (* the prefix is empty *)
     try solve[(constructor || simpl; destruct (extract_actions_literal cont); constructor)];
