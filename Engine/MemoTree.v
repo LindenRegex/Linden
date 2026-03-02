@@ -196,19 +196,6 @@ Section MemoTree.
   (** * Initialization  *)
   (* In the initial state, the invariant holds *)
 
-  Lemma init_memotree_inv:
-    forall t inp,
-      pike_subtree t -> 
-      memotree_inv (initial_tree_state t inp initial_seentrees) (first_leaf t inp).
-  Proof.
-    intros t. unfold first_leaf. unfold initial_tree_state. constructor; simpl; pike_subset; auto.
-    - intros res LISTND. 
-      simpl. apply tree_nd_initial; auto.
-      inversion LISTND; subst. inversion TLR; subst. rewrite seqop_none. auto.
-    - unfold noleaf_config. simpl. eapply noleaf_tree; eauto.
-    - apply noleaf_initial.
-  Qed.
-
   Lemma noleaftree_nd:
     forall t gm inp,
       pike_subtree t ->
@@ -250,6 +237,16 @@ Section MemoTree.
     - unfold noleaf_config. simpl. eapply noleaf_tree. eauto.
   Qed.
 
+  Lemma init_memotree_inv:
+    forall t inp,
+      pike_subtree t -> 
+      memotree_inv (initial_tree_state t inp initial_seentrees) (first_leaf t inp).
+  Proof.
+    intros. apply init_memotree_inv_noleaf; auto.
+    apply noleaf_initial.
+  Qed.
+
+  
   (** * Invariant Preservation  *)
 
   Theorem memotree_preservation:
