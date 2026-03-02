@@ -27,6 +27,15 @@ Fixpoint has_groups (r:regex) : bool :=
   | Regex.Character _ | Epsilon | Backreference _ | Anchor _ => false
   end.
 
+(* whether a regex has assertions that do not contribute to the match range *)
+Fixpoint has_asserts (r:regex) : bool :=
+  match r with
+  | Lookaround _ _ | Anchor _ => true
+  | Sequence r1 r2 | Disjunction r1 r2 => has_asserts r1 || has_asserts r2
+  | Group _ r' | Quantified _ _ _ r' => has_asserts r'
+  | Regex.Character _ | Epsilon | Backreference _ => false
+  end.
+
 (* tries to perform a search using only the literal from the regex *)
 (* On success, returns Some leaf. On failure, returns the None. *)
 Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : option (option leaf) :=
@@ -42,7 +51,9 @@ Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : option (optio
             (* if it has groups we must reconstruct them *)
             (* LATER: do group reconstruction with an anchored engine *)
             if has_groups r then None
-            else Some (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty))
+            (* LATER: return exact result *)
+            (* else Some (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty)) *)
+            else None
         | None => Some None
         end
   end.
@@ -122,11 +133,7 @@ Proof.
   - destruct has_asserts eqn:Hasserts; [discriminate|].
     destruct input_search eqn:Hsearch.
     (* we found a match *)
-    + destruct has_groups eqn:Hgroups; [discriminate|].
-      injection Htry as <-.
-      eapply no_asserts_exact_literal in Hsearch as [leaf [Hleaf Hres]]; eauto.
-      eapply no_groups_empty_gm in Htree; simpl; boolprop; eauto.
-      now rewrite Hleaf, <-Hres, <-Htree, <-surjective_pairing.
+    + destruct has_groups eqn:Hgroups; discriminate.
     (* we did not find a match *)
     + injection Htry as <-.
       rewrite input_search_none_str_search in Hsearch.
