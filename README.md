@@ -33,7 +33,7 @@ This includes:
 2. Pin the version of Warblre:
 
    ```
-   opam pin add --no-action warblre.0.1.0 https://github.com/epfl-systemf/Warblre.git#1657babedb991424e225d689c3ee8b0e151e9f5d
+   opam pin add --no-action warblre.0.1.0 https://github.com/epfl-systemf/Warblre.git#a5a312072b892f4fb0343b8c2ac9d35d451c84f1
    ```
 
 3. Install dependencies:
