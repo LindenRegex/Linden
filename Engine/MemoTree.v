@@ -186,6 +186,12 @@ Section MemoTree.
   (* This uses the non-deterministic results of the stack, just like the PikeTree proof. *)
   (* Such results can non-deteterministically skip any subtree in the seen set *)
 
+  (* The NOLEAF part of the invariant ensures that when the algorithm does not find a match,
+     then the treeseen set contains only trees without matches.
+     This allows the MemoBT algorithm to reuse its seen set when no result has been found,
+     and avoids exploring configurations that have been explored in a previous unfructuous run.
+   *)
+  
   
   (** * Initialization  *)
   (* In the initial state, the invariant holds *)
@@ -263,24 +269,33 @@ Section MemoTree.
       subst. constructor.
       intros H. apply NOLEAF in H as [_ H]. auto.
     (* skipping *)
-    - constructor; pike_subset.
-      + intros res LISTND.
-        apply SAMERES. eapply tlr_cons with (l1:=None); eauto.
-        apply tr_skip. auto.
-      + admit.
-      + admit.
+    - constructor; try solve[pike_subset].
+      2:{ intros N. apply NOLEAF in N as [N1 N2]. split; auto. inversion N1; auto. } 
+      intros res LISTND.
+      apply SAMERES. eapply tlr_cons with (l1:=None); eauto.
+      apply tr_skip. auto.
     (* match found *)
     - destruct t; inversion MATCH; subst.
       assert (Some (i,gm) = result).
       { apply SAMERES. eapply tlr_cons with (l2:=list_result stk0); try solve[constructor].
         apply list_result_nd. pike_subset. }
       subst. constructor.
+      intros N. inversion N.
     (* Mismatch *)
-    - simpl. constructor; pike_subset. intros res LISTND.
+    - simpl. constructor; try solve[pike_subset].
+      2:{ intros N. apply NOLEAF in N as [N1 N2]. inversion N1. split; auto.
+          apply add_noleaf; auto. } 
+      intros res LISTND.
       apply SAMERES. eapply tlr_cons; try solve[constructor].
-      eapply list_add_seen with (gm:=gm) (inp:=i) in LISTND; eauto.
+      eapply list_add_seen with (gm:=gm) (inp:=i) in LISTND; eauto. pike_subset. 
     (* Choice *)
-    - simpl. constructor; pike_subset. intros res LISTND.
+    - simpl. constructor; try solve[pike_subset].
+      2:{ intros N. apply NOLEAF in N as [N1 N2].
+          inversion N1. inversion NLT. apply Bool.andb_true_iff in H2 as [NL1 NL2].
+          split; auto.
+          - repeat (constructor; auto).
+          - apply add_noleaf; auto. }
+      intros res LISTND.
       inversion LISTND; subst. inversion TLR; subst.
       apply SAMERES.
       apply add_parent_tree in TR.
@@ -300,7 +315,10 @@ Section MemoTree.
         eapply list_add_seen_nd with (gm:=gm) in TLR0; eauto.
         econstructor; eauto.
     (* Read *)
-    - simpl. constructor; pike_subset. intros res LISTND.
+    - simpl. constructor; try solve[pike_subset].
+      2:{ intros N. apply NOLEAF in N as [N1 N2]. inversion N1.
+          split; auto. constructor; auto. apply add_noleaf; auto. }
+      intros res LISTND.
       inversion LISTND; subst. apply SAMERES.
       apply add_parent_tree in TR.
       2: { simpl. lia. }
@@ -309,12 +327,15 @@ Section MemoTree.
       (* case analysis: did t1 contribute to the result? *)
       destruct l1 as [leaf1|].
       + simpl. eapply tlr_cons; eauto.
-        apply list_result_nd; auto.
+        apply list_result_nd; auto. pike_subset.
       (* when the tree did not contribute, adding it to seen does not change the results *)
       + econstructor; eauto.
         eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
     (* Progress *)
-    - simpl. constructor; pike_subset. intros res LISTND.
+    - simpl. constructor; try solve[pike_subset].
+      2:{ intros N. apply NOLEAF in N as [N1 N2]. inversion N1.
+          split; auto. constructor; auto. apply add_noleaf; auto. }
+      intros res LISTND.
       inversion LISTND; subst. apply SAMERES.
       apply add_parent_tree in TR.
       2: { simpl. lia. }
@@ -323,12 +344,15 @@ Section MemoTree.
       (* case analysis: did t1 contribute to the result? *)
       destruct l1 as [leaf1|].
       + simpl. eapply tlr_cons; eauto.
-        apply list_result_nd; auto.
+        apply list_result_nd; auto. pike_subset.
       (* when the tree did not contribute, adding it to seen does not change the results *)
       + econstructor; eauto.
         eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
     (* AnchorPass *)
-    - simpl. constructor; pike_subset. intros res LISTND.
+    - simpl. constructor; try solve[pike_subset].
+      2:{ intros N. apply NOLEAF in N as [N1 N2]. inversion N1.
+          split; auto. constructor; auto. apply add_noleaf; auto. }
+      intros res LISTND.
       inversion LISTND; subst. apply SAMERES.
       apply add_parent_tree in TR.
       2: { simpl. lia. }
@@ -337,12 +361,15 @@ Section MemoTree.
       (* case analysis: did t1 contribute to the result? *)
       destruct l1 as [leaf1|].
       + simpl. eapply tlr_cons; eauto.
-        apply list_result_nd; auto.
+        apply list_result_nd; auto. pike_subset.
       (* when the tree did not contribute, adding it to seen does not change the results *)
       + econstructor; eauto.
         eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
     (* GroupAction *)
-    - simpl. constructor; pike_subset. intros res LISTND.
+    - simpl. constructor; try solve[pike_subset].
+      2:{ intros N. apply NOLEAF in N as [N1 N2]. inversion N1.
+          split; auto. constructor; auto. apply add_noleaf; auto. }
+      intros res LISTND.
       inversion LISTND; subst. apply SAMERES.
       apply add_parent_tree in TR.
       2: { simpl. lia. }
@@ -351,7 +378,7 @@ Section MemoTree.
       (* case analysis: did t1 contribute to the result? *)
       destruct l1 as [leaf1|].
       + simpl. eapply tlr_cons; eauto.
-        apply list_result_nd; auto.
+        apply list_result_nd; auto. pike_subset.
       (* when the tree did not contribute, adding it to seen does not change the results *)
       + econstructor; eauto.
         eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
