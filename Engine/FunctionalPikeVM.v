@@ -1,6 +1,6 @@
 (* The PikeVM algorithm, expressed as a fuel-based function *)
 
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
@@ -216,7 +216,7 @@ End FunctionalPikeVM.
 
 From Linden Require Import Inst.
 From Warblre Require Import Inst.
-Require Import Coq.Strings.Ascii Coq.Strings.String.
+Require Import Stdlib.Strings.Ascii Stdlib.Strings.String.
 Open Scope string_scope.
 
 Section Example.

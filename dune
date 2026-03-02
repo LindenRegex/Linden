@@ -1,6 +1,7 @@
 (include_subdirs qualified)
 
-(coq.theory
+(rocq.theory
  (name Linden)
  (package linden)
- (theories Warblre Ltac2))
+ (generate_project_file)
+ (theories Warblre Ltac2 Stdlib))

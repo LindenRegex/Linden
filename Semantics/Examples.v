@@ -1,6 +1,6 @@
 (** * Some examples of Backtracking Trees  *)
 
-Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
@@ -9,7 +9,7 @@ From Warblre Require Import Base RegExpRecord.
 From Linden Require Import FunctionalUtils FunctionalSemantics.
 From Linden Require Import Inst.
 From Warblre Require Import Inst.
-Require Import Coq.Strings.Ascii Coq.Strings.String.
+Require Import Stdlib.Strings.Ascii Stdlib.Strings.String.
 Open Scope string_scope.
 
 
@@ -40,7 +40,7 @@ Example fig2_regex: regex :=
           a_char))
     (Sequence b_char c_char).
 
-Example fig2_input: input := Input [a;b;b;c] []. 
+Example fig2_input: input := Input [a;b;b;c] [].
 
 Example fig2_tree: tree :=
   Choice

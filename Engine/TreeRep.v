@@ -1,4 +1,4 @@
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
@@ -94,7 +94,7 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
 Ltac same_instr :=
   match goal with
   | [ H1 : get_pc ?code ?pc = ?i1, H2: get_pc ?code ?pc = ?i2 |- _ ] => rewrite H1 in H2; inversion H2; subst
-  end.                                                                                                       
+  end.
 
 (* Determinism of the tree representation *)
 Theorem tree_rep_determ:

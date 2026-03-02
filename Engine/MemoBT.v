@@ -1,7 +1,7 @@
 (** * MemoBT algorithm  *)
 (* A backtracking algorithm on the extended NFA, with memoization *)
 
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
@@ -35,7 +35,7 @@ Section MemoBT.
     MBT [(0, GroupMap.empty, CanExit, inp)] initial_memoset.
 
   (** * MemoBT small-step semantics *)
-  
+
   Inductive exec_result : Type :=
   | FoundMatch: leaf -> exec_result
   | Explore: stack -> exec_result.
@@ -77,7 +77,7 @@ Section MemoBT.
         end
     end.
 
-  
+
   Inductive memobt_step (c:code) : mbt_state -> mbt_state -> Prop :=
   (* we exhausted all configurations, there is no match *)
   | mbt_nomatch: forall ms,
@@ -102,7 +102,7 @@ Section MemoBT.
 
   (** * MemoBT properties  *)
 
-  Theorem memobt_deterministic: 
+  Theorem memobt_deterministic:
      forall c mbs mbs1 mbs2
     (STEP1: memobt_step c mbs mbs1)
     (STEP2: memobt_step c mbs mbs2),

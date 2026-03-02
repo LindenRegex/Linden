@@ -1,6 +1,6 @@
 From Linden Require Import Parameters Groups Chars Tree.
 From Warblre Require Import RegExpRecord Typeclasses.
-From Coq Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 
 (** * Equivalence of lists of leaves: definition and lemmas *)

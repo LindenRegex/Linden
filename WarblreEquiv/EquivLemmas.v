@@ -3,7 +3,7 @@ From Linden Require Import Regex GroupMapMS LWParameters Groups Tree Chars Seman
   GroupMapLemmas Tactics CharDescrCharSet LKFactorization StrictSuffix
   Parameters.
 From Warblre Require Import Parameters List Notation Result Typeclasses Base Errors RegExpRecord StaticSemantics Semantics Base.
-From Coq Require Import List ZArith Lia DecidableClass ClassicalFacts.
+From Stdlib Require Import List ZArith Lia DecidableClass ClassicalFacts.
 Import ListNotations.
 Import Notation.
 Import Result.Notations.
@@ -155,8 +155,8 @@ Section EquivLemmas.
       rewrite List.Indexing.Int.of_nat in Hreadsuccess.
       apply List.Indexing.Nat.concat in Hreadsuccess.
       destruct Hreadsuccess as [ [Habs _] | [Hzero Hreadsuccess] ].
-      1: { rewrite List.rev_length in Habs. lia. }
-      rewrite List.rev_length in Hreadsuccess.
+      1: { rewrite List.length_rev in Habs. lia. }
+      rewrite List.length_rev in Hreadsuccess.
       replace (end_ind - length pref) with 0 in Hreadsuccess by lia.
       injection Hreadsuccess as <-.
       unfold char_match. simpl.
@@ -170,11 +170,11 @@ Section EquivLemmas.
       rewrite List.Indexing.Int.of_nat in Hreadsuccess.
       apply List.Indexing.Nat.concat in Hreadsuccess.
       destruct Hreadsuccess as [ [Hlen Hreadsuccess] | [Habs _] ].
-      2: { rewrite List.app_length, List.rev_length in Habs. simpl in *. lia. }
+      2: { rewrite List.length_app, List.length_rev in Habs. simpl in *. lia. }
       injection Hlenpref as <-.
       unfold List.Indexing.Nat.indexing in Hreadsuccess.
-      rewrite List.nth_error_app2 in Hreadsuccess. 2: { rewrite List.rev_length. reflexivity. }
-      rewrite List.rev_length, Nat.sub_diag in Hreadsuccess.
+      rewrite List.nth_error_app2 in Hreadsuccess. 2: { rewrite List.length_rev. reflexivity. }
+      rewrite List.length_rev, Nat.sub_diag in Hreadsuccess.
       injection Hreadsuccess as <-.
       unfold char_match. simpl.
       setoid_rewrite char_match_warblre with (chr := chr) (cd := cd) (charset := charset); auto.
@@ -250,8 +250,8 @@ Section EquivLemmas.
       subst str0 end_ind.
       apply List.Indexing.Nat.concat in Hreadsuccess.
       destruct Hreadsuccess as [ [Habs _] | [_ Hreadsuccess] ].
-      1: { rewrite List.rev_length in Habs. lia. }
-      rewrite List.rev_length in Hreadsuccess.
+      1: { rewrite List.length_rev in Habs. lia. }
+      rewrite List.length_rev in Hreadsuccess.
       replace (length pref - length pref) with 0 in Hreadsuccess by lia.
       injection Hreadsuccess as <-.
       unfold char_match. simpl.
@@ -264,10 +264,10 @@ Section EquivLemmas.
       injection Hlenpref as <-. subst str0.
       apply List.Indexing.Nat.concat in Hreadsuccess.
       destruct Hreadsuccess as [ [Hlen Hreadsuccess] | [Habs _] ].
-      2: { rewrite List.rev_length in Habs. simpl in *. lia. }
+      2: { rewrite List.length_rev in Habs. simpl in *. lia. }
       unfold List.Indexing.Nat.indexing in Hreadsuccess. simpl in *.
-      rewrite List.nth_error_app2 in Hreadsuccess. 2: { rewrite List.rev_length. reflexivity. }
-      rewrite List.rev_length, Nat.sub_diag in Hreadsuccess.
+      rewrite List.nth_error_app2 in Hreadsuccess. 2: { rewrite List.length_rev. reflexivity. }
+      rewrite List.length_rev, Nat.sub_diag in Hreadsuccess.
       injection Hreadsuccess as <-.
       unfold char_match. simpl.
       now setoid_rewrite char_mismatch_warblre.
@@ -360,8 +360,8 @@ Section EquivLemmas.
     inversion Hmatches as [s end_ind cap next pref Hlenpref Heqs Heqms Heqinp].
     subst ms. simpl in *.
     apply (f_equal (length (A := Character))) in Heqs.
-    rewrite List.app_length in Heqs.
-    rewrite List.rev_length in Heqs.
+    rewrite List.length_app in Heqs.
+    rewrite List.length_rev in Heqs.
     assert (Hlen: end_ind = length s) by lia.
     assert (Hnext_zerolen: length next = 0) by lia.
     exists pref. f_equal.
@@ -377,7 +377,7 @@ Section EquivLemmas.
   Proof.
     intros ms [next pref] Hnotend Hmatches. destruct next as [|x next].
     - inversion Hmatches as [s end_ind cap next' pref' Hlenpref Heqs Heqms Heqinp]. subst ms next' pref'. simpl in *.
-      subst s. rewrite app_nil_r, rev_length in Hnotend. lia.
+      subst s. rewrite app_nil_r, length_rev in Hnotend. lia.
     - exists pref. exists x. exists next. reflexivity.
   Qed.
 
@@ -416,7 +416,7 @@ Section EquivLemmas.
     inversion Hmatches as [s end_ind cap next pref Hlenpref Heqs Heqms Heqinp].
     subst ms. simpl in *.
     apply (f_equal (length (A := Character))) in Heqs.
-    rewrite List.app_length, List.rev_length in Heqs.
+    rewrite List.length_app, List.length_rev in Heqs.
     assert (Hlen: end_ind = 0) by lia. subst end_ind.
     exists next. f_equal.
     now apply List.length_zero_iff_nil.
@@ -481,7 +481,7 @@ Section EquivLemmas.
     intros ms inp Hmatches.
     inversion Hmatches as [s end_ind cap next pref Hlenpref Heqs Heqms Heqinp].
     subst ms. simpl in *.
-    apply (f_equal (@length Character)) in Heqs. rewrite List.app_length, List.rev_length in Heqs.
+    apply (f_equal (@length Character)) in Heqs. rewrite List.length_app, List.length_rev in Heqs.
     subst end_ind. lia.
   Qed.
 
@@ -551,8 +551,8 @@ Section EquivLemmas.
       destruct Hinb as [_ Hinb].
       assert (Hinb': end_ind + 1 <= length s) by lia.
       apply (f_equal (length (A := Character))) in Heqs.
-      rewrite List.app_length in Heqs.
-      rewrite List.rev_length in Heqs.
+      rewrite List.length_app in Heqs.
+      rewrite List.length_rev in Heqs.
       simpl in Heqs.
       lia.
     - destruct pref as [|c pref'].
@@ -628,7 +628,7 @@ Section EquivLemmas.
       pose proof ms_matches_inp_prevchar _ _ _ Hmatches Hcl as [pref' [next0 Heqinp]]. injection Heqinp as Heqnext0 Heqpref. subst next0 pref.
       replace next with (@nil Character) in *.
       2: {
-        symmetry. apply length_zero_iff_nil. apply (f_equal (@length Character)) in Hstr0. rewrite app_length, rev_length in Hstr0. lia.
+        symmetry. apply length_zero_iff_nil. apply (f_equal (@length Character)) in Hstr0. rewrite length_app, length_rev in Hstr0. lia.
       }
       injection Hb as <-. rewrite unwrap_bool in Ha. injection Ha as <-.
       rewrite Bool.xorb_false_r. symmetry. reflexivity.
@@ -691,7 +691,7 @@ Section EquivLemmas.
     | Acheck _ :: q => actions_def_groups q
     | Aclose gid :: q => gid :: actions_def_groups q
     end.
-  
+
   (* Lemma for a list of actions *)
   Lemma actions_tree_no_outside_groups:
     forall acts gm0 inp0 dir0 fuel t,
@@ -707,7 +707,7 @@ Section EquivLemmas.
     - (* No action *)
       intro H. injection H as <-. simpl.
       intros gm1 gm2 inp1 inp2 dir H. now injection H as <- <-.
-    
+
     - (* Areg *)
       destruct reg as [ | cd | r1 r2 | r1 r2 | greedy min delta r | lk r | gid r | a | gid].
 
@@ -722,7 +722,7 @@ Section EquivLemmas.
         intro H. injection H as <-. intros gm1 gm2 inp1 inp2 dir.
         simpl. intro Hrescont. specialize (IHfuel treecont eq_refl gm1 gm2 (advance_input' inp1 dir) inp2 dir Hrescont).
         exact IHfuel.
-      
+
       + (* Disjunction *)
         destruct compute_tree as [t1|] eqn:Heqt1; simpl; try discriminate.
         destruct (compute_tree rer (Areg r2 :: acts) _ _ _ _) as [t2|] eqn:Heqt2; simpl; try discriminate.
@@ -744,7 +744,7 @@ Section EquivLemmas.
           intro Htreecomp. specialize (IHfuel (Areg r2 :: Areg r1 :: acts) gm0 inp0 backward t Htreecomp).
           simpl in IHfuel. rewrite <- app_assoc. intros. eapply IHfuel; eauto.
           do 2 rewrite in_app_iff. do 2 rewrite in_app_iff in H0. tauto.
-      
+
       + (* Quantified *)
         destruct min as [|min'].
         1: destruct (delta =? (NoI.N 0))%NoI eqn:Hdeltazero.
@@ -786,11 +786,11 @@ Section EquivLemmas.
         * (* Forced *)
           destruct compute_tree as [titer|] eqn:Hiter; try discriminate.
           intro H. injection H as <-.
-          simpl. intros gm1 gm2 inp1 inp2 dir Heqgm2 gid Hnotin. rewrite in_app_iff in Hnotin. 
+          simpl. intros gm1 gm2 inp1 inp2 dir Heqgm2 gid Hnotin. rewrite in_app_iff in Hnotin.
           rewrite (IHfuel _ _ _ _ _ Hiter _ _ _ _ _ Heqgm2).
           2: { simpl. do 2 rewrite in_app_iff. tauto. }
           assert (~In gid (def_groups r)) by tauto. now apply gm_reset_find_other.
-        
+
       + (* Lookaround *)
         destruct compute_tree as [treelk|] eqn:Hcomputelk; try discriminate.
         destruct lk_result eqn:LKRES.
@@ -820,7 +820,7 @@ Section EquivLemmas.
         2: { simpl. rewrite in_app_iff in *. simpl. tauto. }
         assert (gid <> gid') by tauto.
         now apply group_map_open_find_other.
-      
+
       + (* Anchor *)
         destruct anchor_satisfied.
         * destruct compute_tree as [treecont|] eqn:Hcomputecont; try discriminate.
@@ -832,7 +832,7 @@ Section EquivLemmas.
         * destruct compute_tree as [tcont|] eqn:Hcomputecont; try discriminate.
           intro H. injection H as <-. simpl. eauto using IHfuel.
         * intro H. injection H as <-. discriminate.
-    
+
     - (* Acheck *)
       destruct is_strict_suffix.
       + (* Check passes *)
@@ -843,7 +843,7 @@ Section EquivLemmas.
         exact IHfuel.
       + (* Check fails *)
         intro H. injection H as <-. discriminate.
-    
+
     - (* Aclose *)
       specialize (IHfuel acts (GroupMap.close (idx inp0) gid gm0) inp0 dir0).
       destruct compute_tree as [treecont|]; simpl; try discriminate.
@@ -905,7 +905,7 @@ Section EquivLemmas.
     - (* No action *)
       simpl. intros _ _ _ t H. injection H as <-. simpl.
       intros gm1 gm2 inp1 inp2 _ H. injection H as <- <-. auto.
-    
+
     - (* Epsilon *)
       simpl. intros gm0 inp dir0 t Hcomputesucc gm1 gm2 inp1 inp2 dir Heqgm2 gid idx Hopen2.
       rewrite Areg_Aclose_disappear. eauto using IHfuel.
@@ -921,7 +921,7 @@ Section EquivLemmas.
         eapply IHfuel; eauto.
       + (* Read fails *)
         intro H. injection H as <-. discriminate.
-    
+
     - (* Disjunction *)
       simpl. intros gm0 inp dir0 t.
       destruct compute_tree as [t1|] eqn:Hcompute1; try discriminate.
@@ -937,7 +937,7 @@ Section EquivLemmas.
         intros Hres2 gid idx' Hopen2.
         pose proof IHfuel _ _ _ _ _ Hcompute2 _ _ _ _ _ Hres2 _ _ Hopen2.
         simpl in H. rewrite Areg_Aclose_disappear in *. auto.
-    
+
     - (* Sequence *)
       simpl. intros gm0 inp dir0 t Hcomputesucc gm1 gm2 inp1 inp2 dir Heqgm2 gid idx' Hopen2.
       pose proof IHfuel _ _ _ _ _ Hcomputesucc _ _ _ _ _ Heqgm2 _ _ Hopen2.
@@ -1044,7 +1044,7 @@ Section EquivLemmas.
         rewrite Areg_Aclose_disappear. eauto using IHfuel.
       + (* Anchor is not satisfied *)
         intro H. injection H as <-. discriminate.
-    
+
     - (* Backreference *)
       intros gm0 inp dir t. simpl.
       destruct read_backref as [[br_str nextinp]|].
@@ -1053,7 +1053,7 @@ Section EquivLemmas.
         intros gm1 gm2 inp1 inp2 dir0 Heqgm2 gid' Hopen2.
         rewrite Areg_Aclose_disappear. eauto using IHfuel.
       + intro H. injection H as <-. discriminate.
-    
+
     - (* Check *)
       intros gm0 inp dir0 t. simpl.
       destruct is_strict_suffix.
@@ -1161,22 +1161,22 @@ Section EquivLemmas.
       + intro Habs.
         assert (next = []). {
           destruct next; try reflexivity.
-          apply (f_equal (length (A := Character))) in Habs. rewrite firstn_length in Habs. simpl in Habs. lia.
+          apply (f_equal (length (A := Character))) in Habs. rewrite length_firstn in Habs. simpl in Habs. lia.
         }
         subst next. rewrite app_nil_r in H3. rewrite <- H3 in H2.
-        apply (f_equal (length (A := Character))) in H2. rewrite app_length, rev_length, rev_length in H2. lia.
+        apply (f_equal (length (A := Character))) in H2. rewrite length_app, length_rev, length_rev in H2. lia.
       + apply (f_equal (skipn (A := Character) (length pref))) in H3, H2. rewrite skipn_app in H3, H2. rewrite <- H2 in H3.
-        rewrite rev_length, Nat.sub_diag in H3. rewrite <- rev_length in H3 at 1. rewrite skipn_all in H3.
-        simpl in *. rewrite rev_length in *. replace (length pref - length pref') with 0 in * by lia. simpl in *.
+        rewrite length_rev, Nat.sub_diag in H3. rewrite <- length_rev in H3 at 1. rewrite skipn_all in H3.
+        simpl in *. rewrite length_rev in *. replace (length pref - length pref') with 0 in * by lia. simpl in *.
         rewrite H3. f_equal.
-        rewrite firstn_app, skipn_length, rev_length, Nat.sub_diag. simpl. rewrite app_nil_r.
+        rewrite firstn_app, length_skipn, length_rev, Nat.sub_diag. simpl. rewrite app_nil_r.
         rewrite firstn_all2. 1: reflexivity.
-        rewrite skipn_length, rev_length. reflexivity.
-      + apply (f_equal (firstn (length pref'))) in H2, H3. rewrite firstn_app, rev_length in H2, H3.
-        rewrite <- rev_length in H2 at 1. rewrite firstn_all, Nat.sub_diag in H2. simpl in H2. rewrite app_nil_r in H2.
+        rewrite length_skipn, length_rev. reflexivity.
+      + apply (f_equal (firstn (length pref'))) in H2, H3. rewrite firstn_app, length_rev in H2, H3.
+        rewrite <- length_rev in H2 at 1. rewrite firstn_all, Nat.sub_diag in H2. simpl in H2. rewrite app_nil_r in H2.
         rewrite <- H2 in H3. apply (f_equal (rev (A := Character))) in H3. rewrite rev_app_distr, rev_involutive in H3.
         rewrite <- H3 at 1. f_equal.
-        rewrite firstn_all2. 2: { rewrite rev_length. lia. } apply rev_involutive.
+        rewrite firstn_all2. 2: { rewrite length_rev. lia. } apply rev_involutive.
     - (* Backward *)
       destruct inp' as [next' pref']. destruct inp as [next pref].
       apply ss_bwd_diff.
@@ -1194,22 +1194,22 @@ Section EquivLemmas.
       + intro Habs.
         assert (next' = []). {
           destruct next'; try reflexivity.
-          apply (f_equal (length (A := Character))) in Habs. rewrite firstn_length in Habs. simpl in Habs. lia.
+          apply (f_equal (length (A := Character))) in Habs. rewrite length_firstn in Habs. simpl in Habs. lia.
         }
         subst next'. rewrite app_nil_r in H2. rewrite <- H2 in H3.
-        apply (f_equal (length (A := Character))) in H3. rewrite app_length, rev_length, rev_length in H3. lia.
-      + apply (f_equal (skipn (length pref'))) in H2, H3. rewrite skipn_app, rev_length in H2, H3.
-        rewrite <- rev_length in H2 at 1. rewrite skipn_all, Nat.sub_diag in H2. simpl in H2.
+        apply (f_equal (length (A := Character))) in H3. rewrite length_app, length_rev, length_rev in H3. lia.
+      + apply (f_equal (skipn (length pref'))) in H2, H3. rewrite skipn_app, length_rev in H2, H3.
+        rewrite <- length_rev in H2 at 1. rewrite skipn_all, Nat.sub_diag in H2. simpl in H2.
         rewrite <- H2 in H3. replace (length pref' - length pref) with 0 in H3 by lia. simpl in H3.
         rewrite <- H3 at 1. f_equal.
-        rewrite <- H3. rewrite firstn_app, skipn_length, rev_length, Nat.sub_diag. simpl. rewrite app_nil_r.
+        rewrite <- H3. rewrite firstn_app, length_skipn, length_rev, Nat.sub_diag. simpl. rewrite app_nil_r.
         rewrite firstn_all2. 1: reflexivity.
-        rewrite skipn_length, rev_length. reflexivity.
-      + apply (f_equal (firstn (length pref))) in H2, H3. rewrite firstn_app, rev_length in H2, H3.
-        rewrite <- rev_length in H3 at 1. rewrite firstn_all, Nat.sub_diag in H3. simpl in H3. rewrite app_nil_r in H3.
+        rewrite length_skipn, length_rev. reflexivity.
+      + apply (f_equal (firstn (length pref))) in H2, H3. rewrite firstn_app, length_rev in H2, H3.
+        rewrite <- length_rev in H3 at 1. rewrite firstn_all, Nat.sub_diag in H3. simpl in H3. rewrite app_nil_r in H3.
         rewrite <- H3 in H2. apply (f_equal (rev (A := Character))) in H2. rewrite rev_app_distr, rev_involutive in H2.
         rewrite <- H2 at 1. f_equal.
-        rewrite firstn_all2. 2: { rewrite rev_length. lia. } apply rev_involutive.
+        rewrite firstn_all2. 2: { rewrite length_rev. lia. } apply rev_involutive.
   Qed.
 
   (* Validity wrt checks right before iterating a quantifier *)
@@ -1405,7 +1405,7 @@ Section EquivLemmas.
         unfold List.Disjoint, not in Hdef_forbid_disj. intros ->. apply Hdef_forbid_disj with (x := S n); auto. simpl. now left.
       }
       rewrite group_map_open_find_other. 2: congruence.
-      unfold no_forbidden_groups in Hnoforb. apply Hnoforb. rewrite in_app_iff. now right. 
+      unfold no_forbidden_groups in Hnoforb. apply Hnoforb. rewrite in_app_iff. now right.
   Qed.
 
   (* Lemma used when closing a group *)
@@ -1641,7 +1641,7 @@ Section EquivLemmas.
         * exfalso. apply Hgmgl in Hin. specialize (Hnoforb (S n)).
           rewrite in_app_iff in Hnoforb.
           specialize_prove Hnoforb. {
-            left. simpl. left. reflexivity. 
+            left. simpl. left. reflexivity.
           }
           congruence.
     - (* gid' is not the newly open group *)
@@ -1662,7 +1662,7 @@ Section EquivLemmas.
       (Hinp'compat: input_compat inp' str0)
       (Hgm'ms': equiv_groupmap_ms gm' ms')
       (Hgm'gl': group_map_equiv_open_groups gm' ((S n, idx inp)::gl))
-      (Heqrres: rres = 
+      (Heqrres: rres =
         if (dir ==? forward)%wt
         then
          if negb (MatchState.endIndex ms <=? MatchState.endIndex ms')%Z
@@ -1749,7 +1749,7 @@ Section EquivLemmas.
       rewrite List.Update.Nat.One.indexing_updated_other with (i := n) (ls := MatchState.captures ms') (v := r); auto.
       rewrite <- nth_indexing. apply Hgm'ms'.
   Qed.
-  
+
   Lemma equiv_open_groups_close_group:
     forall n startidx endidx gm' gl lr,
       group_map_equiv_open_groups gm' ((S n, startidx)::gl) ->
@@ -1796,7 +1796,7 @@ Section EquivLemmas.
   Proof.
     intros ms next pref rlen endMatch -> Hmsinp Hrlennneg.
     inversion Hmsinp as [str0 end_ind cap next' pref' Hlenpref Heqstr0 Heqms Heqnext']. subst next' pref' str0. simpl.
-    rewrite app_length, rev_length, Z.gtb_gt.
+    rewrite length_app, length_rev, Z.gtb_gt.
     change (match Z.to_nat rlen with | 0 => _ | S m' => _ end) with (S (length next) <=? Z.to_nat rlen).
     rewrite Nat.leb_le. lia.
   Qed.
@@ -1858,7 +1858,7 @@ Section EquivLemmas.
     forall i j inp, length (substr inp i j) <= j-i.
   Proof.
     intros i j inp. unfold substr.
-    rewrite firstn_length. lia.
+    rewrite length_firstn. lia.
   Qed.
 
   Lemma indexing_nat_to_int {A}:
@@ -1961,12 +1961,12 @@ Section EquivLemmas.
     decide (Z.to_nat startIdx + n < length s).
     - (* firstn is actually truncating stuff *)
       rewrite <- nth_error_app1 with (l' := skipn n (skipn (Z.to_nat startIdx) s)).
-      2: { rewrite firstn_length_le; auto. rewrite skipn_length. lia. }
+      2: { rewrite firstn_length_le; auto. rewrite length_skipn. lia. }
       rewrite firstn_skipn.
       rewrite nth_error_skipn; auto.
     - (* firstn leaves the skipn unchanged *)
       rewrite firstn_all2.
-      2: { rewrite skipn_length. lia. }
+      2: { rewrite length_skipn. lia. }
       rewrite nth_error_skipn; auto.
   Qed.
 
@@ -1990,8 +1990,8 @@ Section EquivLemmas.
     - replace (length (skipn (length (rev pref)) str0)) with (length next).
       2: { rewrite <- Heqstr0. rewrite skipn_app, skipn_all, Nat.sub_diag. reflexivity. }
       apply List.Indexing.Int.success_bounds in Hindexing. rewrite <- Heqstr0 in Hindexing.
-      rewrite app_length, rev_length in Hindexing. lia.
-    - rewrite rev_length, Hlenpref. auto.
+      rewrite length_app, length_rev in Hindexing. lia.
+    - rewrite length_rev, Hlenpref. auto.
   Qed.
 
   Lemma nth_error_firstn {A}:
@@ -2031,10 +2031,10 @@ Section EquivLemmas.
     simpl in *.
     replace (rev _) with (firstn (Z.to_nat rlen) (skipn (end_ind - Z.to_nat rlen) str0)).
     2: { apply (f_equal (skipn (end_ind - Z.to_nat rlen))) in Heqstr0. rewrite <- Heqstr0.
-    rewrite skipn_app, rev_length. replace (end_ind - _ - length pref) with 0 by lia. simpl.
-    rewrite firstn_app, skipn_length, rev_length. replace (Z.to_nat rlen - _) with 0 by lia.
+    rewrite skipn_app, length_rev. replace (end_ind - _ - length pref) with 0 by lia. simpl.
+    rewrite firstn_app, length_skipn, length_rev. replace (Z.to_nat rlen - _) with 0 by lia.
     simpl. rewrite app_nil_r. rewrite skipn_rev. replace (length pref - _) with (Z.to_nat rlen) by lia.
-    rewrite firstn_all2. 2: { rewrite rev_length. apply firstn_le_length. } reflexivity. }
+    rewrite firstn_all2. 2: { rewrite length_rev. apply firstn_le_length. } reflexivity. }
     replace (end_ind - Z.to_nat rlen) with (Z.to_nat (Z.of_nat end_ind - rlen)) by lia.
     apply indexing_firstn_skipn; auto.
   Qed.
@@ -2107,13 +2107,13 @@ Section EquivLemmas.
         replace (nth_error (substr _ _ _) i) with (Some rsi) by (symmetry; eauto using backref_get_ref).
         rewrite neqb_eq in Hdiff. simpl. f_equal. congruence.
       + replace (nth_error _ i) with (None (A := Character)).
-        2: { symmetry. apply nth_error_None. rewrite map_length, firstn_length. lia. }
+        2: { symmetry. apply nth_error_None. rewrite length_map, length_firstn. lia. }
         replace (nth_error _ i) with (None (A := Character)).
         2: { symmetry. apply nth_error_None. transitivity (Z.to_nat endIdx - Z.to_nat startIdx). 2: lia.
-          rewrite map_length. apply substr_len. }
+          rewrite length_map. apply substr_len. }
         reflexivity.
   Qed.
-  
+
   (* Backward direction; mostly copy-pasting forward proof *)
   Lemma exists_diff_iff_bwd:
     forall ms next pref startIdx endIdx beginMatch rlen existsdiff,
@@ -2170,10 +2170,10 @@ Section EquivLemmas.
         replace (nth_error (substr _ _ _) i) with (Some rsi) by (symmetry; eauto using backref_get_ref).
         rewrite neqb_eq in Hdiff. simpl. f_equal. congruence.
       + replace (nth_error _ i) with (None (A := Character)).
-        2: { symmetry. apply nth_error_None. rewrite map_length, rev_length, firstn_length. lia. }
+        2: { symmetry. apply nth_error_None. rewrite length_map, length_rev, length_firstn. lia. }
         replace (nth_error _ i) with (None (A := Character)).
         2: { symmetry. apply nth_error_None. transitivity (Z.to_nat endIdx - Z.to_nat startIdx). 2: lia.
-          rewrite map_length. apply substr_len. }
+          rewrite length_map. apply substr_len. }
         reflexivity.
   Qed.
 
@@ -2195,8 +2195,8 @@ Section EquivLemmas.
     inversion Hmsinp as [str0' endIndOrig cap next' pref' Hlenpref Heqstr0 Heqms]. inversion Hinpcompat as [next'' pref'' str0'' Heqstr0bis Heqnext'' Heqpref''].
     subst next' next'' pref' pref'' ms str0''. simpl in *.
     split; constructor.
-    - rewrite app_length, rev_length, firstn_length_le; try lia.
-      apply (f_equal (length (A := Character))) in Heqstr0. rewrite app_length, rev_length in Heqstr0. lia.
+    - rewrite length_app, length_rev, firstn_length_le; try lia.
+      apply (f_equal (length (A := Character))) in Heqstr0. rewrite length_app, length_rev in Heqstr0. lia.
     - rewrite rev_app_distr. rewrite <- app_assoc. rewrite rev_involutive, firstn_skipn. auto.
     - rewrite rev_app_distr. rewrite <- app_assoc. rewrite rev_involutive, firstn_skipn. auto.
   Qed.
@@ -2219,7 +2219,7 @@ Section EquivLemmas.
     inversion Hmsinp as [str0' endIndOrig cap next' pref' Hlenpref Heqstr0 Heqms]. inversion Hinpcompat as [next'' pref'' str0'' Heqstr0bis Heqnext'' Heqpref''].
     subst next' next'' pref' pref'' ms str0''. simpl in *.
     split; constructor.
-    - rewrite skipn_length. lia.
+    - rewrite length_skipn. lia.
     - rewrite app_assoc. rewrite <- rev_app_distr. rewrite firstn_skipn. auto.
     - rewrite app_assoc. rewrite <- rev_app_distr. rewrite firstn_skipn. auto.
   Qed.
@@ -2233,7 +2233,7 @@ Section EquivLemmas.
   Proof.
     intros next pref inp' rlen startIdx endIdx -> Hrlennneg Hfirstn_next_substr ->.
     rewrite <- Hfirstn_next_substr.
-    simpl. rewrite app_length, rev_length. lia. 
+    simpl. rewrite length_app, length_rev. lia.
   Qed.
 
   Lemma backref_inp'_idx_bwd:
@@ -2245,7 +2245,7 @@ Section EquivLemmas.
   Proof.
     intros next pref inp' rlen startIdx endIdx -> Hrlennneg Hrlenle Hfirstn_pref_substr ->.
     rewrite <- Hfirstn_pref_substr.
-    simpl. rewrite rev_length, skipn_length, firstn_length_le; lia.
+    simpl. rewrite length_rev, length_skipn, firstn_length_le; lia.
   Qed.
 
 

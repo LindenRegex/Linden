@@ -1,6 +1,6 @@
 From Warblre Require Import Parameters Typeclasses RegExpRecord Patterns Result Errors.
 From Linden Require Import Parameters Utils.
-From Coq Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 Import Result.Notations.
 Import Utils.List.

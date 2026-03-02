@@ -1,4 +1,4 @@
-From Coq Require Import ZArith List.
+From Stdlib Require Import ZArith List.
 From Linden Require Import Chars Groups Tree LWParameters Parameters.
 From Warblre Require Import Notation Result Errors Parameters Base Patterns.
 Import Notation.

@@ -1,5 +1,5 @@
 From Linden Require Import LeavesEquivalence Parameters Tree.
-From Coq Require Import List.
+From Stdlib Require Import List.
 Import ListNotations.
 
 

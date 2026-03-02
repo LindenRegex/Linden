@@ -1,6 +1,6 @@
 (** * Equivalence between MemoBT algorithm and MemoTree algorithm  *)
 
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 
@@ -16,7 +16,7 @@ Section MemoEquiv.
   Context {params: LindenParameters}.
   Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
-  
+
   (* FIXME: these are generalizations of definitions used in the PikeEquiv proof *)
   (* it could be nice to only use the generalized version everywhere *)
   (* I should write an NFA library *)
@@ -77,7 +77,7 @@ Section MemoEquiv.
       simpl in IHTC1. destruct IHTC1; subst; simpl; auto.
   Qed.
 
-  
+
   Lemma tc_same_tree:
     forall code inp t1 gm1 t2 gm2 pc b
       (TC1: tree_config code (t1,gm1,inp) (pc,gm1,b,inp))
@@ -88,7 +88,7 @@ Section MemoEquiv.
     eapply tc_same_interm in TC1; eauto. simpl in TC1. auto.
   Qed.
 
-  
+
   (* the initial active config and the initial active tree are related with the invariant *)
   Lemma initial_tree_config:
     forall r code tree inp
@@ -117,7 +117,7 @@ Section MemoEquiv.
       (LTC: list_tree_config code treelist threadlist)
       (TC: tree_config code (tree, gm, inp) (pc, gm, b, inp)),
       list_tree_config code ((tree,gm,inp)::treelist) ((pc,gm,b,inp)::threadlist).
-  
+
   Lemma ltc_app:
     forall code tl1 tl2 vl1 vl2
       (LTC1: list_tree_config code tl1 vl1)
@@ -153,14 +153,14 @@ Section MemoEquiv.
     unfold seen_inclusion in *.
     intros pc0 b0 inp0 SEEN. apply is_memo_add in SEEN. destruct SEEN as [EQ|SEEN].
     - inversion EQ. subst. left. exists tree. exists gm. split; auto. apply in_add. left. auto.
-    - specialize (INCL pc0 b0 inp0 SEEN).      
+    - specialize (INCL pc0 b0 inp0 SEEN).
       destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
       + left. exists ts. exists gms. split; auto. apply in_add. right; auto.
       + left. exists ts. exists gms. split; auto.
         apply in_add. left; auto. inversion EQ. auto.
   Qed.
 
-  
+
   Lemma skip_inclusion:
     forall code inp treeseen memoset tree gm currentpc
       (INCL: seen_inclusion code treeseen memoset (Some (tree, gm, inp)) currentpc)
@@ -197,7 +197,7 @@ Section MemoEquiv.
     - right. split; auto. exists ts. exists gms. split; auto. lia.
   Qed.
 
-  
+
   Definition head_pc (stk:list config) : label :=
     match stk with
     | [] => 0
@@ -332,7 +332,7 @@ Section MemoEquiv.
       repeat invert_rep. simpl. rewrite CONSUME, READ. split; auto. split; auto.
       eapply tc_eq; eauto.
       2: { pike_subset. }
-      replace (pc + 1) with (S pc) by lia. auto.      
+      replace (pc + 1) with (S pc) by lia. auto.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
       repeat (econstructor; eauto). pike_subset.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
@@ -358,7 +358,7 @@ Section MemoEquiv.
     - repeat invert_rep. simpl. rewrite OPEN. split; auto.
       eapply tc_eq; eauto.
       2: { pike_subset. }
-      replace (pc+1) with (S pc) by lia. 
+      replace (pc+1) with (S pc) by lia.
       apply cons_bc with (pcmid:=end1); repeat (econstructor; eauto).
   Qed.
 
@@ -375,7 +375,7 @@ Section MemoEquiv.
     induction TREE; intros; subst; try inversion HeqTCLOSE; subst.
     - repeat invert_rep. simpl. rewrite CLOSE. split; auto.
       econstructor; eauto. 2: pike_subset.
-      replace (pc + 1) with (S pc) by lia. auto. 
+      replace (pc + 1) with (S pc) by lia. auto.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
       repeat (econstructor; eauto). pike_subset.
@@ -383,7 +383,7 @@ Section MemoEquiv.
     - destruct greedy; inversion CHOICE.
   Qed.
 
-  Lemma exec_reset:  
+  Lemma exec_reset:
     forall gidl tree inp code pc b gm,
       tree_config code (GroupAction (Reset gidl) tree, gm, inp) (pc,gm,b,inp)  ->
       stutters pc code = false ->
@@ -436,7 +436,7 @@ Section MemoEquiv.
     - repeat invert_rep. simpl. rewrite CHECK, ANCHOR. split; auto.
       eapply tc_eq; eauto.
       2: { pike_subset. }
-      replace (pc+1) with (S pc) by lia. 
+      replace (pc+1) with (S pc) by lia.
       assumption.
   Qed.
 
@@ -502,7 +502,7 @@ Section MemoEquiv.
               { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
               repeat (econstructor; eauto).
             * apply tc_eq with (actions:=cont); auto. pike_subset.
-        }      
+        }
       + { (* Star *)
           destruct plus; inversion DINF.
           repeat invert_rep. destruct greedy; inversion CHOICE; subst.
@@ -670,14 +670,14 @@ Section MemoEquiv.
         exists pcstart. exists b. split; try split; try lia.
         * simpl. rewrite JMP. auto.
         * apply tc_eq with (actions:=Areg (Quantified greedy 0 (NoI.N 1 + NoI.N 0)%NoI r1) :: cont); try constructor; auto; pike_subset.
-          eapply tree_quant_free; eauto.        
+          eapply tree_quant_free; eauto.
       (* Star *)
       + destruct plus; inversion DINF. invert_rep.
         { invert_rep. invert_rep; try in_subset. destruct greedy; stutter. }
         exists pcstart. exists b. split; try split; try lia.
         * simpl. rewrite JMP. auto.
         * apply tc_eq with (actions:=Areg (Quantified greedy 0 (NoI.N 1 + +∞)%NoI r1) :: cont); try constructor; auto; pike_subset.
-          eapply tree_quant_free; eauto.        
+          eapply tree_quant_free; eauto.
       (* Unsupported *)
       + rewrite DUN in SUBSET. inversion SUBSET; inversion H1; inversion H4; subst; lia.
     - invert_rep.
@@ -722,7 +722,7 @@ Section MemoEquiv.
       unfold PikeVM.upd_label. eauto.
   Qed.
 
-  
+
 
   Theorem invariant_preservation:
   forall code mts1 mbs1 mbs2

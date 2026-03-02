@@ -7,8 +7,8 @@ license: "MIT"
 homepage: "https://github.com/epfl-systemf/Linden"
 bug-reports: "https://github.com/epfl-systemf/Linden/issues"
 depends: [
-  "dune" {>= "3.14"}
-  "coq" {= "8.18.0"}
+  "dune" {>= "3.21"}
+  "rocq-prover" {= "9.0.0"}
   "warblre" {= "0.1.0"}
   "odoc" {with-doc}
 ]
@@ -26,3 +26,4 @@ build: [
     "@doc" {with-doc}
   ]
 ]
+x-maintenance-intent: ["(latest)"]

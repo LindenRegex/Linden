@@ -1,4 +1,4 @@
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
@@ -105,7 +105,7 @@ Section PikeSubset.
     forall t gm i l,
       pike_list ((t,gm,i)::l) <-> pike_subtree t /\ pike_list l.
   Proof.
-    intros t gm i l. unfold pike_list. split; try split; intros. 
+    intros t gm i l. unfold pike_list. split; try split; intros.
     - eapply H; eauto. left. eauto.
     - eapply H; eauto. right. eauto.
     - destruct H. inversion H0; subst.
@@ -159,19 +159,19 @@ Section PikeSubset.
   Proof.
     intros l1 l2 inp. unfold suppl. rewrite map_app. auto.
   Qed.
-  
+
 End PikeSubset.
 
 
 
 (* inverting evidence of belonging to the subset *)
-Ltac invert_subset := 
+Ltac invert_subset :=
   match goal with
   | [ H : pike_list (suppl ((_, _) :: _) _) |- _ ] => simpl in H
   | [ H : pike_list ((_,_,_)::_) |- _ ] => apply pike_list_cons in H; destruct H
   | [ H : pike_list (?tgmi::_) |- _ ] => destruct ?tgmi as [[t gm]i]
   | [ H : pike_list (_ ++ _) |- _ ] => apply pike_list_app in H; destruct H
-    
+
   | [ H : pike_subtree (Choice _ _) |- _ ] => inversion H; clear H
   | [ H : pike_subtree (Read _ _) |- _ ] => inversion H; clear H
   | [ H : pike_subtree (Progress _) |- _ ] => inversion H; clear H
@@ -179,12 +179,12 @@ Ltac invert_subset :=
   | [ H : pike_subtree (ReadBackRef _ _) |- _ ] => inversion H; clear H
   | [ H : pike_subtree (AnchorPass _ _) |- _ ] => inversion H; clear H
   | [ H : pike_subtree (LK _ _ _) |- _ ] => inversion H; clear H
-  | [ H : pike_subtree (LKFail _ _) |- _ ] => inversion H; clear H                                       
+  | [ H : pike_subtree (LKFail _ _) |- _ ] => inversion H; clear H
 
   | [ H : pike_actions (_ :: _) |- _ ] => inversion H; clear H
 
   | [ H : pike_action (Areg _) |- _ ] => inversion H; clear H
-                                                           
+
   | [ H : pike_regex (Regex.Character _) |- _ ] => inversion H; clear H
   | [ H : pike_regex (Disjunction _ _) |- _ ] => inversion H; clear H
   | [ H : pike_regex (Sequence _ _) |- _ ] => inversion H; clear H
@@ -231,11 +231,11 @@ Section PikeSubsetLemma.
   Proof.
     intros rer cont inp gm dir t PIKE ISTREE.
     induction ISTREE; try apply IHISTREE; pike_subset; auto.
-    - apply IHISTREE1. pike_subset. 
+    - apply IHISTREE1. pike_subset.
     - apply IHISTREE2. pike_subset.
-    - destruct dir; simpl; pike_subset. 
+    - destruct dir; simpl; pike_subset.
     - destruct greedy.
-      + pike_subset. apply IHISTREE1. destruct plus; inversion H3. pike_subset. 
+      + pike_subset. apply IHISTREE1. destruct plus; inversion H3. pike_subset.
       + pike_subset. apply IHISTREE1. destruct plus; inversion H3. pike_subset.
     - destruct greedy.
       + pike_subset. apply IHISTREE1. destruct plus; inversion H3. pike_subset.

@@ -1,6 +1,6 @@
 (** * Correctness theorems for the PikeVM engine  *)
 
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.

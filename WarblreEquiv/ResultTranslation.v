@@ -47,13 +47,13 @@ Section ResultTranslation.
     | None => 0
     | Some ms => List.length (MatchState.captures ms)
     end.
-  
+
   Lemma ms_num_groups_refl:
     forall ms_opt, ms_num_groups ms_opt (num_captures_opt ms_opt).
   Proof.
     intros [ms|]; simpl; constructor; auto.
   Qed.
-  
+
   Lemma to_MatchState_equal:
     forall res_opt ms_opt n,
       ms_num_groups ms_opt n ->
@@ -68,8 +68,8 @@ Section ResultTranslation.
     unfold GroupMapMS.equiv_groupmap_ms in H0. simpl in H0.
     clear EQUIV H NUM_GROUPS.
     apply List.nth_ext with (d := None) (d' := None).
-    1: { rewrite List.map_length, List.seq_length. reflexivity. }
-    rewrite List.map_length, List.seq_length. intros n IN_BOUNDS.
+    1: { rewrite List.length_map, List.length_seq. reflexivity. }
+    rewrite List.length_map, List.length_seq. intros n IN_BOUNDS.
     set (g := fun gid_prec =>
         if gid_prec <? length cap then
           to_capture_range (GroupMap.find (S gid_prec) gm)

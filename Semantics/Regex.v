@@ -1,4 +1,4 @@
-Require Import List Lia.
+From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Chars.
@@ -43,12 +43,12 @@ Inductive anchor: Type :=
 
 Section Regex.
   Context {params: LindenParameters}.
-  
+
   (** * Regex Syntax  *)
   Inductive regex : Type :=
-  | Epsilon 
+  | Epsilon
   | Character (cd : char_descr)   (* includes character classes and dot *)
-  | Disjunction (r1 r2 : regex) 
+  | Disjunction (r1 r2 : regex)
   | Sequence (r1 r2 : regex)
   | Quantified (greedy:bool) (min: nat) (delta: non_neg_integer_or_inf) (r1: regex) (* means any number of repetitions of r1 between min and min+delta *)
   | Lookaround (lk: lookaround) (r: regex)
@@ -134,5 +134,5 @@ Section Regex.
   (* r?? *)
   Definition lazy_qmark (r:regex) : regex :=
     Quantified false 0 (NoI.N 1) r.
-  
+
 End Regex.

@@ -1,4 +1,4 @@
-From Coq Require Export Bool Arith List Equivalence Lia.
+From Stdlib Require Export Bool Arith List Equivalence Lia.
 From Warblre Require Import Base RegExpRecord.
 From Linden Require Import Regex Chars Groups Tree Semantics
   FunctionalSemantics FunctionalUtils ComputeIsTree Parameters
@@ -44,14 +44,14 @@ Section Definitions.
         (TREE1: is_tree rer acts1 inp gm dir t1)
         (TREE2: is_tree rer acts2 inp gm dir t2),
         tree_equiv_tr_dir inp gm dir t1 t2.
-    
+
     Definition actions_equiv_dir_cond (dir: Direction) (P: leaf -> Prop) (acts1 acts2: actions): Prop :=
       forall lf, P lf ->
       forall t1 t2
         (TREE1: is_tree rer acts1 (fst lf) (snd lf) dir t1)
         (TREE2: is_tree rer acts2 (fst lf) (snd lf) dir t2),
         tree_equiv_tr_dir (fst lf) (snd lf) dir t1 t2.
-    
+
     (* Stating for all directions *)
     Definition actions_equiv (acts1 acts2: actions): Prop :=
       forall dir, actions_equiv_dir dir acts1 acts2.
@@ -64,7 +64,7 @@ Section Definitions.
     Definition tree_equiv_dir dir r1 r2 :=
       def_groups r1 = def_groups r2 /\
       actions_equiv_dir dir [Areg r1] [Areg r2].
-    
+
     (* Stating for all directions *)
     Definition tree_equiv r1 r2 :=
       forall dir, tree_equiv_dir dir r1 r2.
@@ -198,7 +198,7 @@ Section Definitions.
         | d => d
         end
       end.
-  
+
   End Contexts.
 
 
@@ -415,7 +415,7 @@ Section Relation.
         symmetry proved by actions_equiv_sym
         transitivity proved by actions_equiv_trans
         as actions_equiv_rel.
-  
+
   End Actions.
 
 
@@ -423,7 +423,7 @@ Section Relation.
 
   Section DirSpecific.
     Context (dir: Direction).
-      
+
     (* tree_equiv_dir *)
     Lemma tree_equiv_dir_reflexive:
       Relation_Definitions.reflexive regex (tree_equiv_dir rer dir).
@@ -515,7 +515,7 @@ Section Relation.
       symmetry proved by tree_equiv_symmetric
       transitivity proved by tree_equiv_transitive
       as tree_equiv_rel.
-      
+
 
   (* tree_equiv_compute *)
   Lemma tree_equiv_compute_reflexive:
@@ -563,7 +563,7 @@ Section Relation.
         tree_equiv_rw. destruct H as [i [gm H]]. exists i. exists gm.
         symmetry. auto.
       Qed.
-      
+
       #[global] Add Relation regex (tree_nequiv_dir rer dir)
           symmetry proved by tree_nequiv_dir_sym
           as tree_nequiv_dir_rel.
@@ -595,14 +595,14 @@ Section Relation.
       pose proof tree_nequiv_dir_irrefl. unfold Irreflexive, Reflexive, complement in H0.
       eauto.
     Qed.
-    
+
     Lemma tree_nequiv_sym:
       Relation_Definitions.symmetric regex (tree_nequiv rer).
     Proof.
       unfold Relation_Definitions.symmetric, tree_nequiv. intros x y [dir H].
       exists dir. symmetry. auto.
     Qed.
-      
+
     #[global] Add Relation regex (tree_nequiv rer)
         symmetry proved by tree_nequiv_sym
         as tree_nequiv_rel.
@@ -689,19 +689,19 @@ Section Congruence.
     induction TREE_1; intros; simpl in *.
     - (* Done *)
       rewrite <- app_nil_r. constructor; constructor. auto.
-    
+
     - (* Check pass *)
       inversion TREE_APP; subst. 2: contradiction.
       simpl. apply IHTREE_1. auto.
-    
+
     - (* Check fail *)
       inversion TREE_APP; subst. 1: contradiction.
       simpl. constructor.
-    
+
     - (* Close *)
       inversion TREE_APP; subst. simpl.
       apply IHTREE_1. auto.
-    
+
     - (* Epsilon *)
       inversion TREE_APP; subst. auto.
 
@@ -712,28 +712,28 @@ Section Congruence.
       rewrite advance_input_success with (nexti := nextinp).
       2: eauto using read_char_success_advance.
       auto.
-    
+
     - (* Read char fail *)
       inversion TREE_APP; subst. 1: congruence.
       simpl. constructor.
-    
+
     - (* Disjunction *)
       inversion TREE_APP; subst.
       simpl. apply FlatMap_app; auto.
-    
+
     - (* Sequence *)
       inversion TREE_APP; subst.
       rewrite app_assoc in CONT. auto.
-    
+
     - (* Forced quantifier *)
       inversion TREE_APP; subst. simpl.
       auto.
-    
+
     - (* Done quantifier *)
       inversion TREE_APP; subst.
       2: { destruct plus; discriminate. }
       auto.
-    
+
     - (* Free quantifier *)
       inversion TREE_APP; subst.
       1: { destruct plus; discriminate. }
@@ -747,11 +747,11 @@ Section Congruence.
         simpl. apply FlatMap_app; auto.
       + (* Lazy *)
         simpl. apply FlatMap_app; auto.
-      
+
     - (* Group *)
       inversion TREE_APP; subst. simpl.
       auto.
-    
+
     - (* Lookaround success *)
       inversion TREE_APP; subst;
         assert (treelk0 = treelk) by (eapply is_tree_determ; eauto); subst.
@@ -771,23 +771,23 @@ Section Congruence.
         { apply leaves_group_map_indep with (gm1 := gmlk) (inp1 := inp) (dir1 := lk_dir lk).
           apply hd_error_none_nil. rewrite <- first_tree_leaf. auto. }
         simpl. rewrite Hpos, H. auto.
-  
+
     - (* Lookaround failure *)
       inversion TREE_APP; subst;
         assert (treelk0 = treelk) by (eapply is_tree_determ; eauto); subst.
       { rewrite RES_LK in FAIL_LK. inversion FAIL_LK. }
       simpl. constructor.
-    
+
     - (* Anchor *)
       inversion TREE_APP; subst.
       2: congruence.
       simpl. auto.
-    
+
     - (* Anchor fail *)
       inversion TREE_APP; subst.
       1: congruence.
       simpl. constructor.
-    
+
     - (* Backref *)
       inversion TREE_APP; subst.
       2: congruence.
@@ -796,7 +796,7 @@ Section Congruence.
       replace (advance_input_n _ _ _) with nextinp.
       2: eauto using read_backref_success_advance.
       auto.
-    
+
     - (* Backref fail *)
       inversion TREE_APP; subst.
       1: congruence.
@@ -843,7 +843,7 @@ Section Congruence.
     eauto using flatmap_leaves_equiv_l, act_from_leaf_determ.
   Qed.
 
-  
+
   (* Same as app_eq_right, but prepending this time the actions to the left *)
   (* Used in the sequence case *)
   Lemma app_eq_left:
@@ -864,7 +864,7 @@ Section Congruence.
     unfold equiv_leaffuncts. intros lf yf yg Hyf Hyg.
     inversion Hyf; subst. inversion Hyg; subst. apply ACTS_EQ; auto.
   Qed.
-  
+
   (* If a1 ≅ a2 and b1 ≅ b2, then a1 ++ b1 ≅ a2 ++ b2. *)
   (* Used in quantifier case of contextual equivalence proof *)
   Lemma app_eq_both:
@@ -1064,12 +1064,12 @@ Section Congruence.
     - (* Forward *)
       apply StrictSuffix.ss_fwd_diff in STRICT_SUFFIX.
       destruct STRICT_SUFFIX as [diff [DIFF_NOTNIL [Heqnext2 Heqpref1]]]. simpl.
-      rewrite Heqnext2, app_length.
+      rewrite Heqnext2, length_app.
       destruct diff; try contradiction. simpl. lia.
     - (* Backward *)
       apply StrictSuffix.ss_bwd_diff in STRICT_SUFFIX.
       destruct STRICT_SUFFIX as [diff [DIFF_NOTNIL [Heqnext1 Heqpref2]]]. simpl.
-      rewrite Heqpref2, app_length, rev_length.
+      rewrite Heqpref2, length_app, length_rev.
       destruct diff; try contradiction. simpl. lia.
   Qed.
 
@@ -1203,7 +1203,7 @@ Section Congruence.
       unfold tree_equiv_tr_dir in *.
       simpl. apply leaves_equiv_app; auto.
       assert (t1 = t0) by (eapply is_tree_determ; eauto). subst t1. apply leaves_equiv_refl.
-    
+
     - (* Disjunction right *)
       simpl in *. unfold tree_equiv_dir, actions_equiv_dir in *. specialize (IHctx Hctxdir).
       destruct IHctx as [IHgroups IHctx]. split.
@@ -1227,7 +1227,7 @@ Section Congruence.
       + (* Backward *)
         simpl in *. pose proof app_eq_right _ _ [Areg r0] backward IHctx.
         unfold actions_equiv_dir in H. simpl in H. unfold tree_equiv_tr_dir in *. auto.
-      
+
     - (* Sequence right *)
       simpl in *. unfold tree_equiv_dir, actions_equiv_dir in *. specialize (IHctx Hctxdir).
       destruct IHctx as [IHgroups IHctx]. split.
@@ -1241,7 +1241,7 @@ Section Congruence.
       + (* Backward *)
         simpl in *. pose proof app_eq_left _ _ [Areg r0] backward IHctx.
         unfold actions_equiv_dir in H. simpl in H. unfold tree_equiv_tr_dir in *. auto.
-      
+
     - (* Quantified *)
       simpl in *. specialize (IHctx Hctxdir). apply regex_equiv_quant. auto.
 
@@ -1330,7 +1330,7 @@ Section Congruence.
     intros ctx H. simpl in *.
     destruct (ctx_dir ctx); try discriminate; auto.
   Qed.
-  
+
   Lemma ctx_dir_lookahead_bwd_inv:
     forall ctx,
       ctx_dir (CLookaround LookAhead ctx) = Backward ->
@@ -1366,7 +1366,7 @@ Section Congruence.
     intros ctx H. simpl in *.
     destruct (ctx_dir ctx); try discriminate; auto.
   Qed.
-  
+
   Lemma ctx_dir_neglookahead_bwd_inv:
     forall ctx,
       ctx_dir (CLookaround NegLookAhead ctx) = Backward ->
