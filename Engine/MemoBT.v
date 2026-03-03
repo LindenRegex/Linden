@@ -32,7 +32,7 @@ Section MemoBT.
   | MBT_final (res:option leaf) (ms:memoset): mbt_state.
 
   Definition initial_state (inp:input) (ms:memoset): mbt_state :=
-    MBT [(0, GroupMap.empty, CanExit, inp)] initial_memoset.
+    MBT [(0, GroupMap.empty, CanExit, inp)] ms.
 
   (** * MemoBT small-step semantics *)
 

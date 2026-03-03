@@ -14,6 +14,8 @@ Section NFA.
   (* the bytecode generated for the PikeVM algorithm *)
 
   Definition label : Type := nat.
+  Definition lbl_eq_dec : forall (l1 l2 : label), { l1 = l2 } + { l1 <> l2 }.
+  Proof. repeat decide equality. Defined.
 
   Inductive bytecode: Type :=
   | Accept

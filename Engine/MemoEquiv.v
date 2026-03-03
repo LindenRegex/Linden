@@ -143,6 +143,16 @@ Section MemoEquiv.
            exists t gm, pc < cur /\ current = Some (t,gm,inp) /\
                      tree_config c (t,gm,inp) (pc,gm,b,inp)).
 
+  Lemma seen_inclusion_none:
+    forall c ts ms current currentpc
+      (INCL: seen_inclusion c ts ms None None),
+      seen_inclusion c ts ms current currentpc.
+  Proof.
+    unfold seen_inclusion. intros c ts ms current currentpc INCL pc b inp SEEN.
+    specialize (INCL pc b inp SEEN) as [[t [gm [IN EQ]]] | [ST [cur [H _]]]]; eauto.
+    inversion H.
+  Qed.
+  
   Lemma add_inclusion:
     forall treeseen memoset code inp tree pc gm b nextcurrent nextpc
       (INCL: seen_inclusion code treeseen memoset (Some (tree,gm,inp)) (Some pc))
@@ -159,8 +169,7 @@ Section MemoEquiv.
       + left. exists ts. exists gms. split; auto.
         apply in_add. left; auto. inversion EQ. auto.
   Qed.
-
-
+  
   Lemma skip_inclusion:
     forall code inp treeseen memoset tree gm currentpc
       (INCL: seen_inclusion code treeseen memoset (Some (tree, gm, inp)) currentpc)
@@ -212,7 +221,8 @@ Section MemoEquiv.
       (INCL: seen_inclusion code treeseen memoset (hd_error treestk) (head_pc stk)),
       memo_inv code (MTree treestk treeseen) (MBT stk memoset)
   | memoinv_final:
-    forall result ts ms,
+    forall result ts ms
+      (INCL: result = None -> seen_inclusion code ts ms None None),
       memo_inv code (MTree_final result ts) (MBT_final result ms).
 
 
@@ -224,8 +234,7 @@ Section MemoEquiv.
   Proof.
     intros c current currentpc. unfold seen_inclusion. intros pc b inp SEEN.
     rewrite initial_empty in SEEN. inversion SEEN.
-  Qed.
-
+  Qed.  
 
   (* the initial states of both smallstep semantics are related with the invariant *)
   Lemma initial_memo_inv:
@@ -782,6 +791,7 @@ Section MemoEquiv.
       assert (mbs2 = MBT_final (Some l) memoset); subst.
       { eapply memobt_deterministic; eauto. constructor; auto. }
       exists (MTree_final (Some l) treeseen). split; constructor; auto.
+      inversion 1.
     }
     (* We keep exploring *)
     specialize (exec_explore _ _ _ _ _ _ _ EXEC STUTTERS TC) as [expconfig [EXECBT LTCNEXT]].
