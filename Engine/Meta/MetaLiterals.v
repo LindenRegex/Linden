@@ -37,24 +37,23 @@ Fixpoint has_asserts (r:regex) : bool :=
   end.
 
 (* tries to perform a search using only the literal from the regex *)
-(* On success, returns Some leaf. On failure, returns the None. *)
-Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : option (option leaf) :=
+Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : search_result :=
   match extract_literal rer r with
-  | Prefix s => None
-  | Impossible => Some None
+  | Prefix s => Unsupported
+  | Impossible => Ok None
   | Exact s =>
       (* if it has asserts doing a string search is not enough *)
-      if has_asserts r then None
+      if has_asserts r then Unsupported
       else
         match input_search s inp with
         | Some inp' =>
             (* if it has groups we must reconstruct them *)
             (* LATER: do group reconstruction with an anchored engine *)
-            if has_groups r then None
+            if has_groups r then Unsupported
             (* LATER: return exact result *)
             (* else Some (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty)) *)
-            else None
-        | None => Some None
+            else Unsupported
+        | None => Ok None
         end
   end.
 
@@ -76,11 +75,7 @@ Lemma has_no_groups_def_groups:
   forall r,
     has_groups r = false -> def_groups r = [].
 Proof.
-  induction r; eauto; try easy.
-  - simpl; intros H; boolprop.
-    now rewrite (IHr1 H), (IHr2 H0).
-  - simpl; intros H; boolprop.
-    now rewrite (IHr1 H), (IHr2 H0).
+  induction r; try easy; simpl; intros; boolprop; now rewrite IHr1, IHr2.
 Qed.
 
 (* if a list of actions contains no groups, any matching leaf produces an empty group map *)
@@ -123,7 +118,7 @@ Qed.
 Theorem try_lit_search_correct {strs:StrSearch}:
   forall r inp tree ol,
     is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
-    try_lit_search r inp = Some ol ->
+    try_lit_search r inp = Ok ol ->
     first_leaf tree inp = ol.
 Proof.
   unfold try_lit_search.

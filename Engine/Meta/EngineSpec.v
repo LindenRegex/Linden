@@ -123,4 +123,10 @@ Instance MemoBTAnchoredEngine: AnchoredEngine rer := {
 Defined.
 
 
+(* result type for search procedures that can potentially not support finding a match *)
+Variant search_result :=
+| Unsupported
+| Ok (result : option leaf).
+
+
 End Instances.

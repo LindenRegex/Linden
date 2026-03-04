@@ -59,9 +59,9 @@ Proof.
   intros r inp tree Hsup Htree.
   unfold meta_search_anchored.
   case_if.
-  - (* use tha MemoBT engine *)
+  - (* use the MemoBT engine *)
     eauto using exec_correct.
-  - (* use tha PikeVM engine *)
+  - (* use the PikeVM engine *)
     eauto using exec_correct.
 Qed.
 
@@ -78,11 +78,11 @@ Proof. intro r. eauto. Qed.
 
 Definition search (config:meta_config) (r:regex) (inp:input) : option leaf :=
   match @try_lit_search _ rer BruteForceStrSearch r inp with
-  | Some ol => ol
-  | None =>
+  | Ok ol => ol
+  | Unsupported =>
     match @try_anchored_search _ _ (@MetaSearchAnchored config) r inp with
-    | Some ol => ol
-    | None =>
+    | Ok ol => ol
+    | Unsupported =>
         let can_use_memobt := match config.(memory_limit) with
           | Some lim => memobt_peak_memory_usage r inp <=? lim
           | None => true
@@ -104,19 +104,19 @@ Proof.
   intros r inp tree Hsup Htree.
   unfold search.
   unfold meta_supported_regex in Hsup.
-  destruct try_lit_search as [ol'|] eqn:Hlit.
-  - (* literal search succeeded *)
-    eapply try_lit_search_correct in Hlit; eauto.
+  destruct try_lit_search as [|ol'] eqn:Hlit.
   - (* literal search failed, try anchored search *)
-    destruct try_anchored_search as [ol'|] eqn:Hanch.
-    + (* anchored search succeeded *)
-      eapply try_anchored_search_correct in Hanch as <-; eauto.
+    destruct try_anchored_search as [|ol'] eqn:Hanch.
     + (* anchored search not applicable, fall back to unanchored search *)
       case_if.
-      * (* use tha MemoBT engine *)
+      * (* use the MemoBT engine *)
         eauto using un_exec_correct.
-      * (* use tha PikeVM engine *)
+      * (* use the PikeVM engine *)
         eauto using un_exec_correct.
+    + (* anchored search succeeded *)
+      eapply try_anchored_search_correct in Hanch as <-; eauto.
+  - (* literal search succeeded *)
+    eapply try_lit_search_correct in Hlit; eauto.
 Qed.
 
 Instance MetaEngine (config:meta_config): UnanchoredEngine rer := {

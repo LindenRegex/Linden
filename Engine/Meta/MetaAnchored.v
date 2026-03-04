@@ -17,7 +17,7 @@ From Linden Require Import Tactics.
 From Warblre Require Import Base RegExpRecord.
 
 
-Section MetaLiterals.
+Section MetaAnchored.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
 
@@ -30,6 +30,12 @@ Fixpoint is_anchored' (r:regex) : bool :=
   | Sequence r1 r2 => is_anchored' r1 || is_anchored' r2
   | Group _ r1 => is_anchored' r1
   | Quantified _ min _ r1 => (min != 0) && is_anchored' r1
+  (* only positive lookaheads can potentially cause the regex to be anchored *)
+  (* because then during matching the anchor is only ever tested on the current *)
+  (* or upcoming input positions *)
+  (* negative lookarounds do not tell us anything about being anchored *)
+  (* an anchor in positive lookbehinds could extend before the current input position *)
+  (* like in the regex `(?<=^.+)r` *)
   | Lookaround LookAhead r1 => is_anchored' r1
   | Anchor _ | Lookaround _ _ | Epsilon | Regex.Character _ | Backreference _ => false
   end.
@@ -40,13 +46,13 @@ Definition is_anchored (r:regex) : bool :=
   else is_anchored' r.
 
 (* performs an anchored search at the start position if the regex is anchored *)
-Definition try_anchored_search {engine:AnchoredEngine rer} (r:regex) (inp:input) : option (option leaf) :=
+Definition try_anchored_search {engine:AnchoredEngine rer} (r:regex) (inp:input) : search_result :=
   if is_anchored r then
     if pref_str inp == [] then
-      Some (exec rer r inp)
+      Ok (exec rer r inp)
     else
-      Some None
-  else None.
+      Ok None
+  else Unsupported.
 
 
 (* generalization of being anchored into actions *)
@@ -168,7 +174,7 @@ Theorem try_anchored_search_correct {engine:AnchoredEngine rer}:
   forall r inp leaf tree,
     supported_regex rer r = true ->
     is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
-    try_anchored_search r inp = Some leaf ->
+    try_anchored_search r inp = Ok leaf ->
     first_leaf tree inp = leaf.
 Proof.
   intros r inp leaf tree Hsup Htree Hanch.
@@ -184,4 +190,4 @@ Proof.
     erewrite <-anchored_regex_match with (tree1:=tskip); eauto using is_anchored_match_not_begin_regex.
 Qed.
 
-End MetaLiterals.
+End MetaAnchored.
