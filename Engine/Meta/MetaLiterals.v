@@ -80,14 +80,13 @@ Qed.
 
 (* if a list of actions contains no groups, any matching leaf produces an empty group map *)
 Lemma no_groups_empty_gm:
-  forall acts inp dir tree leaf,
+  forall acts inp gm dir tree leaf,
     has_groups_actions acts = false ->
-    is_tree rer acts inp Groups.GroupMap.empty dir tree ->
-    tree_res tree Groups.GroupMap.empty inp dir = Some leaf ->
-    snd leaf = Groups.GroupMap.empty.
+    is_tree rer acts inp gm dir tree ->
+    tree_res tree gm inp dir = Some leaf ->
+    snd leaf = gm.
 Proof.
-  intros acts inp dir tree leaf Hnogroups Htree Hleaf.
-  remember Groups.GroupMap.empty as gm.
+  intros acts inp gm dir tree leaf Hnogroups Htree Hleaf.
   generalize dependent leaf.
   induction Htree; intros leaf Hleaf;
     (* simplify *)
