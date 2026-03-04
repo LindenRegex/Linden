@@ -110,16 +110,16 @@ Defined.
 Instance MemoBTAnchoredEngine: AnchoredEngine rer := {
   exec r inp := match memobt_match rer r inp with
                 | FunctionalMemoBT.OutOfFuel => None
-                | FunctionalMemoBT.Finished res => res
+                | FunctionalMemoBT.Finished res _ => res
                 end;
   supported_regex := is_pike_regex;
 }.
   (* exec_correct *)
   intros r inp tree Hsubset Htree.
   rewrite is_pike_regex_correct in Hsubset.
-  pose proof (memobt_match_terminates rer r inp Hsubset) as [res Hmatch].
+  pose proof (memobt_match_terminates rer r inp Hsubset) as [res [ms Hmatch]].
   rewrite Hmatch.
-  symmetry. eauto using memobt_match_correct, memobt_correct.
+  symmetry. eapply memobt_correct; eauto using memobt_match_correct, correctms_init.
 Defined.
 
 

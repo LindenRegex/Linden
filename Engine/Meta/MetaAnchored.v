@@ -94,36 +94,36 @@ Proof.
     (* remove cases that are not anchored *)
     try easy;
     (* result is from the IH *)
-    try solve[eapply res_group_map_indep; eauto].
+    try solve[eapply res_indep; eauto].
   (* tree_char *)
   - unfold read_char in READ. destruct next; [discriminate|]. destruct char_match; [|discriminate].
     injection READ as <-.
-    eapply res_group_map_indep; eauto.
+    eapply res_indep; eauto.
   (* tree_disj*)
   -  boolprop; erewrite IHHtree1; eauto.
   (* tree_sequence *)
   - simpl in IHHtree. boolprop; eauto.
   (* tree_quant_forced *)
-  - boolprop; eapply res_group_map_indep; eauto.
+  - boolprop; eapply res_indep; eauto.
   (* tree_quant_free *)
   - boolprop.
     destruct greedy; simpl; erewrite IHHtree2; eauto.
-    +  erewrite res_group_map_indep; eauto.
-    +  erewrite res_group_map_indep; eauto.
+    +  erewrite res_indep; eauto.
+    +  erewrite res_indep; eauto.
   (* tree_lk *)
   - boolprop.
     + destruct lk; try discriminate.
       erewrite IHHtree1; eauto.
     + destruct positivity, (tree_res treelk); eauto.
       destruct l.
-      eapply res_group_map_indep; eauto.
+      eapply res_indep; eauto.
   (* tree_anchor *)
   - boolprop; eauto.
     unfold anchor_satisfied in ANCHOR. rewrite Hmulti in ANCHOR.
     now destruct a.
   (* tree_backref *)
   - pose proof (read_backref_not_begin _ _ _ _ _ _ _ READ_BACKREF) as [? [? [? ?]]].
-    eapply res_group_map_indep; eauto.
+    eapply res_indep; eauto.
 Qed.
 
 (* is_anchored_match_not_begin specialized to a single anchored regex *)
