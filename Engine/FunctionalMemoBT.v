@@ -69,11 +69,11 @@ Definition memobt_fuel (r:regex) (inp:input) : nat :=
 
 Inductive matchres : Type :=
 | OutOfFuel
-| Finished: option leaf -> matchres.
+| Finished: option leaf -> memoset -> matchres.
 
 Definition getres (mbt:mbt_state) : matchres :=
   match mbt with
-  | MBT_final best _ => Finished best
+  | MBT_final best ms => Finished best ms
   | _ => OutOfFuel
   end.
 
@@ -150,13 +150,13 @@ Qed.
 
 (* when the function finishes, it returns the correct result *)
 Theorem memobt_match_correct:
-  forall r inp result,
-    memobt_match r inp = Finished result ->
-    exists ms, trc_memo_bt rer (compilation r) (initial_state inp initial_memoset) (MBT_final result ms).
+  forall r inp result ms,
+    memobt_match r inp = Finished result ms ->
+    trc_memo_bt rer (compilation r) (initial_state inp initial_memoset) (MBT_final result ms).
 Proof.
-  unfold memobt_match, getres. intros r inp result H.
+  unfold memobt_match, getres. intros r inp result ms H.
   match_destr; inversion H; subst.
-  eexists. eapply loop_trc; eauto.
+  eapply loop_trc; eauto.
 Qed.
 
 
@@ -164,11 +164,11 @@ Qed.
 Theorem memobt_match_terminates:
   forall r inp,
     pike_regex r ->
-    exists result, memobt_match r inp = Finished result.
+    exists result ms, memobt_match r inp = Finished result ms.
 Proof.
   intros r inp SUBSET. unfold memobt_match, memobt_fuel.
   apply memobt_complexity with (r:=r) (inp:=inp) in SUBSET as [result [ms TERM]].
-  exists result. apply steps_loop in TERM. rewrite TERM. auto.
+  exists result. exists ms. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
 End FunctionMemoBT.
