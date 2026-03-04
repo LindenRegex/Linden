@@ -35,7 +35,6 @@ Record meta_config := {
   memory_limit : option nat;
 }.
 
-(* FIXME: move this computation to FunctionalMemoBT and it should be with regards to :code, not regex size *)
 Definition memobt_peak_memory_usage (r:regex) (inp:input) : nat :=
   regex_size r * total_length inp.
 
