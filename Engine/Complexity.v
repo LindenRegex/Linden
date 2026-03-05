@@ -6,6 +6,7 @@ Import ListNotations.
 From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree Semantics BooleanSemantics.
 From Linden Require Import NFA PikeVM PikeSubset Prefix.
+From Linden Require Import MemoBT.
 From Linden Require Import Correctness PikeEquiv SeenSets.
 From Linden Require Import StrictSuffix.
 From Linden Require Import Parameters.
@@ -203,6 +204,32 @@ Section CodeWF.
         inversion IN; subst; try solve [inversion H0];
         simpl; eexists; split; eauto; simpl; auto; lia.
   Qed.
+
+  Lemma exec_instr_wf:
+    forall code nextconfs conf conf',
+      exec_instr rer code conf = Explore nextconfs ->
+      In conf' nextconfs ->
+      exists instr, get_pc code (fst (fst (fst conf))) = Some instr /\
+                 In (fst (fst (fst conf'))) (next_pcs (fst (fst (fst conf))) instr).
+  Proof.
+    unfold exec_instr. intros code nextconfs [[[pc gm] b] i] conf' H IN.
+    destruct (get_pc code pc) eqn:GET.
+    2: { inversion H. subst. inversion IN. }
+    destruct b0; inversion H; subst;
+      try solve[inversion IN; subst; try solve [inversion H0];
+                simpl; eexists; split; eauto; simpl; auto; lia].
+   - destruct (read_char rer c i forward); try destruct p; inversion H1; subst;
+        inversion IN; subst; try solve [inversion H0];
+        simpl; eexists; split; eauto; simpl; auto; lia.
+    - destruct (anchor_satisfied rer a i); try destruct p; inversion H1; subst;
+        inversion IN; subst; try solve [inversion H0];
+        simpl; eexists; split; eauto; simpl; auto; lia.
+    - inversion IN; [|inversion H0]; subst; try solve [inversion H1];
+        simpl; eexists; split; eauto; simpl; auto.
+    - destruct b; subst; inversion H1; subst;
+        inversion IN; subst; try solve [inversion H0];
+        simpl; eexists; split; eauto; simpl; auto; lia.
+  Qed.     
 
 End CodeWF.
 
@@ -1010,234 +1037,175 @@ Section MemoBTComplexity.
   (* we remove the number of distinct entries in the memoset *)
   Definition msfree (codesize:nat) (inpsize:nat) (dist:list (nat*LoopBool*input)) : nat :=
     (2 * codesize * inpsize) - length dist.
-  (*
-  Lemma free_initial:
-    forall codesize, free codesize [] = 2 * codesize.
-  Proof.
-    intros codesize. unfold free. simpl. lia.
-  Qed.
   
-  Lemma free_add:
-    forall seen size dist t,
-      wf seen size dist ->
-      seen_thread seen t = false ->
-      fst (fst t) < size ->
-      wf (add_thread seen t) size ((fst (fst t),snd t)::dist).
+  Lemma msfree_initial:
+    forall codesize inpsize, msfree codesize inpsize [] = 2 * codesize * inpsize.
   Proof.
-    intros seen size count [[pc gm] b] WF SEEN SIZE. unfold seen_thread in SEEN.
+    intros codesize inpsize. unfold msfree. simpl. lia.
+  Qed.
+
+  Lemma msfree_add:
+    forall ms size originp dist pc b inp,
+      mswf ms size originp dist ->
+      is_memo ms pc b inp = false ->
+      pc < size ->
+      validinp inp originp ->
+      mswf (memoize ms pc b inp) size originp ((pc,b,inp)::dist).
+  Proof.
+    intros ms size0 originp dist pc b inp WF SEEN SIZE VALID.
     constructor; auto.
   Qed.
-  
-  (** * Well Formedness Invariant and Measure of PikeVM states *)
+
+  (** * Well Formedness Invariant and Measure of MemoBT states *)
   
   (* The number of free slots decreases at most steps *)
   (* In some cases (a fork), a new thread is created but the number of free slots decreases: this is why free slots are multiplied by 2 *)
-  (* As we change characters, the seen set might get 2*codesize new free slots (multiplied by 2 for the measure) *)
-  (* But the input decreases, which makes the measure also decrease, because input size is multiplied by (2 + 4*codesize)  *)
-  (* It's (2 + 4*codesize) because we might generate a new thread at each input (for unanchored search) and because of the step it takes to advance *)
-  Definition measure (codesize:nat) (dist:list (nat*LoopBool)) (active blocked:list thread) (inp:input) :=
-    (2 * free codesize dist) + length active + length blocked + (inpsize inp * (2 + 4 * codesize)).
+  (* We add +1 for the last mbt_nomatch step *)
+  Definition memo_measure (codesize:nat) (inpsize:nat) (dist:list (nat*LoopBool*input)) (stack:list config) :=
+    (2 * msfree codesize inpsize dist) + length stack + 1.
   
   (* The invariant that is preserved through pikeVM execution, with a measure that strictly decreases *)
-  Inductive vm_inv (c:code): pike_vm_state -> nat -> Prop :=
-  | inv_final:
-    forall b, vm_inv c (PVS_final b) 0
-  | inv_pvs:
-    forall inp active best blocked nextprefix seen dist
-      (* the threads in active and blocked have their pc inside the code range *)
-      (ACTIVEWF: forall t, In t active -> fst (fst t) < size c)
-      (BLOCKEDWF: forall t, In t blocked -> fst (fst t) < size c)
+  Inductive memo_inv (c:code) (originp:input): mbt_state -> nat -> Prop :=
+  | minv_final:
+    forall b, memo_inv c originp (MBT_final b) 0
+  | minv_mbt:
+    forall stk ms dist
+      (* the threads in the stack have their pc inside the code range, and valid inputs *)
+      (PCWF: forall pc gm b inp, In (pc, gm, b, inp) stk -> pc < size c)
+      (INPWF: forall pc gm b inp, In (pc, gm, b, inp) stk -> validinp inp originp)
       (* the seen set is well-formed, and has `count` distinct elements *)
-      (SEENWF: wf seen (size c) dist)
-      (* The next place where the prefix can match is in range of the input *)
-      (RANGEPREF: forall n lit strs, nextprefix = Some (n, lit, strs) -> inpsize inp > S n),
-      vm_inv c (PVS inp active best blocked nextprefix seen) (measure (size c) dist active blocked inp).
+      (MSWF: mswf ms (size c) originp dist),
+      memo_inv c originp (MBT stk ms) (memo_measure (size c) (inpsize originp) dist stk).
   
-  Lemma nonfinal_pos:
-    forall c inp active best blocked nextprefix seen m,
-      vm_inv c (PVS inp active best blocked nextprefix seen) m -> 0 < m.
+  Lemma memo_nonfinal_pos:
+    forall c originp stk ms m,
+      memo_inv c originp (MBT stk ms) m -> 0 < m.
   Proof.
-    intros c inp active best blocked nextprefix seen m H. inversion H. subst. unfold measure.
-    specialize (inpsize_strict inp) as SIZE. lia.
+    intros c originp stk ms m H. inversion H. subst. unfold memo_measure. lia.
   Qed.
 
 
-  (** * PikeVM measure decreases *)
+  (** * MemoBT measure decreases *)
   
-  (* epsilon_step cannot generate too many new threads *)
-  Lemma eps_step_active:
-    forall t code inp next,
-      epsilon_step rer t code inp = EpsActive next ->
-      length next <= 2.
+  (* exec_instr cannot generate too many new threads *)
+  Lemma exec_instr_explore:
+    forall c conf stk,
+      exec_instr rer c conf = Explore stk ->
+      length stk <= 2.
   Proof.
-    unfold epsilon_step. intros [[pc gm] b] code inp next H.
+    unfold exec_instr. intros code [[[pc gm] b] inp] stk E.
     destruct (get_pc code pc) eqn:GET.
-    2: { inversion H. simpl. lia. }
-    destruct b0; try solve [inversion H; simpl; lia].
-    - destruct (check_read rer c inp forward); try solve [inversion H; simpl; lia].
-    - destruct (anchor_satisfied rer a inp); try solve [inversion H; simpl; lia].
-    - destruct b; try solve [inversion H; simpl; lia].
+    2: { inversion E. simpl. lia. }
+    destruct b0; try solve [inversion E; simpl; lia].
+    - destruct (read_char rer c inp forward) as [[char i]|]; try solve [inversion E; simpl; lia].
+    - destruct (anchor_satisfied rer a inp); try solve [inversion E; simpl; lia].
+    - destruct b; try solve [inversion E; simpl; lia].
   Qed.
-  
-  Theorem increase_mult:
-    forall a b x,
-      a < b ->
-      x + a * (S x) < b * (S x).
+
+
+  Lemma valid_explore:
+    forall c stk originp pc1 pc2 b1 b2 gm1 gm2 i1 i2,
+      validinp i1 originp ->
+      exec_instr rer c (pc1, b1, gm1, i1) = Explore stk ->
+      In (pc2, b2, gm2, i2) stk ->
+      validinp i2 originp.
   Proof.
-    intros a b c H. repeat rewrite PeanoNat.Nat.mul_succ_r.
-    induction c; try lia.
+    unfold exec_instr. intros c stk originp pc1 pc2 b1 b2 gm1 gm2 i1 i2 VAL E IN.
+    destruct (get_pc c pc1) eqn:GET.
+    2: { inversion E. simpl. subst. inversion IN. }
+    destruct b; try solve[inversion E; subst; inversion IN; subst; inversion H; subst; auto].
+    - destruct read_char as [[char i]|] eqn:R.
+      * inversion E; subst. inversion IN; subst; inversion H; subst; auto.
+        apply read_char_success_advance in R. right.
+        inversion VAL; subst.
+        ** constructor; auto.
+        ** eapply ss_next; eauto.
+      * inversion E; subst. inversion IN.
+    - destruct anchor_satisfied; inversion E; subst; inversion IN; subst; inversion H; subst; auto.
+    - inversion E; subst. inversion IN; subst; inversion H; subst; try inversion H0; subst; auto.
+    - destruct gm1; inversion E; subst; inversion IN; subst; inversion H; subst; auto.
   Qed.
-  
   
   (* at each step, the measure strictly decreases *)
-  (* the well-formedness of the seen set is preserved *)
-  Theorem pikevm_decreases:
-    forall code pvs1 pvs2 m1,
+  (* the well-formedness of the memoset is preserved *)
+  Theorem memobt_decreases:
+    forall code originp mbs1 mbs2 m1,
       code_wf code (size code) ->
-      nonempty code ->
-      pike_vm_step rer code pvs1 pvs2 ->
-      vm_inv code pvs1 m1 ->
-      exists m2, vm_inv code pvs2 m2 /\ m2 < m1.
+      memobt_step rer code mbs1 mbs2 ->
+      memo_inv code originp mbs1 m1 ->
+      exists m2, memo_inv code originp mbs2 m2 /\ m2 < m1.
   Proof.
-    intros code pvs1 pvs2 m1 CODEWF NONEMPTY STEP INV. inversion STEP; subst; simpl measure; inversion INV; subst;
-      try destruct t as [[pc gm] b].
-    (* when reaching a final state, we end up with a measure of 0, while the previous measure was strictly positive *)
+    intros code originp mbs1 mbs2 m1 CODEWF STEP INV. inversion STEP; subst; simpl memo_measure; inversion INV; subst.
+    (* nomatch *)
     - exists 0. split.
       + constructor.
-      + apply nonfinal_pos in INV. auto.
-    (* acc: we might add (2*codesize) free slots, but we lose at least one input length *)
-    - specialize (RANGEPREF n lit strs eq_refl).
-      exists (measure (size code) [] [pike_vm_initial_thread] [] (advance_input_n inp (S n) forward)). split; [constructor|]; auto.
-      + (* the new generated thread is in range because the code is nonempty *)
-        intros t H. inversion H as [IN1|IN2]; auto.
-        subst. unfold pike_vm_initial_thread. simpl. auto.
-      + constructor.
-      + intros n0 lit0 strs0 H. eapply search_in_range with (strs:=strs); eauto.
-      + unfold measure. simpl. rewrite free_initial. specialize (advance_n_inpsize inp n RANGEPREF)as ADV.
-        apply increase_mult with (x:= 4 * size code) in ADV as NEXT. simpl in NEXT. lia.
-    (* end *)
+      + eapply memo_nonfinal_pos; eauto.
+    (* skip *)
+    - exists (memo_measure (size code) (inpsize originp) dist stk). split.
+      + constructor; auto.
+        * intros. eapply PCWF; eauto. right. eauto.
+        * intros. eapply INPWF; eauto. right. eauto.
+      + unfold memo_measure. simpl. lia.
+    (* match *)
     - exists 0. split.
       + constructor.
-      + apply nonfinal_pos in INV. auto.
-    (* nextchar: we might add (2*codesize) free slots, but we lose an input length *)
-    - exists (measure (size code) [] (thr::blocked) [] inp2). split; [constructor|]; auto.
-      + constructor.
-      + intros n lit strs H; inversion H.
-      + unfold measure. simpl. rewrite free_initial. apply advance_input_decreases in ADVANCE.
-        apply increase_mult with (x:= 4 * size code) in ADVANCE as NEXT. simpl in NEXT. lia.
-    (* nextchar_generate: we might add (2*codesize) free slots, but we lose an input length *)
-    - exists (measure (size code) [] ((thr::blocked)++[pike_vm_initial_thread]) [] inp2). split; [constructor|]; auto.
-      + (* the new generated thread is in range because the code is nonempty *)
-        intros t H. apply in_app_or in H as [IN1|IN2]; auto.
-        inversion IN2; inversion H. unfold pike_vm_initial_thread. simpl. auto.
-      + constructor.
-      + intros n lit0 H. eapply search_in_range; eauto.
-      + unfold measure. simpl. rewrite free_initial. apply advance_input_decreases in ADVANCE.
-        apply increase_mult with (x:= 4 * size code) in ADVANCE as NEXT. simpl in NEXT.
-        rewrite length_app. simpl. lia.
-    (* nextchar_filter: we might add (2*codesize) free slots, but we lose an input length *)
-    - exists (measure (size code) [] (thr::blocked) [] inp2). split; [constructor|]; auto.
-      + constructor.
-      + intros n0 lit0 strs0 H. inversion H; subst. specialize (RANGEPREF (S n0) lit0 strs0 eq_refl).
-        eapply advance_inpsize; eauto.
-      + unfold measure. simpl. rewrite free_initial. apply advance_input_decreases in ADVANCE.
-        apply increase_mult with (x:= 4 * size code) in ADVANCE as NEXT. simpl in NEXT. lia.
-    (* skip: we lose a thread *)
-    - exists (measure (size code) dist active blocked inp). split; [constructor|]; auto.
-      + intros t0 H. apply ACTIVEWF. simpl. right. auto.
-      + unfold measure. simpl. lia.
-    (* active: we may add a new thread, but lose a free slot *)
+      + eapply memo_nonfinal_pos; eauto.
+    (* explore *)
     - assert (RANGE: pc < size code).
-      { specialize (ACTIVEWF (pc,gm,b) ltac:(simpl;left;auto)). simpl in ACTIVEWF. auto. }
-      exists (measure (size code) ((pc,b)::dist) (nextactive++active) blocked inp). split; [constructor|]; auto.
-      + intros t0 H. apply in_app_or in H as [H|H].
-        * eapply eps_step_active_wf in STEP0 as [i [GET IN]]; eauto.
-        * apply ACTIVEWF. right. auto.
-      + unfold add_thread. apply wf_new; auto.
-      + specialize (free_add seen (size code) dist (pc,gm,b) SEENWF UNSEEN) as FREE.
-        apply wf_size in FREE; auto. apply eps_step_active in STEP0.
-        unfold measure, free. rewrite length_app. simpl. simpl in FREE. lia.
-    (* match: we lose a thread and a free slot *)
-    - assert (RANGE: pc < size code).
-      { specialize (ACTIVEWF (pc,gm,b) ltac:(simpl;left;auto)). simpl in ACTIVEWF. auto. }
-      exists (measure (size code) ((pc,b)::dist) [] blocked inp). split; [constructor|]; auto.
-      + intros t0 H. inversion H.
-      + unfold add_thread. apply wf_new; auto.
-      + intros n lit strs H; inversion H.
-      + specialize (free_add seen (size code) dist (pc,gm,b) SEENWF UNSEEN RANGE) as FREE.
-        apply wf_size in FREE. unfold measure, free. simpl. lia.
-    (* blocked: we switch an active thread to blocked, but lose a free slot *)
-    -  assert (RANGE: pc < size code).
-       { specialize (ACTIVEWF (pc,gm,b) ltac:(simpl;left;auto)). simpl in ACTIVEWF. auto. }
-       exists (measure (size code) ((pc,b)::dist) active (blocked++[newt]) inp). split; [constructor|]; auto.
-       + intros t0 H. apply ACTIVEWF. simpl. right. auto.
-       + intros t0 H. apply in_app_or in H as [H|H].
-         * eapply BLOCKEDWF; eauto.
-         * inversion H; [|inversion H0]. subst.
-           eapply eps_step_blocked_wf in STEP0 as [i [GET IN]]; eauto.
-       + unfold add_thread. apply wf_new; auto.
-       + specialize (free_add seen (size code) dist (pc,gm,b) SEENWF UNSEEN RANGE) as FREE.
-         apply wf_size in FREE. unfold measure, free. rewrite length_app. simpl. simpl in FREE. lia.
+      { eapply PCWF. left. eauto. }
+      assert (VAL: validinp i originp).
+      { eapply INPWF. left. eauto. }
+      exists (memo_measure (size code) (inpsize originp) ((pc,b,i)::dist) (nextconfs++stk)).
+      split.
+      + constructor; auto.
+        * intros. apply in_app_iff in H as [H1 | H2].
+          ** eapply exec_instr_wf in EXPLORE as [instr [GET IN]]; eauto.
+             simpl in *. eapply CODEWF in GET; eauto.
+          ** eapply PCWF. right; eauto.
+        * intros. apply in_app_iff in H as [H1 | H2].
+          ** eapply valid_explore in EXPLORE as VAL'; eauto.
+          ** eapply INPWF. right; eauto.
+        * constructor; auto.
+      + unfold memo_measure, msfree. apply exec_instr_explore in EXPLORE. rewrite length_app.
+        simpl. eapply msfree_add in MSWF as FREE; eauto. apply mswf_size in FREE. simpl in FREE. lia.
   Qed.
   
+  (** * Initial MemoBT Measure *)
   
-  (** * Initial PikeVM Measure *)
+  Definition mbt_complexity (r:regex) (inp:input) : nat :=
+    2 + 4 * (codesize r * inpsize inp).
   
-  Definition complexity (r:regex) (inp:input) : nat :=
-    1 + (4 * codesize r) + (inpsize inp * (2 + 4 * codesize r)).
-  
-  Theorem initial_measure:
+  Theorem initial_memo_measure:
     forall inp r,
       pike_regex r ->
-      vm_inv (compilation r) (pike_vm_initial_state inp) (complexity r inp).
+      memo_inv (compilation r) inp (initial_state inp) (mbt_complexity r inp).
   Proof.
     intros inp r SUBSET.
-    replace (complexity r inp) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp).
-    - unfold pike_vm_initial_state. rewrite <- compilation_size; auto.
+    replace (mbt_complexity r inp) with (memo_measure (codesize r) (inpsize inp) [] [(0, GroupMap.empty, CanExit,inp)]).
+    - unfold initial_state. rewrite <- compilation_size; auto.
       constructor; auto.
-      + intros t H. destruct H. 2: inversion H.
-        subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
+      + intros pc gm b inp0 H. inversion H; inversion H0.
+        unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
         simpl. lia.
-      + intros t H. inversion H.
-      + constructor.
-      + intros n lit strs H; inversion H.
-    - unfold complexity, measure. rewrite <- compilation_size; auto. simpl.
-      rewrite free_initial. simpl. lia.
+      + intros pc gm b inp0 H. inversion H; inversion H0. subst. left.
+      + apply mswf_init.
+    -  unfold memo_measure, mbt_complexity. rewrite <- compilation_size; auto. simpl.
+       rewrite msfree_initial. simpl. lia.
   Qed.
+      
+  (** * Bounding the number of MemoBT steps  *)
   
-  Theorem initial_measure_unanchored {strs:StrSearch}:
-    forall inp r,
-      pike_regex r ->
-      vm_inv (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (complexity r inp).
-  Proof.
-    intros inp r SUBSET.
-    replace (complexity r inp) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp).
-    - unfold pike_vm_initial_state_unanchored. rewrite <- compilation_size; auto.
-      constructor; auto.
-      + intros t H. destruct H. 2: inversion H.
-        subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
-        simpl. lia.
-      + intros t H. inversion H.
-      + constructor.
-      + intros n lit' strs' H; eapply search_in_range with (strs:=strs); eauto.
-    - unfold complexity, measure. rewrite <- compilation_size; auto. simpl.
-      rewrite free_initial. simpl. lia.
-  Qed.
-  
-  (** * Bounding the number of PikeVM steps  *)
-  
-  Lemma pike_vm_bound:
-    forall pvs code n,
+  Lemma memobt_bound:
+    forall mbs code inp n,
       code_wf code (size code) ->
-      nonempty code ->
-      vm_inv code pvs n ->
-      exists result, steps (pike_vm_step rer code) pvs n (PVS_final result).
+      memo_inv code inp mbs n ->
+      exists result, steps (memobt_step rer code) mbs n (MBT_final result).
   Proof.
-    intros pvs code n WF NONEMPTY INV. generalize dependent pvs. induction n using (strong_ind); intros.
-    destruct pvs.
-    2: { exists best. constructor. }
-    specialize (pikevm_progress rer code inp active best blocked nextprefix seen) as [next STEP].
-    specialize (pikevm_decreases code (PVS inp active best blocked nextprefix seen) next n WF NONEMPTY STEP INV) as [newm [INV2 DECR]].
+    intros mbs code inp n WF INV. generalize dependent mbs. induction n using (strong_ind); intros.
+    destruct mbs.
+    2: { exists res. constructor. }
+    specialize (memobt_progress rer code stk ms) as [next STEP].
+    specialize (memobt_decreases code inp (MBT stk ms) next n WF STEP INV) as [newm [INV2 DECR]].
     specialize (H newm DECR next INV2) as [result STEPS].
     exists result. apply more_steps with (n:=S newm); try lia.
     econstructor; eauto.
@@ -1245,56 +1213,30 @@ Section MemoBTComplexity.
   
   (** * Complexity Theorem  *)
   
-  Theorem pikevm_complexity:
+  Theorem memobt_complexity:
     forall (r:regex) (inp:input),
       (* for any supported regex r and input inp *)
       pike_regex r ->
       (* The initial state reaches a final state in at most (complexity r inp) steps. *)
-      exists result, steps (pike_vm_step rer (compilation r))
-                  (pike_vm_initial_state inp) (complexity r inp) (PVS_final result).
+      exists result, steps (memobt_step rer (compilation r))
+                  (initial_state inp) (mbt_complexity r inp) (MBT_final result).
   Proof.
     intros r inp SUBSET.
-    apply pike_vm_bound.
+    eapply memobt_bound.
     - apply compiled_wf.
-    - apply compilation_nonempty.
-    - apply initial_measure. auto.
-  Qed.
+    - apply initial_memo_measure. auto.
+  Qed.  
   
-  Theorem pikevm_complexity_unanchored {strs:StrSearch}:
-    forall (r:regex) (inp:input),
-      (* for any supported regex r and input inp *)
-      pike_regex r ->
-      (* The initial state reaches a final state in at most (complexity r inp) steps. *)
-      exists result, steps (pike_vm_step rer (compilation r))
-                  (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (complexity r inp) (PVS_final result).
-  Proof.
-    intros r inp SUBSET.
-    apply pike_vm_bound.
-    - apply compiled_wf.
-    - apply compilation_nonempty.
-    - apply initial_measure_unanchored; auto.
-  Qed.
+  (** * Termination of the MemoBT algorithm  *)
   
-  
-  (** * Termination of the PikeVM algorithm  *)
-  
-  (* As a corollary, we can deduce that the PikeVM always terminates *)
-  Theorem pike_vm_terminates:
+  (* As a corollary, we can deduce that the MemoBT algorithm always terminates *)
+  Theorem memobt_terminates:
     forall r inp,
       pike_regex r ->
-      exists result, trc_pike_vm rer (compilation r) (pike_vm_initial_state inp) (PVS_final result).
+      exists result, trc_memo_bt rer (compilation r) (initial_state inp) (MBT_final result).
   Proof.
-    intros r inp H. eapply pikevm_complexity in H as [result STEPS]; eauto.
+    intros r inp H. eapply memobt_complexity in H as [result STEPS]; eauto.
     exists result. eapply steps_trc; eauto.
   Qed.
   
-  Theorem pike_vm_terminates_unanchored {strs:StrSearch}:
-    forall r inp,
-      pike_regex r ->
-      exists result, trc_pike_vm rer (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (PVS_final result).
-  Proof.
-    intros r inp H. eapply pikevm_complexity_unanchored in H as [result STEPS]; eauto.
-    exists result. eapply steps_trc; eauto.
-  Qed.
-     *)
-  End MemoBTComplexity.
+End MemoBTComplexity.
