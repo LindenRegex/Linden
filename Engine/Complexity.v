@@ -824,6 +824,15 @@ Section MemoBTComplexity.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
   Context {VMS: VMSeen}.
+
+  (** * Valid Inputs  *)
+  (* Given an original inputs, the only valid inputs that can be inseretd into the memoization set are
+     either the original input itself or a strict suffix of it. *)
+  Inductive validinp : input -> input -> Prop :=
+  | valid_refl: forall i, validinp i i
+  | valid_suf: forall iorig inp
+                 (SUF: strict_suffix inp iorig forward),
+      validinp inp iorig.
   
   (** * Free slots  *)
   (* To define the measure, we need a notion of free slots: how many more states can MemoBT visit *)
@@ -838,14 +847,14 @@ Section MemoBTComplexity.
   | mswf_new:
     forall ms size originp pc b inp dist
       (RANGE: pc < size)
-      (PREF: input_prefix inp originp forward)
+      (VAL: validinp inp originp)
       (NEW: is_memo ms pc b inp = false)
       (WF: mswf ms size originp dist),
       mswf (memoize ms pc b inp) size originp ((pc,b,inp)::dist)
   | mswf_seen:
     forall ms size originp pc b inp dist
       (RANGE: pc < size)
-      (PREF: input_prefix inp originp forward)
+      (VAL: validinp inp originp)
       (SEEN: is_memo ms pc b inp = true)
       (WF: mswf ms size originp dist),
       mswf (memoize ms pc b inp) size originp dist.
@@ -887,20 +896,121 @@ Section MemoBTComplexity.
     - inversion IN.
     - destruct IN as [IN|IN]; try inversion IN; subst; auto.
   Qed.
-    
-  Theorem mswf_size:
-    forall ms size originp dist,
-      mswf ms size originp dist -> length dist <= 2 * size * (inpsize originp).
+
+  (* every element is a valid input *)
+  Lemma mswf_valid:
+    forall ms size originp dist pc b inp,
+      mswf ms size originp dist ->
+      In (pc, b, inp) dist ->
+      validinp inp originp.
   Proof.
-    intros ms size originp dist H. rewrite <- possible_size.
-  Admitted.
-    (*
-  (* the number of free slots in a seen set *)
-  (* the total number of slots is 2 times the size of the code: each label can be added with 2 possible LoopBool values *)
-  (* we remove the number of distinct entries in the seen set *)
-  Definition free (codesize:nat) (dist:list (nat*LoopBool)) : nat :=
-    (2 * codesize) - length dist.
+    intros ms size0 originp dist pc b inp WF IN. induction WF; auto.
+    - inversion IN.
+    - destruct IN as [IN|IN]; try inversion IN; subst; auto.
+  Qed.      
+
+  (* the list of possible elements in the memoset for a fixed input *)
+  Definition possible_fixedinput (size:nat) (inp:input) :=
+    List.map (fun pcb => (fst pcb,snd pcb,inp)) (possible_elements size).
+
+  (* list of all possible (non-strict) suffixes of (Input next pref) *)
+  Fixpoint possible_suffixes (next pref:list Character) :=
+    match next with
+    | [] => [Input next pref]
+    | c::next' => (Input next pref)::(possible_suffixes next' (c::pref))
+    end.
+
+  (* list of all possible elements in a memoset *)
+  Definition possible_memo (next pref:list Character) (sizec:nat) :=
+    List.flat_map (fun inp => possible_fixedinput sizec inp) (possible_suffixes next pref).
+               
+  Lemma possible_fixedsize:
+    forall size inp, length (possible_fixedinput size inp) = 2 * size.
+  Proof.
+    intros size inp. induction size; auto. simpl.
+    rewrite length_map. rewrite possible_size. lia.
+  Qed.
   
+  Lemma possible_fixedall:
+    forall pc b inp sizec,
+      pc < sizec ->
+      In (pc, b, inp) (possible_fixedinput sizec inp).
+  Proof.
+    intros pc b inp sizec H. unfold possible_fixedinput. apply in_map_iff.
+    exists (pc,b). split; auto. apply possible_all. auto.
+  Qed.
+
+  Lemma possible_sufsize:
+    forall next pref,
+      length (possible_suffixes next pref) = inpsize (Input next pref).
+  Proof. induction next; intros; simpl; auto. Qed.
+
+  Lemma no_more_strict_suffix:
+    forall pref inp,
+      strict_suffix inp (Input [] pref) forward -> False.
+  Proof.
+    intros pref inp H. remember [] as next. remember (Input next pref) as oinp.
+    remember forward as dir. induction H; subst; auto.
+    inversion H.
+  Qed.
+
+  Lemma possible_sufall:
+    forall next pref inp,
+      validinp inp (Input next pref) ->
+      In inp (possible_suffixes next pref).
+  Proof.
+    intros next pref inp VAL. inversion VAL; subst.
+    { destruct next; simpl; auto. }
+    clear VAL.
+    generalize dependent pref. generalize dependent inp. remember forward as dir.
+    induction next; intros.
+    { subst. apply no_more_strict_suffix in SUF. contradiction. }
+    right. simpl. subst. eapply advance_suffix in SUF; simpl; eauto.
+    destruct SUF as [EQ | SUF]; auto. subst.
+    destruct next; simpl; auto.
+  Qed.
+  
+  Lemma possible_memosize:
+    forall next pref sizec,
+      length (possible_memo next pref sizec) = 2 * sizec * inpsize (Input next pref).
+  Proof.
+    intros. unfold possible_memo. erewrite flat_map_constant_length.
+    2:{ intros x H. apply possible_fixedsize. }
+    rewrite possible_sufsize. lia.
+  Qed.
+
+  Lemma possible_memo_all:
+    forall pc b inp onext opref sizec,
+      pc < sizec ->
+      (* Input onext opref is the original input *)
+      validinp inp (Input onext opref) ->
+      In (pc, b, inp) (possible_memo onext opref sizec).
+  Proof.
+    intros pc b inp onext opref sizec H H0. unfold possible_memo.
+    apply in_flat_map. exists inp. split.
+    - apply possible_sufall. auto.
+    - apply possible_fixedall. auto.
+  Qed.
+            
+    
+  (* We have a bound on the numer of distinct elements in a memoset *)
+  Theorem mswf_size:
+    forall ms sizec inp dist,
+      mswf ms sizec inp dist -> length dist <= 2 * sizec * (inpsize inp).
+  Proof.
+    intros ms size0 [next pref] dist H. rewrite <- possible_memosize.
+    apply NoDup_incl_length.
+    { eapply mswf_nodup; eauto. }    
+    unfold incl. intros [[pca ba] ia] IN.
+    eapply mswf_small in IN as LT; eauto. eapply mswf_valid in IN as VA; eauto.
+    apply possible_memo_all; auto.
+  Qed.
+
+  (* the number of free slots in a memoset *)
+  (* we remove the number of distinct entries in the memoset *)
+  Definition msfree (codesize:nat) (inpsize:nat) (dist:list (nat*LoopBool*input)) : nat :=
+    (2 * codesize * inpsize) - length dist.
+  (*
   Lemma free_initial:
     forall codesize, free codesize [] = 2 * codesize.
   Proof.
