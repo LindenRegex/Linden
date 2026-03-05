@@ -849,6 +849,7 @@ End PikeVMComplexity.
 
 Section MemoBTComplexity.
   Context {params: LindenParameters}.
+  Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
   Context {VMS: VMSeen}.
 
@@ -1067,7 +1068,7 @@ Section MemoBTComplexity.
   (* The invariant that is preserved through pikeVM execution, with a measure that strictly decreases *)
   Inductive memo_inv (c:code) (originp:input): mbt_state -> nat -> Prop :=
   | minv_final:
-    forall b, memo_inv c originp (MBT_final b) 0
+    forall b ms, memo_inv c originp (MBT_final b ms) 0
   | minv_mbt:
     forall stk ms dist
       (* the threads in the stack have their pc inside the code range, and valid inputs *)
@@ -1178,7 +1179,7 @@ Section MemoBTComplexity.
   Theorem initial_memo_measure:
     forall inp r,
       pike_regex r ->
-      memo_inv (compilation r) inp (initial_state inp) (mbt_complexity r inp).
+      memo_inv (compilation r) inp (initial_state inp initial_memoset) (mbt_complexity r inp).
   Proof.
     intros inp r SUBSET.
     replace (mbt_complexity r inp) with (memo_measure (codesize r) (inpsize inp) [] [(0, GroupMap.empty, CanExit,inp)]).
@@ -1199,15 +1200,15 @@ Section MemoBTComplexity.
     forall mbs code inp n,
       code_wf code (size code) ->
       memo_inv code inp mbs n ->
-      exists result, steps (memobt_step rer code) mbs n (MBT_final result).
+      exists result finalms, steps (memobt_step rer code) mbs n (MBT_final result finalms).
   Proof.
     intros mbs code inp n WF INV. generalize dependent mbs. induction n using (strong_ind); intros.
     destruct mbs.
-    2: { exists res. constructor. }
+    2: { exists res. eexists. constructor. }
     specialize (memobt_progress rer code stk ms) as [next STEP].
     specialize (memobt_decreases code inp (MBT stk ms) next n WF STEP INV) as [newm [INV2 DECR]].
-    specialize (H newm DECR next INV2) as [result STEPS].
-    exists result. apply more_steps with (n:=S newm); try lia.
+    specialize (H newm DECR next INV2) as [result [finalms STEPS]].
+    exists result. exists finalms. apply more_steps with (n:=S newm); try lia.
     econstructor; eauto.
   Qed.
   
@@ -1218,8 +1219,8 @@ Section MemoBTComplexity.
       (* for any supported regex r and input inp *)
       pike_regex r ->
       (* The initial state reaches a final state in at most (complexity r inp) steps. *)
-      exists result, steps (memobt_step rer (compilation r))
-                  (initial_state inp) (mbt_complexity r inp) (MBT_final result).
+      exists result finalms, steps (memobt_step rer (compilation r))
+                  (initial_state inp initial_memoset) (mbt_complexity r inp) (MBT_final result finalms).
   Proof.
     intros r inp SUBSET.
     eapply memobt_bound.
@@ -1233,10 +1234,10 @@ Section MemoBTComplexity.
   Theorem memobt_terminates:
     forall r inp,
       pike_regex r ->
-      exists result, trc_memo_bt rer (compilation r) (initial_state inp) (MBT_final result).
+      exists result finalms, trc_memo_bt rer (compilation r) (initial_state inp initial_memoset) (MBT_final result finalms).
   Proof.
-    intros r inp H. eapply memobt_complexity in H as [result STEPS]; eauto.
-    exists result. eapply steps_trc; eauto.
+    intros r inp H. eapply memobt_complexity in H as [result [finalms STEPS]]; eauto.
+    exists result. exists finalms. eapply steps_trc; eauto.
   Qed.
   
 End MemoBTComplexity.

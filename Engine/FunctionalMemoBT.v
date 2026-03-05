@@ -50,22 +50,9 @@ Fixpoint memobt_loop (c:code) (mbt:mbt_state) (fuel:nat) : mbt_state :=
       end
   end.
 
-
-(* LATER: prove complexity bound of MemoBT *)
-Definition complexity (r:regex) (inp:input) : nat :=
-  (* LATER: derive from complexity of the MemoBT algorithm *)
-  0.
-Axiom memobt_complexity:
-  forall (r:regex) (inp:input),
-    (* for any supported regex r and input inp *)
-    pike_regex r ->
-    (* The initial state reaches a final state in at most (complexity r inp) steps. *)
-    exists result ms, steps (memobt_step rer (compilation r))
-                (initial_state inp initial_memoset) (complexity r inp) (MBT_final result ms).
-
 (* an upper bound for the fuel necessary to compute a result *)
 Definition memobt_fuel (r:regex) (inp:input) : nat :=
-  complexity r inp.
+  mbt_complexity r inp.
 
 Inductive matchres : Type :=
 | OutOfFuel
@@ -167,8 +154,8 @@ Theorem memobt_match_terminates:
     exists result ms, memobt_match r inp = Finished result ms.
 Proof.
   intros r inp SUBSET. unfold memobt_match, memobt_fuel.
-  apply memobt_complexity with (r:=r) (inp:=inp) in SUBSET as [result [ms TERM]].
-  exists result. exists ms. apply steps_loop in TERM. rewrite TERM. auto.
+  eapply memobt_complexity with (rer:=rer) (r:=r) (inp:=inp) in SUBSET as [result [finalms TERM]].
+  exists result. exists finalms. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
 End FunctionMemoBT.
