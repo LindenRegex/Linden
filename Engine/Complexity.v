@@ -1206,36 +1206,44 @@ Section MemoBTComplexity.
   Qed.
       
   (** * Bounding the number of MemoBT steps  *)
-  
+
+  (* A memoset is valid when it does correspond to some distinct list of elements,
+     all of them correct with regards to the sizec of the code and the initial input. *)
+  Definition validms (ms:memoset) (sizec:nat) (inp:input) : Prop :=
+    exists dist, mswf ms sizec inp dist.
+
   Lemma memobt_bound:
     forall mbs code inp n,
       code_wf code (size code) ->
       memo_inv code inp mbs n ->
-      exists result finalms, steps (memobt_step rer code) mbs n (MBT_final result finalms).
+      exists result finalms, steps (memobt_step rer code) mbs n (MBT_final result finalms) /\
+                          validms finalms (size code) inp.
   Proof.
     intros mbs code inp n WF INV. generalize dependent mbs. induction n using (strong_ind); intros.
     destruct mbs.
-    2: { exists res. eexists. constructor. }
+    2: { exists res. eexists. split. constructor. inversion INV. eexists. eauto. }
     specialize (memobt_progress rer code stk ms) as [next STEP].
     specialize (memobt_decreases code inp (MBT stk ms) next n WF STEP INV) as [newm [INV2 DECR]].
-    specialize (H newm DECR next INV2) as [result [finalms STEPS]].
-    exists result. exists finalms. apply more_steps with (n:=S newm); try lia.
-    econstructor; eauto.
+    specialize (H newm DECR next INV2) as [result [finalms [STEPS VALID]]].
+    exists result. exists finalms. split; auto.
+    apply more_steps with (n:=S newm); try lia. econstructor; eauto.
   Qed.
   
   (** * Complexity Theorem  *)
-
-    Theorem memobt_complexity:
-    forall (r:regex) (inp:input) (ms:memoset) dist,
+  
+  Theorem memobt_complexity:
+    forall (r:regex) (inp:input) (ms:memoset),
       pike_regex r ->
-      mswf ms (codesize r) inp dist -> 
+      validms ms (codesize r) inp ->
       exists result finalms, steps (memobt_step rer (compilation r))
-                  (initial_state inp ms) (mbt_complexity r inp) (MBT_final result finalms).
+                          (initial_state inp ms) (mbt_complexity r inp) (MBT_final result finalms) /\
+                          validms finalms (codesize r) inp. 
     Proof.
-      intros r inp ms dist SUBSET WF.
+      intros r inp ms SUBSET WF.
+      destruct WF as [dist WF].
       specialize (initial_memo_measure inp r ms dist SUBSET WF) as [measure [LE INV]].
-      specialize (memobt_bound _ _ _ _ (compiled_wf r) INV) as [result [finalms STEPS]].
-      exists result. exists finalms. eapply more_steps; eauto.
+      specialize (memobt_bound _ _ _ _ (compiled_wf r) INV) as [result [finalms [STEPS VALID]]].
+      exists result. exists finalms. rewrite <- compilation_size; auto. split;auto. eapply more_steps; eauto.
     Qed.
   
   Theorem memobt_complexity_empty_memoset:
@@ -1244,10 +1252,11 @@ Section MemoBTComplexity.
       pike_regex r ->
       (* The initial state reaches a final state in at most (complexity r inp) steps. *)
       exists result finalms, steps (memobt_step rer (compilation r))
-                  (initial_state inp initial_memoset) (mbt_complexity r inp) (MBT_final result finalms).
+                          (initial_state inp initial_memoset) (mbt_complexity r inp) (MBT_final result finalms) /\
+                          validms finalms (codesize r) inp.
   Proof.
-    intros r inp H. eapply memobt_complexity with (dist:=[]); auto.
-    apply mswf_init.
+    intros r inp H. eapply memobt_complexity; auto.
+    exists []. apply mswf_init.
   Qed.
 
   (** * Termination of the MemoBT algorithm  *)
@@ -1258,7 +1267,7 @@ Section MemoBTComplexity.
       pike_regex r ->
       exists result finalms, trc_memo_bt rer (compilation r) (initial_state inp initial_memoset) (MBT_final result finalms).
   Proof.
-    intros r inp H. eapply memobt_complexity_empty_memoset in H as [result [finalms STEPS]]; eauto.
+    intros r inp H. eapply memobt_complexity_empty_memoset in H as [result [finalms [STEPS VALID]]]; eauto.
     exists result. exists finalms. eapply steps_trc; eauto.
   Qed.
   
