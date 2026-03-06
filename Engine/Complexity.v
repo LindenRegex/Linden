@@ -1045,6 +1045,12 @@ Section MemoBTComplexity.
     intros codesize inpsize. unfold msfree. simpl. lia.
   Qed.
 
+  Lemma msfree_initial_dist:
+    forall codesize inpsize dist, msfree codesize inpsize dist <= 2 * codesize * inpsize.
+  Proof.
+    intros codesize inpsize. unfold msfree. simpl. lia.
+  Qed.
+
   Lemma msfree_add:
     forall ms size originp dist pc b inp,
       mswf ms size originp dist ->
@@ -1065,10 +1071,12 @@ Section MemoBTComplexity.
   Definition memo_measure (codesize:nat) (inpsize:nat) (dist:list (nat*LoopBool*input)) (stack:list config) :=
     (2 * msfree codesize inpsize dist) + length stack + 1.
   
-  (* The invariant that is preserved through pikeVM execution, with a measure that strictly decreases *)
+  (* The invariant that is preserved through MemoBT execution, with a measure that strictly decreases *)
   Inductive memo_inv (c:code) (originp:input): mbt_state -> nat -> Prop :=
   | minv_final:
-    forall b ms, memo_inv c originp (MBT_final b ms) 0
+    forall b ms dist
+      (MSWF: mswf ms (size c) originp dist),
+      memo_inv c originp (MBT_final b ms) 0
   | minv_mbt:
     forall stk ms dist
       (* the threads in the stack have their pc inside the code range, and valid inputs *)
@@ -1139,7 +1147,7 @@ Section MemoBTComplexity.
     intros code originp mbs1 mbs2 m1 CODEWF STEP INV. inversion STEP; subst; simpl memo_measure; inversion INV; subst.
     (* nomatch *)
     - exists 0. split.
-      + constructor.
+      + econstructor. eauto.
       + eapply memo_nonfinal_pos; eauto.
     (* skip *)
     - exists (memo_measure (size code) (inpsize originp) dist stk). split.
@@ -1149,7 +1157,7 @@ Section MemoBTComplexity.
       + unfold memo_measure. simpl. lia.
     (* match *)
     - exists 0. split.
-      + constructor.
+      + econstructor. eauto.
       + eapply memo_nonfinal_pos; eauto.
     (* explore *)
     - assert (RANGE: pc < size code).
@@ -1177,21 +1185,24 @@ Section MemoBTComplexity.
     2 + 4 * (codesize r * inpsize inp).
   
   Theorem initial_memo_measure:
-    forall inp r,
+    forall inp r ms dist,
       pike_regex r ->
-      memo_inv (compilation r) inp (initial_state inp initial_memoset) (mbt_complexity r inp).
+      mswf ms (codesize r) inp dist  ->
+      exists measure,
+        measure <= mbt_complexity r inp /\
+          memo_inv (compilation r) inp (initial_state inp ms) measure.
   Proof.
-    intros inp r SUBSET.
-    replace (mbt_complexity r inp) with (memo_measure (codesize r) (inpsize inp) [] [(0, GroupMap.empty, CanExit,inp)]).
-    - unfold initial_state. rewrite <- compilation_size; auto.
-      constructor; auto.
+    intros inp r ms dist SUBSET WF.
+    exists (memo_measure (codesize r) (inpsize inp) dist [(0, GroupMap.empty, CanExit,inp)]).
+    split.
+    - unfold memo_measure, mbt_complexity. rewrite <- compilation_size; auto. simpl.
+      pose proof (msfree_initial_dist (size (compilation r)) (inpsize inp) dist) as FREE. simpl. lia.
+    - unfold initial_state. rewrite <- compilation_size; auto. constructor; auto.
       + intros pc gm b inp0 H. inversion H; inversion H0.
         unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
         simpl. lia.
       + intros pc gm b inp0 H. inversion H; inversion H0. subst. left.
-      + apply mswf_init.
-    -  unfold memo_measure, mbt_complexity. rewrite <- compilation_size; auto. simpl.
-       rewrite msfree_initial. simpl. lia.
+      + rewrite compilation_size; auto.
   Qed.
       
   (** * Bounding the number of MemoBT steps  *)
@@ -1213,8 +1224,21 @@ Section MemoBTComplexity.
   Qed.
   
   (** * Complexity Theorem  *)
+
+    Theorem memobt_complexity:
+    forall (r:regex) (inp:input) (ms:memoset) dist,
+      pike_regex r ->
+      mswf ms (codesize r) inp dist -> 
+      exists result finalms, steps (memobt_step rer (compilation r))
+                  (initial_state inp ms) (mbt_complexity r inp) (MBT_final result finalms).
+    Proof.
+      intros r inp ms dist SUBSET WF.
+      specialize (initial_memo_measure inp r ms dist SUBSET WF) as [measure [LE INV]].
+      specialize (memobt_bound _ _ _ _ (compiled_wf r) INV) as [result [finalms STEPS]].
+      exists result. exists finalms. eapply more_steps; eauto.
+    Qed.
   
-  Theorem memobt_complexity:
+  Theorem memobt_complexity_empty_memoset:
     forall (r:regex) (inp:input),
       (* for any supported regex r and input inp *)
       pike_regex r ->
@@ -1222,12 +1246,10 @@ Section MemoBTComplexity.
       exists result finalms, steps (memobt_step rer (compilation r))
                   (initial_state inp initial_memoset) (mbt_complexity r inp) (MBT_final result finalms).
   Proof.
-    intros r inp SUBSET.
-    eapply memobt_bound.
-    - apply compiled_wf.
-    - apply initial_memo_measure. auto.
-  Qed.  
-  
+    intros r inp H. eapply memobt_complexity with (dist:=[]); auto.
+    apply mswf_init.
+  Qed.
+
   (** * Termination of the MemoBT algorithm  *)
   
   (* As a corollary, we can deduce that the MemoBT algorithm always terminates *)
@@ -1236,7 +1258,7 @@ Section MemoBTComplexity.
       pike_regex r ->
       exists result finalms, trc_memo_bt rer (compilation r) (initial_state inp initial_memoset) (MBT_final result finalms).
   Proof.
-    intros r inp H. eapply memobt_complexity in H as [result [finalms STEPS]]; eauto.
+    intros r inp H. eapply memobt_complexity_empty_memoset in H as [result [finalms STEPS]]; eauto.
     exists result. exists finalms. eapply steps_trc; eauto.
   Qed.
   

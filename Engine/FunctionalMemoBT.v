@@ -154,7 +154,7 @@ Theorem memobt_match_terminates:
     exists result ms, memobt_match r inp = Finished result ms.
 Proof.
   intros r inp SUBSET. unfold memobt_match, memobt_fuel.
-  eapply memobt_complexity with (rer:=rer) (r:=r) (inp:=inp) in SUBSET as [result [finalms TERM]].
+  eapply memobt_complexity_empty_memoset with (rer:=rer) (r:=r) (inp:=inp) in SUBSET as [result [finalms TERM]].
   exists result. exists finalms. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
