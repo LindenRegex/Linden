@@ -62,9 +62,9 @@ Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : search_result
         | Some inp' =>
             (* if it has groups we must reconstruct them *)
             (* LATER: do group reconstruction with an anchored engine *)
-            if has_groups r then None
-            else Some (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty))
-        | None => Some None
+            if has_groups r then Unsupported
+            else Ok (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty))
+        | None => Ok None
         end
   end.
 
