@@ -27,6 +27,19 @@ Fixpoint has_groups (r:regex) : bool :=
   | Regex.Character _ | Epsilon | Backreference _ | Anchor _ => false
   end.
 
+Definition has_groups_action (a:action) : bool :=
+  match a with
+  | Areg r => has_groups r
+  | Acheck _ => false
+  | Aclose _ => true
+  end.
+
+Fixpoint has_groups_actions (acts:list action) : bool :=
+  match acts with
+  | [] => false
+  | a::t => has_groups_action a || has_groups_actions t
+  end.
+
 (* whether a regex has assertions that do not contribute to the match range *)
 Fixpoint has_asserts (r:regex) : bool :=
   match r with
@@ -55,19 +68,6 @@ Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : search_result
             else Unsupported
         | None => Ok None
         end
-  end.
-
-Definition has_groups_action (a:action) : bool :=
-  match a with
-  | Areg r => has_groups r
-  | Acheck _ => false
-  | Aclose _ => true
-  end.
-
-Fixpoint has_groups_actions (acts:list action) : bool :=
-  match acts with
-  | [] => false
-  | a::t => has_groups_action a || has_groups_actions t
   end.
 
 (* if a regex has no groups, then it defines no groups *)
