@@ -9,7 +9,7 @@
 From Stdlib Require Import List Lia RelationClasses FunInd Recdef Arith.
 Import ListNotations.
 
-From Linden Require Import Regex Chars Semantics Tree FunctionalSemantics.
+From Linden Require Import Regex Chars Semantics Tree FunctionalSemantics FunctionalUtils.
 From Linden Require Import Parameters LWParameters.
 From Linden Require Import StrictSuffix.
 From Linden Require Import Tactics.
@@ -325,6 +325,46 @@ Proof.
     specialize (Hnf k).
     rewrite Hskip in Hstarts.
     now apply Hnf.
+Qed.
+
+(* given an input search from inp1 to inp3 where they are different *)
+(* the search on the input right after inp1 also returns inp3 *)
+Lemma input_search_advance {strs: StrSearch}:
+  forall inp1 inp2 inp3 p,
+    input_search p inp1 = Some inp3 ->
+    strict_suffix inp3 inp1 forward ->
+    advance_input inp1 forward = Some inp2 ->
+    input_search p inp2 = Some inp3.
+Proof.
+  unfold input_search.
+  intros inp1 inp2 inp3 p Hsearch Hss Hadv.
+  destruct (str_search p (next_str inp1)) as [n|] eqn:Hss1; [injection Hsearch as Heq|discriminate].
+  destruct n as [|n]; [rewrite advance_input_n_0 in Heq; ss_solve|].
+  destruct inp1 as [[|c next1] pref1]; [discriminate Hadv|].
+  injection Hadv as <-.
+  simpl.
+  rewrite (str_search_succ_next _ _ _ _ Hss1).
+  f_equal. subst. symmetry. apply advance_input_n_succ_forward.
+Qed.
+
+(* given an input search from inp1 to inp3, all searches on inputs *)
+(* between inp1 and inp3 also return inp3 *)
+Lemma input_search_between {strs: StrSearch}:
+  forall inp1 inp2 inp3 p,
+    input_search p inp1 = Some inp3 ->
+    inp2 = inp1 \/ strict_suffix inp2 inp1 forward ->
+    inp3 = inp2 \/ strict_suffix inp3 inp2 forward ->
+    input_search p inp2 = Some inp3.
+Proof.
+  intros inp1 inp2 inp3 p Hsearch [<- | Hlow] Hhigh; [assumption|].
+  remember forward as dir.
+  induction Hlow; subst.
+  + eapply input_search_advance; eauto.
+    destruct Hhigh; ss_solve.
+  + apply input_search_advance with (inp1 := inp2); eauto.
+    * apply IHHlow; eauto.
+      destruct Hhigh; ss_solve.
+    * destruct Hhigh; ss_solve.
 Qed.
 
 (* input_search finds no result iff str_search finds no result *)
@@ -1073,14 +1113,64 @@ Proof.
   - destruct extract_literal; simpl; now rewrite ?app_nil_r.
 Qed.
 
-
-Conjecture no_asserts_exact_literal_unanchored :
-  forall r inp p inp' tree gm {strs:StrSearch},
+(* exact_literal_result_unanchored with extra premises to guide the direction *)
+(* of the input we induct on *)
+Lemma exact_literal_result_unanchored' {strs:StrSearch}:
+  forall r i inp inp' p tree,
+    input_prefix i inp forward ->
+    input_prefix inp' i forward ->
+    is_tree rer [Areg (lazy_prefix r)] i Groups.GroupMap.empty forward tree ->
     has_asserts r = false ->
     extract_literal r = Exact p ->
-    is_tree rer [Areg (lazy_prefix r)] inp gm forward tree ->
+    input_search p i = Some inp ->
+    exists gm', first_leaf tree i = Some (advance_input_n inp (length p) forward, gm').
+Proof.
+  intros r i inp inp' p tree Hhigh.
+  remember forward as dir.
+  generalize dependent tree.
+  induction Hhigh; subst; intros tree Hlow Htree Hnoassert Hlit Hsearch.
+  - inversion Htree. inversion CONT. subst.
+    eapply input_search_starts_with in Hsearch.
+    unfold first_leaf. simpl.
+    eapply exact_literal_result with (tree:=tskip) in Hsearch as [? ->]; simpl; eauto.
+  - (* relate inputs *)
+    assert (Hinp31: strict_suffix inp3 inp1 forward) by ss_solve.
+    destruct inp1 as [next1 pref1], next1 as [|c1 next1]; [discriminate|injection H as <-].
+    inversion Htree. inversion CONT. destruct plus; [discriminate|subst].
+    inversion ISTREE1; [inversion READ; subst|discriminate].
+    (* r has no results at inp1 *)
+    eapply input_search_no_earlier with (i:=Input (c::next1) pref1) in Hsearch as Hres; try split; eauto.
+    replace p with (prefix (extract_literal r)) in Hres by now rewrite Hlit.
+    eapply extract_literal_prefix_contra in Hres; eauto.
+    (* the rest of the result comes from IH *)
+    pose proof (is_tree_productivity rer [Areg (lazy_prefix r)] (Input next1 (c :: pref1)) Groups.GroupMap.empty forward) as [t' Ht'].
+    assert (Hinp': input_prefix inp' (Input next1 (c :: pref1)) forward) by ss_solve.
+    assert (Hsearch': input_search p (Input next1 (c::pref1)) = Some inp3). {
+      eapply input_search_advance with (inp1:=Input (c::next1) pref1); eauto.
+    }
+    specialize (IHHhigh ltac:(eauto) _ ltac:(eauto) Ht' ltac:(eauto) ltac:(eauto) ltac:(eauto)) as [gm' Hres'].
+    unfold first_leaf in *. simpl. unfold advance_input'.
+    rewrite Hres. simpl.
+    inversion TREECONT; [|exfalso; eauto using ss_advance].
+    inversion Ht'.
+    eapply is_tree_determ with (t2:=treecont) in CONT0; eauto.
+    subst. eauto.
+Qed.
+
+(* the result of a match of a the lazy prefix of an exact regex with no assertions *)
+(* is the position returned from a substring search *)
+Lemma exact_literal_result_unanchored {strs:StrSearch} :
+  forall r inp p inp' tree,
+    has_asserts r = false ->
+    extract_literal r = Exact p ->
+    is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
     input_search p inp = Some inp' ->
     exists gm', first_leaf tree inp = Some (advance_input_n inp' (length p) forward, gm').
+Proof.
+  intros.
+  eapply input_search_strict_suffix in H2 as Hstr.
+  eapply exact_literal_result_unanchored'; eauto using ip_eq; ss_solve.
+Qed.
 
 (** * Extracted literals size *)
 
