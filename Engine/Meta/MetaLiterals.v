@@ -181,8 +181,7 @@ Proof.
     unfold first_leaf. subst. simpl. unfold advance_input'. simpl.
     assert (Hnoskip: tree_res tskip Groups.GroupMap.empty (Input (c :: next) pref) forward = None). {
       eapply extract_literal_prefix_contra, input_search_no_earlier; eauto.
-      rewrite input_prefix_strict_suffix in Hprefix, Hlow.
-      split; destruct Hprefix, Hlow; subst; eauto using ss_next', ss_advance.
+      split; ss_solve.
     }
     rewrite Hnoskip. simpl.
     inversion Htree'. inversion TREECONT.
@@ -203,7 +202,7 @@ Proof.
   - erewrite un_exec_correct; eauto.
     assert (input_prefix inp i forward). {
       apply input_search_strict_suffix in Hsearch.
-      now rewrite <-input_prefix_strict_suffix in Hsearch.
+      ss_solve.
     }
     eapply un_exec_all_between_str_search_eq; eauto using ip_eq.
   (* there is no occurrence of the literal *)

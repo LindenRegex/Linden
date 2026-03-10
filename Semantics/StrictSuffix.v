@@ -1,4 +1,5 @@
 From Linden Require Import Chars Parameters LWParameters.
+From Linden Require Import ListLemmas.
 From Warblre Require Import Base Parameters.
 From Stdlib Require Import List Lia.
 Import ListNotations.
@@ -389,6 +390,56 @@ Section StrictSuffix.
     pose proof strict_suffix_current inp1 inp1 dir Hss. lia.
   Qed.
 
+  Lemma ss_irreflexive :
+    forall inp dir,
+      ~strict_suffix inp inp dir.
+  Proof.
+    intros inp dir H.
+    now apply ss_neq in H.
+  Qed.
+
+  Lemma ss_asymm:
+    forall inp1 inp2 dir,
+      strict_suffix inp1 inp2 dir ->
+      ~strict_suffix inp2 inp1 dir.
+  Proof.
+    intros inp1 inp2 dir H1 H2.
+    apply (ss_irreflexive inp1 dir).
+    eapply strict_suffix_trans; eauto.
+  Qed.
+
+
+  Lemma ss_forward_backward :
+    forall inp1 inp2,
+      strict_suffix inp1 inp2 forward -> strict_suffix inp2 inp1 backward.
+  Proof.
+    remember forward as dir.
+    induction 1; subst.
+    - destruct inp as [next ?], next; [discriminate|injection H as <-].
+      eauto using ss_advance.
+    - destruct inp2 as [next ?], next; [discriminate|injection H as <-].
+      eauto using ss_next'.
+  Qed.
+
+  Lemma ss_backward_forward :
+    forall inp1 inp2,
+      strict_suffix inp1 inp2 backward -> strict_suffix inp2 inp1 forward.
+  Proof.
+    remember backward as dir.
+    induction 1; subst.
+    - destruct inp as [? pref], pref; [discriminate|injection H as <-].
+      eauto using ss_advance.
+    - destruct inp2 as [? pref], pref; [discriminate|injection H as <-].
+      eauto using ss_next'.
+  Qed.
+
+  Lemma ss_backward_forward_iff :
+    forall inp1 inp2,
+      strict_suffix inp1 inp2 backward <-> strict_suffix inp2 inp1 forward.
+  Proof.
+    intros. split; eauto using ss_forward_backward, ss_backward_forward.
+  Qed.
+
   (** * Prefixes *)
 
   (* In general you should use strict_suffix in definitions. *)
@@ -426,3 +477,59 @@ Section StrictSuffix.
   Qed.
 
 End StrictSuffix.
+
+(** Solver for strict_suffix *)
+
+(* canonicalize into strict suffixes *)
+Ltac ss_canon :=
+  match goal with
+  (* generate strict_suffix *)
+  | |- input_prefix _ _ _ =>
+    rewrite input_prefix_strict_suffix
+  | [H: input_prefix _ _ _ |- _] =>
+    rewrite input_prefix_strict_suffix in H;
+    destruct H; subst
+  (* simplify advance_input *)
+  | [H: advance_input ?inp1 forward = Some _ |- _] =>
+    let next := fresh "next" in
+    destruct inp1 as [next ?pref], next as [|?c ?next]; [discriminate H|];
+    inversion H; clear H; subst
+  | [H: advance_input ?inp1 backward = Some _ |- _] =>
+    let pref := fresh "pref" in
+    destruct inp1 as [?next pref], pref as [|?c ?pref]; [discriminate H|];
+    inversion H; clear H; subst
+  (* flip backward to forward *)
+  | [H: strict_suffix _ _ backward |- _] =>
+    rewrite ss_backward_forward_iff in H
+  | |- strict_suffix _ _ backward =>
+    rewrite ss_backward_forward_iff
+  | [H: strict_suffix _ _ forward |- _] => idtac
+  | [H: strict_suffix _ _ ?dir |- _] => destruct dir
+  end.
+
+(* solves a strict_suffix goal by finding a proof *)
+(* or by finding a contradiction *)
+(* assumes statements are canonicalized with ss_canon *)
+Ltac ss_solve' :=
+  match goal with
+  (* solve directly *)
+  | [H: ?h |- ?h] => eassumption
+  | [H: advance_input ?inp forward = Some ?inp |- _] => exfalso; eapply advance_input_not_self; eauto
+  | [H: strict_suffix ?inp ?inp _ |- _] => exfalso; eapply ss_irreflexive; eauto
+  | [H: strict_suffix ?inp1 ?inp2 forward |- _] =>
+    let H' := fresh "H" in
+    assert (H': strict_suffix inp2 inp1 forward) by (clear H; ss_solve');
+    exfalso; apply (ss_asymm inp1 inp2 forward H H')
+  | |- strict_suffix (Input ?next (?c::?pref)) (Input (?c::?next) ?pref) forward =>
+    eapply ss_advance; eauto
+  | [H: _ :: ?t = ?t |- _] =>
+    exfalso; eapply cons_different; eauto
+  (* find goal transitively *)
+  | |- _ \/ _ => (left; ss_solve') || (right; ss_solve')
+  | [H: strict_suffix _ ?inp3 ?dir |- strict_suffix ?inp1 ?inp3 ?dir] =>
+    eapply strict_suffix_trans with (2:=H);
+    ss_solve'
+  | _ => solve[eauto using ss_next', ss_advance]
+  end.
+
+Ltac ss_solve := solve[repeat ss_canon; ss_solve'].

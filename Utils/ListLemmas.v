@@ -53,3 +53,10 @@ Proof.
   rewrite skipn_all in Hconcat.
   now replace (Z.to_nat endInd1) with (length pref) by lia.
 Qed.
+
+Lemma cons_different {A}: forall (x: A) (l: list A), l <> x::l.
+Proof.
+  induction l.
+  - discriminate.
+  - now inversion 1.
+Qed.
