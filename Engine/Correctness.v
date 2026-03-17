@@ -43,14 +43,14 @@ Section Correctness.
   Context (rer: RegExpRecord).
 
 Definition trc_pike_tree := @trc pike_tree_state pike_tree_step.
-Definition trc_pike_vm (c:code) := @trc pike_vm_state (pike_vm_step rer c).
+Definition trc_pike_vm (c:code) (dir:Direction) := @trc pike_vm_state (pike_vm_step rer c dir).
 
 (* The Pike invariant is preserved through the TRC *)
 Lemma vm_to_tree:
   forall svm1 st1 svm2 code
     (STWF: stutter_wf rer code)
     (INVARIANT: pike_inv rer code st1 svm1)
-    (TRCVM: trc_pike_vm code svm1 svm2),
+    (TRCVM: trc_pike_vm code forward svm1 svm2),
     exists st2, trc_pike_tree st1 st2 /\ pike_inv rer code st2 svm2.
 Proof.
   intros svm1 st1 svm2 code STWF INVARIANT TRCVM.
@@ -69,7 +69,7 @@ Theorem pike_vm_to_pike_tree:
   forall r inp tree result,
     pike_regex r ->
     bool_tree rer [Areg r] inp CanExit tree ->
-    trc_pike_vm (compilation r) (pike_vm_initial_state inp) (PVS_final result) ->
+    trc_pike_vm (compilation r) forward (pike_vm_initial_state inp) (PVS_final result) ->
     trc_pike_tree (pike_tree_initial_state tree inp) (PTS_final result).
 Proof.
   intros r inp tree result SUBSET TREE TRCVM.
@@ -83,7 +83,7 @@ Theorem pike_vm_to_pike_tree_unanchored {strs:StrSearch}:
   forall r inp tree result future_tree,
     pike_regex r ->
     bool_tree rer [Areg r] inp CanExit tree ->
-    trc_pike_vm (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (PVS_final result) ->
+    trc_pike_vm (compilation r) forward (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward) (PVS_final result) ->
     future_tree_shape rer r inp future_tree ->
     exists future, may_erase future_tree future /\
     trc_pike_tree (pike_tree_initial_state_unanchored tree future inp) (PTS_final result).
@@ -117,7 +117,7 @@ Theorem pike_vm_correct:
     (* `tree` is the tree of the regex `r` for the input `inp` *)
     is_tree rer [Areg r] inp GroupMap.empty forward tree ->
     (* the result of the PikeVM is `result` *)
-    trc_pike_vm (compilation r) (pike_vm_initial_state inp) (PVS_final result) ->
+    trc_pike_vm (compilation r) forward (pike_vm_initial_state inp) (PVS_final result) ->
     (* This `result` is the priority result of the `tree` *)
     result = first_leaf tree inp.
 Proof.
@@ -139,7 +139,7 @@ Theorem pike_vm_correct_unanchored {strs:StrSearch}:
     (* `tree` is the tree of the regex `[^]*?r` for the input `inp` *)
     is_tree rer [Areg (lazy_prefix r)] inp GroupMap.empty forward tree ->
     (* the result of the PikeVM is `result` *)
-    trc_pike_vm (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (PVS_final result) ->
+    trc_pike_vm (compilation r) forward (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward) (PVS_final result) ->
     (* This `result` is the priority result of the `tree` *)
     result = first_leaf tree inp.
 Proof.
@@ -161,7 +161,7 @@ Theorem pike_vm_same_warblre:
     RegExpRecord.capturingGroupsCount rer = StaticSemantics.countLeftCapturingParensWithin wr nil ->
     EarlyErrors.Pass_Regex wr nil ->
     forall result,
-      trc_pike_vm (compilation lr) (pike_vm_initial_state inp) (PVS_final result) ->
+      trc_pike_vm (compilation lr) forward (pike_vm_initial_state inp) (PVS_final result) ->
       EquivDef.equiv_res result ((EquivMain.compilePattern wr rer) (input_str inp) (idx inp)).
 Proof.
   intros lr wr inp Hpike Hequiv Hcapcount HearlyErrors.
@@ -183,7 +183,7 @@ Theorem pike_vm_same_warblre_str0:
     RegExpRecord.capturingGroupsCount rer = StaticSemantics.countLeftCapturingParensWithin wr nil ->
     EarlyErrors.Pass_Regex wr nil ->
     forall result,
-      trc_pike_vm (compilation lr) (pike_vm_initial_state (init_input str0)) (PVS_final result) ->
+      trc_pike_vm (compilation lr) forward (pike_vm_initial_state (init_input str0)) (PVS_final result) ->
       EquivDef.equiv_res result ((EquivMain.compilePattern wr rer) str0 0).
 Proof.
   intros lr wr str0 Hpike Hequiv Hcapcount HearlyErrors.
@@ -203,7 +203,7 @@ Theorem pike_vm_warblre:
     (* such that it is in the supported PikeVM subset *)
     pike_regex r ->
     (* When PikeVM reaches a final result *)
-    trc_pike_vm (compilation r) (pike_vm_initial_state inp) (PVS_final result) ->
+    trc_pike_vm (compilation r) forward (pike_vm_initial_state inp) (PVS_final result) ->
     (* this result is equal to Warblre's execution result *)
     (compilePattern rw rer) (input_str inp) (idx inp) = to_MatchState result (RegExpRecord.capturingGroupsCount rer).
 Proof.
@@ -264,7 +264,7 @@ Proof.
   generalize (initial_memo_inv_inclusion rer r inp tree (compilation r) initts initms TREE (@eq_refl _ _) SUBSET INCL).
   intros INIT.
   eapply memobt_to_tree in TRCBT as [btfinal [TRCTREE INV]]; eauto.
-  - inversion INV. subst. eauto. 
+  - inversion INV. subst. eauto.
   - eapply compilation_stutter_wf; eauto.
 Qed.
 
@@ -328,7 +328,7 @@ Theorem memobt_correct:
     /\ (result = None -> correctms finalms (compilation r)).
 Proof.
   intros r inp tree result initms finalms SUBSET CORRECT TREE TRC.
-  destruct CORRECT as [initts [INCL NOLEAF]]. 
+  destruct CORRECT as [initts [INCL NOLEAF]].
   eapply encode_equal with (b:=CanExit) in TREE as BOOLTREE; try solve[pike_subset].
   eapply memobt_to_memotree in TRC as [ts [TRC CORRECT]]; eauto.
   assert (SUBTREE: pike_subtree tree).

@@ -68,6 +68,13 @@ Section Chars.
   Definition init_input (str:string) : input :=
     Input str [].
 
+  Definition input_reverse (i: input) : input :=
+    let '(Input next pref) := i in
+    Input pref next.
+
+  Lemma input_reverse_involutive : forall i, input_reverse (input_reverse i) = i.
+  Proof. now destruct i. Qed.
+
 
   (* Definition of when an input is compatible with (i.e. represents) a given input string str0. *)
   Inductive input_compat: input -> string -> Prop :=
