@@ -37,7 +37,7 @@ to the next position where the prefix matches.
 From Stdlib Require Import List Lia.
 Import ListNotations.
 
-From Linden Require Import Regex Chars Groups.
+From Linden Require Import Regex Chars Groups FunctionalSemantics.
 From Linden Require Import Tree Semantics NFA.
 From Linden Require Import BooleanSemantics PikeSubset.
 From Linden Require Import Parameters SeenSets Prefix.
@@ -99,35 +99,58 @@ Inductive epsilon_result : Type :=
 
 Definition EpsDead : epsilon_result := EpsActive [].
 
+(* flips begin and end input anchors *)
+Definition flip_anchor (a:anchor) : anchor :=
+  match a with
+  | BeginInput => EndInput
+  | EndInput => BeginInput
+  | WordBoundary => WordBoundary
+  | NonWordBoundary => NonWordBoundary
+  end.
+
+(* get the anchor to check depending on the direction *)
+Definition anchor_dir (a:anchor) (dir:Direction): anchor :=
+  match dir with
+  | forward => a
+  | backward => flip_anchor a
+  end.
+
+(* get current string position index depending on the direction *)
+Definition idx_dir (inp:input) (dir:Direction): nat :=
+  match dir with
+  | forward => idx inp
+  | backward =>
+    let 'Input next pref := inp in
+    List.length next
+  end.
+
 (* an atomic step for a thread *)
-Definition epsilon_step (t:thread) (c:code) (i:input): epsilon_result :=
-  match t with
-  | (pc, gm, b) =>
-      match get_pc c pc with
-      | None => EpsDead
-      | Some instr =>
-          match instr with
-          | Accept => EpsMatch
-          | Consume cd => match check_read rer cd i forward with
-                         | CannotRead => EpsDead
-                         | CanRead => EpsBlocked (block_thread t)
+Definition epsilon_step (t:thread) (c:code) (dir:Direction) (i:input): epsilon_result :=
+  let '(pc, gm, b) := t in
+  match get_pc c pc with
+  | None => EpsDead
+  | Some instr =>
+      match instr with
+      | Accept => EpsMatch
+      | Consume cd => match check_read rer cd i dir with
+                      | CannotRead => EpsDead
+                      | CanRead => EpsBlocked (block_thread t)
+                      end
+      | CheckAnchor a => match anchor_satisfied rer (anchor_dir a dir) i with
+                         | false => EpsDead
+                         | true => EpsActive [advance_thread t]
                          end
-          | CheckAnchor a => match anchor_satisfied rer a i with
-                            | false => EpsDead
-                            | true => EpsActive [advance_thread t]
-                            end
-          | Jmp next => EpsActive [upd_label t next]
-          | Fork l1 l2 => EpsActive [upd_label t l1; upd_label t l2]
-          | SetRegOpen gid => EpsActive [open_thread t gid (idx i)]
-          | SetRegClose gid => EpsActive [close_thread t gid (idx i)]
-          | ResetRegs gidl => EpsActive [reset_thread t gidl]
-          | BeginLoop => EpsActive [begin_thread t]
-          | EndLoop next => match b with
-                           | CannotExit => EpsDead
-                           | CanExit => EpsActive [upd_label t next]
-                           end
-          | KillThread => EpsDead
-          end
+      | Jmp next => EpsActive [upd_label t next]
+      | Fork l1 l2 => EpsActive [upd_label t l1; upd_label t l2]
+      | SetRegOpen gid => EpsActive [open_thread t gid (idx_dir i dir)]
+      | SetRegClose gid => EpsActive [close_thread t gid (idx_dir i dir)]
+      | ResetRegs gidl => EpsActive [reset_thread t gidl]
+      | BeginLoop => EpsActive [begin_thread t]
+      | EndLoop next => match b with
+                        | CannotExit => EpsDead
+                        | CanExit => EpsActive [upd_label t next]
+                        end
+      | KillThread => EpsDead
       end
   end.
 
@@ -141,11 +164,15 @@ Inductive pike_vm_state : Type :=
 
 (* given an input and literal, we compute the next prefix counter *)
 (* since the counter is always offset by one, we first try to advance the input before performing a prefix search *)
-Definition next_prefix_counter {strs:StrSearch} (inp: input) (lit: literal) : option (nat * literal * StrSearch) :=
-  match advance_input inp forward with
+Definition next_prefix_counter {strs:StrSearch} (inp: input) (dir: Direction) (lit: literal) : option (nat * literal * StrSearch) :=
+  match advance_input inp dir with
   | None => None
   | Some (Input next pref) =>
-      match str_search (prefix lit) next with
+      let search := str_search (prefix lit) match dir with
+                    | forward => next
+                    | backward => pref
+                    end in
+      match search with
       | None => None
       | Some n => Some (n, lit, strs)
       end
@@ -153,8 +180,8 @@ Definition next_prefix_counter {strs:StrSearch} (inp: input) (lit: literal) : op
 
 Definition pike_vm_initial_thread : thread := (0, GroupMap.empty, CanExit).
 (* initial state for the PikeVM which operates in unanchored fashion *)
-Definition pike_vm_initial_state_unanchored {strs:StrSearch} (lit:literal) (inp:input) : pike_vm_state :=
-  let nextprefix := next_prefix_counter inp lit in
+Definition pike_vm_initial_state_unanchored {strs:StrSearch} (lit:literal) (inp:input) (dir:Direction) : pike_vm_state :=
+  let nextprefix := next_prefix_counter inp dir lit in
   PVS inp [pike_vm_initial_thread] None [] nextprefix initial_seenpcs.
 (* initial state for the PikeVM which operates in anchored fashion *)
 Definition pike_vm_initial_state (inp:input) : pike_vm_state :=
@@ -162,78 +189,78 @@ Definition pike_vm_initial_state (inp:input) : pike_vm_state :=
 
 
 (* small-step semantics for the PikeVM algorithm *)
-Inductive pike_vm_step (c:code): pike_vm_state -> pike_vm_state -> Prop :=
+Variant pike_vm_step (c:code) (dir:Direction): pike_vm_state -> pike_vm_state -> Prop :=
 | pvs_final:
 (* moving to a final state when there are no more active or blocked threads *)
   forall inp best seen,
-    pike_vm_step c (PVS inp [] best [] None seen) (PVS_final best)
+    pike_vm_step c dir (PVS inp [] best [] None seen) (PVS_final best)
 | pvs_acc:
 (* if there are no more active or blocked threads and we know where the next prefix matches, *)
 (* we accelerate to that point *)
   forall inp best n lit strs nextinp seen
-    (ADVANCE: advance_input_n inp (S n) forward = nextinp),
-    pike_vm_step c (PVS inp [] best [] (Some (n, lit, strs)) seen) (PVS nextinp [pike_vm_initial_thread] best [] (next_prefix_counter nextinp lit) initial_seenpcs)
+    (ADVANCE: advance_input_n inp (S n) dir = nextinp),
+    pike_vm_step c dir (PVS inp [] best [] (Some (n, lit, strs)) seen) (PVS nextinp [pike_vm_initial_thread] best [] (next_prefix_counter nextinp dir lit) initial_seenpcs)
 | pvs_end:
   (* when the list of active is empty and we've reached the end of string *)
   (* in practice, this rule is never used because we can have no blocked threads *)
   (* when there is no input left. We keep this rule for convenience in the proofs *)
   (* and for relating it to the functional version *)
   forall inp best thr blocked nextprefix seen
-    (ADVANCE: advance_input inp forward = None),
-    pike_vm_step c (PVS inp [] best (thr::blocked) nextprefix seen) (PVS_final best)
+    (ADVANCE: advance_input inp dir = None),
+    pike_vm_step c dir (PVS inp [] best (thr::blocked) nextprefix seen) (PVS_final best)
 | pvs_nextchar:
   (* when the list of active threads is empty (but not blocked), restart from the blocked ones, proceeding to the next character *)
   (* reset the set of seen pcs *)
   forall inp1 inp2 best thr blocked seen
-    (ADVANCE: advance_input inp1 forward = Some inp2),
-    pike_vm_step c (PVS inp1 [] best (thr::blocked) None seen) (PVS inp2 (thr::blocked) best [] None initial_seenpcs)
+    (ADVANCE: advance_input inp1 dir = Some inp2),
+    pike_vm_step c dir (PVS inp1 [] best (thr::blocked) None seen) (PVS inp2 (thr::blocked) best [] None initial_seenpcs)
 | pvs_nextchar_generate:
   (* when the list of active threads is empty (but not blocked), restart from the blocked ones, proceeding to the next character *)
   (* since the nextprefix counter reached zero, we must also append as lowest priority the initial thread *)
   (* reset the set of seen pcs *)
   forall inp1 inp2 best lit strs thr blocked seen
-    (ADVANCE: advance_input inp1 forward = Some inp2),
-    pike_vm_step c (PVS inp1 [] best (thr::blocked) (Some (0, lit, strs)) seen) (PVS inp2 ((thr::blocked) ++ [pike_vm_initial_thread]) best [] (next_prefix_counter inp2 lit) initial_seenpcs)
+    (ADVANCE: advance_input inp1 dir = Some inp2),
+    pike_vm_step c dir (PVS inp1 [] best (thr::blocked) (Some (0, lit, strs)) seen) (PVS inp2 ((thr::blocked) ++ [pike_vm_initial_thread]) best [] (next_prefix_counter inp2 dir lit) initial_seenpcs)
 | pvs_nextchar_filter:
   (* when the list of active threads is empty (but not blocked), restart from the blocked ones, proceeding to the next character *)
   (* since the nextprefix counter is nonzero, we do not append the initial thread *)
   (* reset the set of seen pcs *)
   forall inp1 inp2 best n lit strs thr blocked seen
-    (ADVANCE: advance_input inp1 forward = Some inp2),
-    pike_vm_step c (PVS inp1 [] best (thr::blocked) (Some (S n, lit, strs)) seen) (PVS inp2 (thr::blocked) best [] (Some (n, lit, strs)) initial_seenpcs)
+    (ADVANCE: advance_input inp1 dir = Some inp2),
+    pike_vm_step c dir (PVS inp1 [] best (thr::blocked) (Some (S n, lit, strs)) seen) (PVS inp2 (thr::blocked) best [] (Some (n, lit, strs)) initial_seenpcs)
 | pvs_skip:
   (* when the pc has already been seen at this current index, we skip it entirely *)
   forall inp t active best blocked nextprefix seen
     (SEEN: seen_thread seen t = true),
-    pike_vm_step c (PVS inp (t::active) best blocked nextprefix seen) (PVS inp active best blocked nextprefix seen)
+    pike_vm_step c dir (PVS inp (t::active) best blocked nextprefix seen) (PVS inp active best blocked nextprefix seen)
 | pvs_active:
   (* generated new active threads: add them in front of the low-priority ones *)
   forall inp t active best blocked nextprefix seen nextactive
     (UNSEEN: seen_thread seen t = false)
-    (STEP: epsilon_step t c inp = EpsActive nextactive),
-    pike_vm_step c (PVS inp (t::active) best blocked nextprefix seen) (PVS inp (nextactive++active) best blocked nextprefix (add_thread seen t))
+    (STEP: epsilon_step t c dir inp = EpsActive nextactive),
+    pike_vm_step c dir (PVS inp (t::active) best blocked nextprefix seen) (PVS inp (nextactive++active) best blocked nextprefix (add_thread seen t))
 | pvs_match:
   (* a match is found, discard remaining low-priority active threads *)
   forall inp t active best blocked nextprefix seen
     (UNSEEN: seen_thread seen t = false)
-    (STEP: epsilon_step t c inp = EpsMatch),
-    pike_vm_step c (PVS inp (t::active) best blocked nextprefix seen) (PVS inp [] (Some (inp,gm_of t)) blocked None (add_thread seen t))
+    (STEP: epsilon_step t c dir inp = EpsMatch),
+    pike_vm_step c dir (PVS inp (t::active) best blocked nextprefix seen) (PVS inp [] (Some (inp,gm_of t)) blocked None (add_thread seen t))
 | pvs_blocked:
   (* add the new blocked thread after the previous ones *)
   forall inp t active best blocked nextprefix seen newt
     (UNSEEN: seen_thread seen t = false)
-    (STEP: epsilon_step t c inp = EpsBlocked newt),
-    pike_vm_step c (PVS inp (t::active) best blocked nextprefix seen) (PVS inp active best (blocked ++ [newt]) nextprefix (add_thread seen t)).
+    (STEP: epsilon_step t c dir inp = EpsBlocked newt),
+    pike_vm_step c dir (PVS inp (t::active) best blocked nextprefix seen) (PVS inp active best (blocked ++ [newt]) nextprefix (add_thread seen t)).
 
 (** * PikeVM properties  *)
 
 Theorem pikevm_deterministic:
-  forall c pvso pvs1 pvs2
-    (STEP1: pike_vm_step c pvso pvs1)
-    (STEP2: pike_vm_step c pvso pvs2),
+  forall c dir pvso pvs1 pvs2
+    (STEP1: pike_vm_step c dir pvso pvs1)
+    (STEP2: pike_vm_step c dir pvso pvs2),
     pvs1 = pvs2.
 Proof.
-  intros c pvso pvs1 pvs2 STEP1 STEP2. inversion STEP1; subst.
+  intros c dir pvso pvs1 pvs2 STEP1 STEP2. inversion STEP1; subst.
   - inversion STEP2; subst; auto.
   - inversion STEP2; subst; auto.
   - inversion STEP2; subst; auto; rewrite ADVANCE in ADVANCE0; inversion ADVANCE0.
@@ -253,17 +280,17 @@ Proof.
 Qed.
 
 Theorem pikevm_progress:
-  forall c inp active best blocked nextprefix seen,
+  forall c dir inp active best blocked nextprefix seen,
   exists pvs_next,
-    pike_vm_step c (PVS inp active best blocked nextprefix seen) pvs_next.
+    pike_vm_step c dir (PVS inp active best blocked nextprefix seen) pvs_next.
 Proof.
-  intros c inp active best blocked nextprefix seen.
+  intros c dir inp active best blocked nextprefix seen.
   destruct active as [|[[pc gm] b] active].
   - destruct blocked as [|t blocked].
     + destruct nextprefix.
       * destruct p as [[n lit] strs]. eexists. now apply pvs_acc.
       * eexists. apply pvs_final.
-    + destruct (advance_input inp forward) eqn:INP.
+    + destruct (advance_input inp dir) eqn:INP.
       * destruct nextprefix.
         -- destruct p as [[n lit] strs], n.
           ++ eexists. apply pvs_nextchar_generate. eauto.
@@ -272,10 +299,175 @@ Proof.
       * eexists. apply pvs_end. eauto.
   - destruct (seen_thread seen (pc,gm,b)) eqn:SEEN.
     { eexists. apply pvs_skip. auto. }
-    destruct (epsilon_step (pc,gm,b) c inp) eqn:EPS.
+    destruct (epsilon_step (pc,gm,b) c dir inp) eqn:EPS.
     + eexists. apply pvs_active; eauto.
     + eexists. apply pvs_match; eauto.
     + eexists. apply pvs_blocked; eauto.
+Qed.
+
+(** Backward direction *)
+
+(* All proofs about the PikeVM will reason about the forward direction. *)
+(* Running the PikeVM in the backward direction means that characters *)
+(* are processed right-to-left rather than left-to-right. This direction *)
+(* mimics reversing the input which we want to avoid due to it being *)
+(* expensive. *)
+(* Here, we define the result of the backward direction in terms of the *)
+(* forward direction. We essentially reverse everything refering to *)
+(* the input. *)
+
+Definition leaf_reverse (o: option leaf) : option leaf :=
+  match o with
+  | None => None
+  | Some (inp, gm) => Some (input_reverse inp, gm)
+  end.
+
+Definition direction_reverse (dir: Direction) : Direction :=
+  match dir with
+  | forward => backward
+  | backward => forward
+  end.
+
+Definition pvs_reverse (pvs: pike_vm_state) : pike_vm_state :=
+  match pvs with
+  | PVS inp active best blocked nextprefix seen => PVS (input_reverse inp) active (leaf_reverse best) blocked nextprefix seen
+  | PVS_final best => PVS_final (leaf_reverse best)
+  end.
+
+Notation involutive f := (forall x, f (f x) = x).
+
+Lemma map_map_involutive {A}: forall (f : A -> A) l,
+  involutive f ->
+  map f (map f l) = l.
+Proof.
+  intros f l invo.
+  rewrite map_map.
+  induction l.
+  - reflexivity.
+  - simpl. now rewrite invo, IHl.
+Qed.
+
+Lemma flip_anchor_involutive : involutive flip_anchor.
+Proof. now destruct x. Qed.
+
+Lemma direction_reverse_involutive : involutive direction_reverse.
+Proof. now destruct x. Qed.
+
+Lemma leaf_reverse_involutive : involutive leaf_reverse.
+Proof.
+  destruct x as [[inp gm]|]; simpl; now rewrite ?input_reverse_involutive.
+Qed.
+
+Lemma pvs_reverse_involutive : involutive pvs_reverse.
+Proof.
+  destruct x as [inp active best blocked nextprefix seen|best]; simpl.
+  - now rewrite input_reverse_involutive, leaf_reverse_involutive.
+  - now rewrite leaf_reverse_involutive.
+Qed.
+
+Lemma advance_input_reverse_none : forall inp dir,
+  advance_input inp dir = None <-> advance_input (input_reverse inp) (direction_reverse dir) = None.
+Proof.
+  intros [next pref] dir.
+  split; intros; now destruct dir, next, pref.
+Qed.
+
+Lemma advance_input_reverse_some : forall inp dir inp',
+  advance_input inp dir = Some inp' <-> advance_input (input_reverse inp) (direction_reverse dir) = Some (input_reverse inp').
+Proof.
+  intros [next pref] dir inp'.
+  split; intros.
+  - destruct dir, next, pref; discriminate || now injection H as <-.
+  - destruct dir, next, pref; simpl in *; try discriminate;
+      inversion H;
+      eapply f_equal with (f:=input_reverse) in H1;
+      simpl in H1;
+      now rewrite H1, input_reverse_involutive.
+Qed.
+
+Lemma advance_input_n_reverse : forall inp dir n,
+  advance_input_n inp n dir = input_reverse (advance_input_n (input_reverse inp) n (direction_reverse dir)).
+Proof.
+  intros [next pref]. now destruct dir.
+Qed.
+
+Lemma check_read_reverse :
+  forall cd inp dir,
+    check_read rer cd inp dir = check_read rer cd (input_reverse inp) (direction_reverse dir).
+Proof.
+  intros ? [next pref]. now destruct dir.
+Qed.
+
+Lemma anchor_satisfied_reverse :
+  forall a inp,
+    anchor_satisfied rer a inp = anchor_satisfied rer (flip_anchor a) (input_reverse inp).
+Proof.
+  intros a [next pref]. destruct a, next, pref; simpl; reflexivity || now rewrite Bool.xorb_comm.
+Qed.
+
+Lemma idx_dir_reverse : forall inp dir,
+  idx_dir inp dir = idx_dir (input_reverse inp) (direction_reverse dir).
+Proof.
+  intros [next pref]. now destruct dir.
+Qed.
+
+Lemma epsilon_step_reverse :
+  forall t c dir inp,
+    epsilon_step t c dir inp = epsilon_step t c (direction_reverse dir) (input_reverse inp).
+Proof.
+  intros [[pc gm] b] c dir inp.
+  simpl. destruct get_pc as [inst|]; [|reflexivity]; destruct inst; try easy.
+  - now rewrite check_read_reverse.
+  - unfold anchor_dir. destruct dir; now rewrite anchor_satisfied_reverse, ?flip_anchor_involutive.
+  - now rewrite idx_dir_reverse.
+  - now rewrite idx_dir_reverse.
+Qed.
+
+Lemma next_prefix_counter_reverse {strs:StrSearch}:
+  forall inp dir lit,
+    next_prefix_counter inp dir lit = next_prefix_counter (input_reverse inp) (direction_reverse dir) lit.
+Proof.
+  now destruct dir, inp as [[|c next] [|c' pref]].
+Qed.
+
+Hint Rewrite
+	flip_anchor_involutive
+	direction_reverse_involutive
+	leaf_reverse_involutive
+	pvs_reverse_involutive
+	input_reverse_involutive
+  epsilon_step_reverse : invo.
+
+Tactic Notation "reverse" := autorewrite with invo using try (easy || congruence).
+
+(* the PikeVM in a forward direction corresponds to a mapped version in the backward direction *)
+Lemma pikevm_step_reverse :
+  forall c dir pvs pvs_next1 pvs_next2,
+    pike_vm_step c dir pvs pvs_next1 ->
+    pike_vm_step c (direction_reverse dir) (pvs_reverse pvs) pvs_next2 ->
+    pvs_next1 = pvs_reverse pvs_next2.
+Proof.
+  intros c dir pvs pvs_next1 pvs_next2 H1 H2.
+  inversion H1; subst; simpl in *.
+  - inversion H2; subst. simpl. reverse.
+  - inversion H2; subst. simpl.
+    f_equal; reverse.
+    + apply advance_input_n_reverse.
+    + now rewrite next_prefix_counter_reverse, advance_input_n_reverse, input_reverse_involutive.
+  - inversion H2; subst; simpl; reverse; rewrite advance_input_reverse_none in ADVANCE; congruence.
+  - inversion H2; subst; simpl; rewrite advance_input_reverse_some in ADVANCE; try congruence.
+    rewrite ADVANCE0 in ADVANCE; injection ADVANCE as ->.
+    reverse.
+  - inversion H2; subst; simpl; rewrite advance_input_reverse_some in ADVANCE; try congruence.
+    rewrite ADVANCE0 in ADVANCE; injection ADVANCE as ->.
+    f_equal; reverse; eauto using next_prefix_counter_reverse.
+  - inversion H2; subst; simpl; rewrite advance_input_reverse_some in ADVANCE; try congruence.
+    rewrite ADVANCE0 in ADVANCE; injection ADVANCE as ->.
+    reverse.
+  - inversion H2; subst; simpl; reverse.
+  - inversion H2; subst; simpl; reverse; rewrite epsilon_step_reverse in STEP; congruence.
+  - inversion H2; subst; simpl; reverse; rewrite epsilon_step_reverse in STEP; congruence.
+  - inversion H2; subst; simpl; reverse; rewrite epsilon_step_reverse in STEP; congruence.
 Qed.
 
 End PikeVM.
