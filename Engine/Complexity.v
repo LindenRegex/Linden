@@ -329,50 +329,57 @@ Section SearchRange.
   Context {params: LindenParameters}.
 
   (* we add 1 because we consider that even at the last position, there is work to do to reach the final state *)
-  Definition inpsize (i:input) : nat :=
-    match i with
-    | Input next pref => 1 + length next
+  Definition inpsize (i:input) (dir:Direction) : nat :=
+    let 'Input next pref := i in
+    match dir with
+    | forward => 1 + length next
+    | backward => 1 + length pref
     end.
 
   Lemma inpsize_strict:
-    forall i, inpsize i > 0.
+    forall i dir, inpsize i dir > 0.
   Proof.
-    intros [next pref]. simpl. lia.
+    intros [next pref] dir. simpl. destruct dir; lia.
   Qed.
 
   Lemma advance_input_decreases:
-    forall i1 i2,
-      advance_input i1 forward = Some i2 ->
-      inpsize i2 < inpsize i1.
+    forall i1 i2 dir,
+      advance_input i1 dir = Some i2 ->
+      inpsize i2 dir < inpsize i1 dir.
   Proof.
-    intros [n1 p1] [n2 p2] H. simpl in H. destruct n1 as [|h1 n1]; inversion H; subst. simpl. lia.
+    intros [n1 p1] [n2 p2] [|] H; simpl in *.
+    - destruct n1; inversion H; subst. simpl. lia.
+    - destruct p1; inversion H; subst. simpl. lia.
   Qed.
 
   (** * Next prefix search is in range  *)
 
   Theorem search_in_range:
-    forall inp lit n lit' (strs:StrSearch) strs',
-    @next_prefix_counter _ strs inp forward lit = Some (n, lit', strs') ->
-    inpsize inp > S n.
+    forall inp lit n lit' (strs:StrSearch) strs' dir,
+    @next_prefix_counter _ strs inp dir lit = Some (n, lit', strs') ->
+    inpsize inp dir > S n.
   Proof.
-    intros [next pref] lit n lit' strs strs' H. unfold next_prefix_counter in H.
-    destruct next; simpl in H. inversion H.
-    destruct str_search eqn:SEARCH; inversion H; subst.
-    apply str_search_bound in SEARCH. simpl. lia.
+    intros [next pref] lit n lit' strs strs' dir H. unfold next_prefix_counter in H.
+    destruct dir.
+    - destruct next; simpl in H. inversion H.
+      destruct str_search eqn:SEARCH; inversion H; subst.
+      apply str_search_bound in SEARCH. simpl. lia.
+    - destruct pref; simpl in H. inversion H.
+      destruct str_search eqn:SEARCH; inversion H; subst.
+      apply str_search_bound in SEARCH. simpl. lia.
   Qed.
 
   Lemma advance_inpsize:
-    forall inp1 inp2 n,
-      advance_input inp1 forward = Some inp2 ->
-      inpsize inp1 > S n ->
-      inpsize inp2 > n.
+    forall inp1 inp2 n dir,
+      advance_input inp1 dir = Some inp2 ->
+      inpsize inp1 dir > S n ->
+      inpsize inp2 dir > n.
   Proof.
-    intros [next1 pref1] inp2 n H H0. simpl in H.
-    destruct next1; inversion H.
-    simpl in H0. simpl. lia.
+    intros [next1 pref1] inp2 n dir H H0. simpl in H.
+    destruct dir, next1, pref1; inversion H; simpl in H0 |- *; lia.
   Qed.
 
-  Lemma advance_S_n:
+  Lemma advance_S_n_forward:
     forall n next pref c,
       advance_input_n (Input (c::next) pref) (S n) forward =
         advance_input_n (Input next (c::pref)) n forward.
@@ -380,19 +387,32 @@ Section SearchRange.
     intros n next pref c. simpl. f_equal. rewrite <- app_assoc. auto.
   Qed.
 
-  Lemma advance_n_inpsize:
-    forall inp n,
-      inpsize inp > S n ->
-      inpsize (advance_input_n inp (S n) forward) < inpsize inp.
+  Lemma advance_S_n_backward:
+    forall n next pref c,
+      advance_input_n (Input next (c::pref)) (S n) backward =
+        advance_input_n (Input (c::next) pref) n backward.
   Proof.
-    intros [next pref] n H.
+    intros n next pref c. simpl. f_equal. rewrite <- app_assoc. auto.
+  Qed.
+
+  Lemma advance_n_inpsize:
+    forall inp n dir,
+    inpsize inp dir > S n ->
+    inpsize (advance_input_n inp (S n) dir) dir < inpsize inp dir.
+  Proof.
+    intros [next pref] n dir H.
     generalize dependent next. generalize dependent pref.
     induction n; intros.
-    - unfold advance_input_n. destruct next; simpl in H; simpl; lia.
-    - destruct next as [|c next]; simpl in H. lia.
-      assert (S (length next) > S n) by lia.
-      specialize (IHn (c::pref) next H0). rewrite advance_S_n.
-      simpl in IHn. simpl. lia.
+    - unfold advance_input_n. destruct dir, next, pref; simpl in H; simpl; lia.
+    - destruct dir.
+      + destruct next as [|c next]; simpl in H. lia.
+        assert (S (length next) > S n) by lia.
+        specialize (IHn (c::pref) next H0). rewrite advance_S_n_forward.
+        simpl in IHn. simpl. lia.
+      + destruct pref as [|c pref]; simpl in H. lia.
+        assert (S (length pref) > S n) by lia.
+        specialize (IHn pref (c::next) H0). rewrite advance_S_n_backward.
+        simpl in IHn. simpl. lia.
   Qed.
 
 End SearchRange.
@@ -583,13 +603,13 @@ Section PikeVMComplexity.
   (* As we change characters, the seen set might get 2*codesize new free slots (multiplied by 2 for the measure) *)
   (* But the input decreases, which makes the measure also decrease, because input size is multiplied by (2 + 4*codesize)  *)
   (* It's (2 + 4*codesize) because we might generate a new thread at each input (for unanchored search) and because of the step it takes to advance *)
-  Definition measure (codesize:nat) (dist:list (nat*LoopBool)) (active blocked:list thread) (inp:input) :=
-    (2 * free codesize dist) + length active + length blocked + (inpsize inp * (2 + 4 * codesize)).
+  Definition measure (codesize:nat) (dist:list (nat*LoopBool)) (active blocked:list thread) (inp:input) (dir:Direction) :=
+    (2 * free codesize dist) + length active + length blocked + (inpsize inp dir * (2 + 4 * codesize)).
 
   (* The invariant that is preserved through pikeVM execution, with a measure that strictly decreases *)
-  Inductive vm_inv (c:code): pike_vm_state -> nat -> Prop :=
+  Inductive vm_inv (c:code) (dir:Direction): pike_vm_state -> nat -> Prop :=
   | inv_final:
-    forall b, vm_inv c (PVS_final b) 0
+    forall b, vm_inv c dir (PVS_final b) 0
   | inv_pvs:
     forall inp active best blocked nextprefix seen dist
       (* the threads in active and blocked have their pc inside the code range *)
@@ -598,15 +618,15 @@ Section PikeVMComplexity.
       (* the seen set is well-formed, and has `count` distinct elements *)
       (SEENWF: wf seen (size c) dist)
       (* The next place where the prefix can match is in range of the input *)
-      (RANGEPREF: forall n lit strs, nextprefix = Some (n, lit, strs) -> inpsize inp > S n),
-      vm_inv c (PVS inp active best blocked nextprefix seen) (measure (size c) dist active blocked inp).
+      (RANGEPREF: forall n lit strs, nextprefix = Some (n, lit, strs) -> inpsize inp dir > S n),
+      vm_inv c dir (PVS inp active best blocked nextprefix seen) (measure (size c) dist active blocked inp dir).
 
   Lemma nonfinal_pos:
-    forall c inp active best blocked nextprefix seen m,
-      vm_inv c (PVS inp active best blocked nextprefix seen) m -> 0 < m.
+    forall c dir inp active best blocked nextprefix seen m,
+      vm_inv c dir (PVS inp active best blocked nextprefix seen) m -> 0 < m.
   Proof.
-    intros c inp active best blocked nextprefix seen m H. inversion H. subst. unfold measure.
-    specialize (inpsize_strict inp) as SIZE. lia.
+    intros c dir inp active best blocked nextprefix seen m H. inversion H. subst. unfold measure.
+    specialize (inpsize_strict inp dir) as SIZE. lia.
   Qed.
 
 
@@ -640,14 +660,14 @@ Section PikeVMComplexity.
   (* at each step, the measure strictly decreases *)
   (* the well-formedness of the seen set is preserved *)
   Theorem pikevm_decreases:
-    forall code pvs1 pvs2 m1,
+    forall code dir pvs1 pvs2 m1,
       code_wf code (size code) ->
       nonempty code ->
-      pike_vm_step rer code forward pvs1 pvs2 ->
-      vm_inv code pvs1 m1 ->
-      exists m2, vm_inv code pvs2 m2 /\ m2 < m1.
+      pike_vm_step rer code dir pvs1 pvs2 ->
+      vm_inv code dir pvs1 m1 ->
+      exists m2, vm_inv code dir pvs2 m2 /\ m2 < m1.
   Proof.
-    intros code pvs1 pvs2 m1 CODEWF NONEMPTY STEP INV. inversion STEP; subst; simpl measure; inversion INV; subst;
+    intros code dir pvs1 pvs2 m1 CODEWF NONEMPTY STEP INV. inversion STEP; subst; simpl measure; inversion INV; subst;
       try destruct t as [[pc gm] b].
     (* when reaching a final state, we end up with a measure of 0, while the previous measure was strictly positive *)
     - exists 0. split.
@@ -655,26 +675,26 @@ Section PikeVMComplexity.
       + apply nonfinal_pos in INV. auto.
     (* acc: we might add (2*codesize) free slots, but we lose at least one input length *)
     - specialize (RANGEPREF n lit strs eq_refl).
-      exists (measure (size code) [] [pike_vm_initial_thread] [] (advance_input_n inp (S n) forward)). split; [constructor|]; auto.
+      exists (measure (size code) [] [pike_vm_initial_thread] [] (advance_input_n inp (S n) dir) dir). split; [constructor|]; auto.
       + (* the new generated thread is in range because the code is nonempty *)
         intros t H. inversion H as [IN1|IN2]; auto.
         subst. unfold pike_vm_initial_thread. simpl. auto.
       + constructor.
       + intros n0 lit0 strs0 H. eapply search_in_range with (strs:=strs); eauto.
-      + unfold measure. simpl. rewrite free_initial. specialize (advance_n_inpsize inp n RANGEPREF)as ADV.
+      + unfold measure. simpl. rewrite free_initial. specialize (advance_n_inpsize inp n dir RANGEPREF)as ADV.
         apply increase_mult with (x:= 4 * size code) in ADV as NEXT. simpl in NEXT. lia.
     (* end *)
     - exists 0. split.
       + constructor.
       + apply nonfinal_pos in INV. auto.
     (* nextchar: we might add (2*codesize) free slots, but we lose an input length *)
-    - exists (measure (size code) [] (thr::blocked) [] inp2). split; [constructor|]; auto.
+    - exists (measure (size code) [] (thr::blocked) [] inp2 dir). split; [constructor|]; auto.
       + constructor.
       + intros n lit strs H; inversion H.
       + unfold measure. simpl. rewrite free_initial. apply advance_input_decreases in ADVANCE.
         apply increase_mult with (x:= 4 * size code) in ADVANCE as NEXT. simpl in NEXT. lia.
     (* nextchar_generate: we might add (2*codesize) free slots, but we lose an input length *)
-    - exists (measure (size code) [] ((thr::blocked)++[pike_vm_initial_thread]) [] inp2). split; [constructor|]; auto.
+    - exists (measure (size code) [] ((thr::blocked)++[pike_vm_initial_thread]) [] inp2 dir). split; [constructor|]; auto.
       + (* the new generated thread is in range because the code is nonempty *)
         intros t H. apply in_app_or in H as [IN1|IN2]; auto.
         inversion IN2; inversion H. unfold pike_vm_initial_thread. simpl. auto.
@@ -684,20 +704,20 @@ Section PikeVMComplexity.
         apply increase_mult with (x:= 4 * size code) in ADVANCE as NEXT. simpl in NEXT.
         rewrite length_app. simpl. lia.
     (* nextchar_filter: we might add (2*codesize) free slots, but we lose an input length *)
-    - exists (measure (size code) [] (thr::blocked) [] inp2). split; [constructor|]; auto.
+    - exists (measure (size code) [] (thr::blocked) [] inp2 dir). split; [constructor|]; auto.
       + constructor.
       + intros n0 lit0 strs0 H. inversion H; subst. specialize (RANGEPREF (S n0) lit0 strs0 eq_refl).
         eapply advance_inpsize; eauto.
       + unfold measure. simpl. rewrite free_initial. apply advance_input_decreases in ADVANCE.
         apply increase_mult with (x:= 4 * size code) in ADVANCE as NEXT. simpl in NEXT. lia.
     (* skip: we lose a thread *)
-    - exists (measure (size code) dist active blocked inp). split; [constructor|]; auto.
+    - exists (measure (size code) dist active blocked inp dir). split; [constructor|]; auto.
       + intros t0 H. apply ACTIVEWF. simpl. right. auto.
       + unfold measure. simpl. lia.
     (* active: we may add a new thread, but lose a free slot *)
     - assert (RANGE: pc < size code).
       { specialize (ACTIVEWF (pc,gm,b) ltac:(simpl;left;auto)). simpl in ACTIVEWF. auto. }
-      exists (measure (size code) ((pc,b)::dist) (nextactive++active) blocked inp). split; [constructor|]; auto.
+      exists (measure (size code) ((pc,b)::dist) (nextactive++active) blocked inp dir). split; [constructor|]; auto.
       + intros t0 H. apply in_app_or in H as [H|H].
         * eapply eps_step_active_wf in STEP0 as [i [GET IN]]; eauto.
         * apply ACTIVEWF. right. auto.
@@ -708,7 +728,7 @@ Section PikeVMComplexity.
     (* match: we lose a thread and a free slot *)
     - assert (RANGE: pc < size code).
       { specialize (ACTIVEWF (pc,gm,b) ltac:(simpl;left;auto)). simpl in ACTIVEWF. auto. }
-      exists (measure (size code) ((pc,b)::dist) [] blocked inp). split; [constructor|]; auto.
+      exists (measure (size code) ((pc,b)::dist) [] blocked inp dir). split; [constructor|]; auto.
       + intros t0 H. inversion H.
       + unfold add_thread. apply wf_new; auto.
       + intros n lit strs H; inversion H.
@@ -717,7 +737,7 @@ Section PikeVMComplexity.
     (* blocked: we switch an active thread to blocked, but lose a free slot *)
     -  assert (RANGE: pc < size code).
        { specialize (ACTIVEWF (pc,gm,b) ltac:(simpl;left;auto)). simpl in ACTIVEWF. auto. }
-       exists (measure (size code) ((pc,b)::dist) active (blocked++[newt]) inp). split; [constructor|]; auto.
+       exists (measure (size code) ((pc,b)::dist) active (blocked++[newt]) inp dir). split; [constructor|]; auto.
        + intros t0 H. apply ACTIVEWF. simpl. right. auto.
        + intros t0 H. apply in_app_or in H as [H|H].
          * eapply BLOCKEDWF; eauto.
@@ -731,16 +751,16 @@ Section PikeVMComplexity.
 
   (** * Initial PikeVM Measure *)
 
-  Definition complexity (r:regex) (inp:input) : nat :=
-    1 + (4 * codesize r) + (inpsize inp * (2 + 4 * codesize r)).
+  Definition complexity (r:regex) (inp:input) (dir:Direction): nat :=
+    1 + (4 * codesize r) + (inpsize inp dir * (2 + 4 * codesize r)).
 
   Theorem initial_measure:
-    forall inp r,
+    forall inp r dir,
       pike_regex r ->
-      vm_inv (compilation r) (pike_vm_initial_state inp) (complexity r inp).
+      vm_inv (compilation r) dir (pike_vm_initial_state inp) (complexity r inp dir).
   Proof.
-    intros inp r SUBSET.
-    replace (complexity r inp) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp).
+    intros inp r dir SUBSET.
+    replace (complexity r inp dir) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp dir).
     - unfold pike_vm_initial_state. rewrite <- compilation_size; auto.
       constructor; auto.
       + intros t H. destruct H. 2: inversion H.
@@ -754,12 +774,12 @@ Section PikeVMComplexity.
   Qed.
 
   Theorem initial_measure_unanchored {strs:StrSearch}:
-    forall inp r,
+    forall inp r dir,
       pike_regex r ->
-      vm_inv (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward) (complexity r inp).
+      vm_inv (compilation r) dir (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (complexity r inp dir).
   Proof.
-    intros inp r SUBSET.
-    replace (complexity r inp) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp).
+    intros inp r dir SUBSET.
+    replace (complexity r inp dir) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp dir).
     - unfold pike_vm_initial_state_unanchored. rewrite <- compilation_size; auto.
       constructor; auto.
       + intros t H. destruct H. 2: inversion H.
@@ -772,36 +792,24 @@ Section PikeVMComplexity.
       rewrite free_initial. simpl. lia.
   Qed.
 
-  Axiom initial_measure_unanchored_backward :
-    forall {strs:StrSearch} inp r ,
-      pike_regex r ->
-      vm_inv (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp backward) (complexity r inp).
-
   (** * Bounding the number of PikeVM steps  *)
 
   Lemma pike_vm_bound:
-    forall pvs code n,
+    forall pvs code dir n,
       code_wf code (size code) ->
       nonempty code ->
-      vm_inv code pvs n ->
-      exists result, steps (pike_vm_step rer code forward) pvs n (PVS_final result).
+      vm_inv code dir pvs n ->
+      exists result, steps (pike_vm_step rer code dir) pvs n (PVS_final result).
   Proof.
-    intros pvs code n WF NONEMPTY INV. generalize dependent pvs. induction n using (strong_ind); intros.
+    intros pvs code dir n WF NONEMPTY INV. generalize dependent pvs. induction n using (strong_ind); intros.
     destruct pvs.
     2: { exists best. constructor. }
-    specialize (pikevm_progress rer code forward inp active best blocked nextprefix seen) as [next STEP].
-    specialize (pikevm_decreases code (PVS inp active best blocked nextprefix seen) next n WF NONEMPTY STEP INV) as [newm [INV2 DECR]].
+    specialize (pikevm_progress rer code dir inp active best blocked nextprefix seen) as [next STEP].
+    specialize (pikevm_decreases code dir (PVS inp active best blocked nextprefix seen) next n WF NONEMPTY STEP INV) as [newm [INV2 DECR]].
     specialize (H newm DECR next INV2) as [result STEPS].
     exists result. apply more_steps with (n:=S newm); try lia.
     econstructor; eauto.
   Qed.
-
-  Axiom pike_vm_bound_backward:
-    forall pvs code n,
-      code_wf code (size code) ->
-      nonempty code ->
-      vm_inv code pvs n ->
-      exists result, steps (pike_vm_step rer code backward) pvs n (PVS_final result).
 
   (** * Complexity Theorem  *)
 
@@ -809,20 +817,15 @@ Section PikeVMComplexity.
     forall (r:regex) (inp:input) (dir:Direction),
       (* for any supported regex r and input inp *)
       pike_regex r ->
-      (* The initial state reaches a final state in at most (complexity r inp) steps. *)
+      (* The initial state reaches a final state in at most (complexity r inp dir) steps. *)
       exists result, steps (pike_vm_step rer (compilation r) dir)
-                  (pike_vm_initial_state inp) (complexity r inp) (PVS_final result).
+                  (pike_vm_initial_state inp) (complexity r inp dir) (PVS_final result).
   Proof.
     intros r inp dir SUBSET.
-    destruct dir.
-    - apply pike_vm_bound.
-      + apply compiled_wf.
-      + apply compilation_nonempty.
-      + apply initial_measure. auto.
-    - apply pike_vm_bound_backward.
-      + apply compiled_wf.
-      + apply compilation_nonempty.
-      + apply initial_measure. auto.
+    apply pike_vm_bound.
+    - apply compiled_wf.
+    - apply compilation_nonempty.
+    - apply initial_measure. auto.
   Qed.
 
   Theorem pikevm_complexity_unanchored {strs:StrSearch}:
@@ -831,18 +834,13 @@ Section PikeVMComplexity.
       pike_regex r ->
       (* The initial state reaches a final state in at most (complexity r inp) steps. *)
       exists result, steps (pike_vm_step rer (compilation r) dir)
-                  (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (complexity r inp) (PVS_final result).
+                  (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (complexity r inp dir) (PVS_final result).
   Proof.
     intros r inp dir SUBSET.
-    destruct dir.
-    - apply pike_vm_bound.
-      + apply compiled_wf.
-      + apply compilation_nonempty.
-      + apply initial_measure_unanchored; auto.
-    - apply pike_vm_bound_backward.
-      + apply compiled_wf.
-      + apply compilation_nonempty.
-      + apply initial_measure_unanchored_backward; auto.
+    apply pike_vm_bound.
+    - apply compiled_wf.
+    - apply compilation_nonempty.
+    - apply initial_measure_unanchored; auto.
   Qed.
 
 
@@ -992,7 +990,7 @@ Section MemoBTComplexity.
 
   Lemma possible_sufsize:
     forall next pref,
-      length (possible_suffixes next pref) = inpsize (Input next pref).
+      length (possible_suffixes next pref) = inpsize (Input next pref) forward.
   Proof. induction next; intros; simpl; auto. Qed.
 
   Lemma no_more_strict_suffix:
@@ -1022,7 +1020,7 @@ Section MemoBTComplexity.
 
   Lemma possible_memosize:
     forall next pref sizec,
-      length (possible_memo next pref sizec) = 2 * sizec * inpsize (Input next pref).
+      length (possible_memo next pref sizec) = 2 * sizec * inpsize (Input next pref) forward.
   Proof.
     intros. unfold possible_memo. erewrite flat_map_constant_length.
     2:{ intros x H. apply possible_fixedsize. }
@@ -1046,7 +1044,7 @@ Section MemoBTComplexity.
   (* We have a bound on the numer of distinct elements in a memoset *)
   Theorem mswf_size:
     forall ms sizec inp dist,
-      mswf ms sizec inp dist -> length dist <= 2 * sizec * (inpsize inp).
+      mswf ms sizec inp dist -> length dist <= 2 * sizec * (inpsize inp) forward.
   Proof.
     intros ms size0 [next pref] dist H. rewrite <- possible_memosize.
     apply NoDup_incl_length.
@@ -1106,7 +1104,7 @@ Section MemoBTComplexity.
       (INPWF: forall pc gm b inp, In (pc, gm, b, inp) stk -> validinp inp originp)
       (* the seen set is well-formed, and has `count` distinct elements *)
       (MSWF: mswf ms (size c) originp dist),
-      memo_inv c originp (MBT stk ms) (memo_measure (size c) (inpsize originp) dist stk).
+      memo_inv c originp (MBT stk ms) (memo_measure (size c) (inpsize originp forward) dist stk).
 
   Lemma memo_nonfinal_pos:
     forall c originp stk ms m,
@@ -1172,7 +1170,7 @@ Section MemoBTComplexity.
       + econstructor. eauto.
       + eapply memo_nonfinal_pos; eauto.
     (* skip *)
-    - exists (memo_measure (size code) (inpsize originp) dist stk). split.
+    - exists (memo_measure (size code) (inpsize originp forward) dist stk). split.
       + constructor; auto.
         * intros. eapply PCWF; eauto. right. eauto.
         * intros. eapply INPWF; eauto. right. eauto.
@@ -1186,7 +1184,7 @@ Section MemoBTComplexity.
       { eapply PCWF. left. eauto. }
       assert (VAL: validinp i originp).
       { eapply INPWF. left. eauto. }
-      exists (memo_measure (size code) (inpsize originp) ((pc,b,i)::dist) (nextconfs++stk)).
+      exists (memo_measure (size code) (inpsize originp forward) ((pc,b,i)::dist) (nextconfs++stk)).
       split.
       + constructor; auto.
         * intros. apply in_app_iff in H as [H1 | H2].
@@ -1204,7 +1202,7 @@ Section MemoBTComplexity.
   (** * Initial MemoBT Measure *)
 
   Definition mbt_complexity (r:regex) (inp:input) : nat :=
-    2 + 4 * (codesize r * inpsize inp).
+    2 + 4 * (codesize r * inpsize inp forward).
 
   Theorem initial_memo_measure:
     forall inp r ms dist,
@@ -1215,10 +1213,10 @@ Section MemoBTComplexity.
           memo_inv (compilation r) inp (initial_state inp ms) measure.
   Proof.
     intros inp r ms dist SUBSET WF.
-    exists (memo_measure (codesize r) (inpsize inp) dist [(0, GroupMap.empty, CanExit,inp)]).
+    exists (memo_measure (codesize r) (inpsize inp forward) dist [(0, GroupMap.empty, CanExit,inp)]).
     split.
     - unfold memo_measure, mbt_complexity. rewrite <- compilation_size; auto. simpl.
-      pose proof (msfree_initial_dist (size (compilation r)) (inpsize inp) dist) as FREE. simpl. lia.
+      pose proof (msfree_initial_dist (size (compilation r)) (inpsize inp forward) dist) as FREE. simpl. lia.
     - unfold initial_state. rewrite <- compilation_size; auto. constructor; auto.
       + intros pc gm b inp0 H. inversion H; inversion H0.
         unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.

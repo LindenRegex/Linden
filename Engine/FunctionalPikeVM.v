@@ -74,8 +74,8 @@ Fixpoint pike_vm_loop (c:code) (dir:Direction) (pvs:pike_vm_state) (fuel:nat) : 
   end.
 
 (* an upper bound for the fuel necessary to compute a result *)
-Definition vm_fuel (r:regex) (inp:input) : nat :=
-  complexity r inp.
+Definition vm_fuel (r:regex) (inp:input) (dir:Direction): nat :=
+  complexity r inp dir.
 
 Inductive matchres : Type :=
 | OutOfFuel
@@ -90,14 +90,14 @@ Definition getres (pvs:pike_vm_state) : matchres :=
 (* Functional version of the PikeVM *)
 Definition pike_vm_match (r:regex) (inp:input) (dir:Direction) : matchres :=
   let code := compilation r in
-  let fuel := vm_fuel r inp in
+  let fuel := vm_fuel r inp dir in
   let pvsinit := pike_vm_initial_state inp in
   getres (pike_vm_loop code dir pvsinit fuel).
 
 (* Functional version of the unanchored PikeVM *)
 Definition pike_vm_match_unanchored {strs:StrSearch} (r:regex) (inp:input) (dir:Direction): matchres :=
   let code := compilation r in
-  let fuel := vm_fuel r inp in
+  let fuel := vm_fuel r inp dir in
   let pvsinit := pike_vm_initial_state_unanchored (extract_literal rer r) inp dir in
   getres (pike_vm_loop code dir pvsinit fuel).
 
