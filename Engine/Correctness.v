@@ -68,7 +68,7 @@ Qed.
 Theorem pike_vm_to_pike_tree:
   forall r inp tree result,
     pike_regex r ->
-    bool_tree rer [Areg r] inp CanExit tree ->
+    bool_tree rer [Areg r] inp CanExit forward tree ->
     trc_pike_vm (compilation r) forward (pike_vm_initial_state inp) (PVS_final result) ->
     trc_pike_tree (pike_tree_initial_state tree inp) (PTS_final result).
 Proof.
@@ -82,7 +82,7 @@ Qed.
 Theorem pike_vm_to_pike_tree_unanchored {strs:StrSearch}:
   forall r inp tree result future_tree,
     pike_regex r ->
-    bool_tree rer [Areg r] inp CanExit tree ->
+    bool_tree rer [Areg r] inp CanExit forward tree ->
     trc_pike_vm (compilation r) forward (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward) (PVS_final result) ->
     future_tree_shape rer r inp future_tree ->
     exists future, may_erase future_tree future /\
@@ -254,7 +254,7 @@ Qed.
 Theorem memobt_to_memotree:
   forall r inp tree result initms finalms initts,
     pike_regex r ->
-    bool_tree rer [Areg r] inp CanExit tree ->
+    bool_tree rer [Areg r] inp CanExit forward tree ->
     seen_inclusion rer (compilation r) initts initms None None ->
     trc_memo_bt (compilation r) (MemoBT.initial_state inp initms) (MBT_final result finalms) ->
     exists finalts, trc_memo_tree (initial_tree_state tree inp initts) (MTree_final result finalts) /\
@@ -271,7 +271,7 @@ Qed.
 Theorem memobt_to_memotree_init:
   forall r inp tree result finalms,
     pike_regex r ->
-    bool_tree rer [Areg r] inp CanExit tree ->
+    bool_tree rer [Areg r] inp CanExit forward tree ->
     trc_memo_bt (compilation r) (MemoBT.initial_state inp initial_memoset) (MBT_final result finalms) ->
     exists finalts, trc_memo_tree (initial_tree_state tree inp initial_seentrees) (MTree_final result finalts) /\
                  (result = None -> seen_inclusion rer (compilation r) finalts finalms None None).
