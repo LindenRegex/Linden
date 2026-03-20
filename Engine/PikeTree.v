@@ -43,7 +43,7 @@ Section PikeTree.
   Definition StepDead := StepActive []. (* the thread died *)
 
   (* this corresponds to an atomic step of a single tree *)
-  Definition tree_bfs_step (t:tree) (gm:group_map) (idx:nat): step_result :=
+  Definition tree_bfs_step (t:tree) (gm:group_map) (inp:input): step_result :=
     match t with
     | Mismatch | ReadBackRef _ _ | LK _ _ _ | LKFail _ _ => StepDead
     | Match => StepMatch
@@ -51,7 +51,7 @@ Section PikeTree.
     | Read c t1 => StepBlocked t1
     | Progress t1 => StepActive [(t1,gm)]
     | AnchorPass a t1 => StepActive [(t1,gm)]
-    | GroupAction a t1 => StepActive [(t1, GroupMap.update idx a gm)]
+    | GroupAction a t1 => StepActive [(t1, GroupMap.update (idx inp) a gm)]
     end.
   (* trees for unsupported features also return StepDead *)
   (* We could support them in this algorithm, but the only problem is ReadBackref which may advance the string in more than one index *)
@@ -173,19 +173,19 @@ Section PikeTree.
   | pts_active:
     (* generated new active trees: add them in front of the low-priority ones *)
     forall inp t gm active best blocked future nextactive seen1 seen2
-      (STEP: tree_bfs_step t gm (idx inp) = StepActive nextactive)
+      (STEP: tree_bfs_step t gm inp = StepActive nextactive)
       (ADD_SEEN: add_seentrees seen1 t = seen2),
       pike_tree_step (PTS inp ((t,gm)::active) best blocked future seen1) (PTS inp (nextactive++active) best blocked future seen2)
   | pts_match:
     (* a match is found, discard remaining low-priority active trees *)
     forall inp t gm active best blocked future seen1 seen2
-      (STEP: tree_bfs_step t gm (idx inp) = StepMatch)
+      (STEP: tree_bfs_step t gm inp = StepMatch)
       (ADD_SEEN: add_seentrees seen1 t = seen2),
       pike_tree_step (PTS inp ((t,gm)::active) best blocked future seen1) (PTS inp [] (Some (inp,gm)) blocked None seen2)
   | pts_blocked:
   (* add the new blocked thread after the previous ones *)
     forall inp t gm active best blocked newt future seen1 seen2
-      (STEP: tree_bfs_step t gm (idx inp) = StepBlocked newt)
+      (STEP: tree_bfs_step t gm inp = StepBlocked newt)
       (ADD_SEEN: add_seentrees seen1 t = seen2),
       pike_tree_step (PTS inp ((t,gm)::active) best blocked future seen1) (PTS inp active best (blocked ++ [(newt,gm)]) future seen2).
 

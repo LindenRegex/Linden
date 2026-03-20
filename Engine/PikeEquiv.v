@@ -87,16 +87,17 @@ Qed.
 (* These lemmas discard the stuttering steps by preventing the current pc being at a Jmp instruction *)
 
 Theorem generate_match:
-  forall tree gm inp code dir pc b
-    (TREESTEP: tree_bfs_step tree gm (idx inp) = StepMatch)
+  forall tree gm inp code pc b
+    (TREESTEP: tree_bfs_step tree gm inp = StepMatch)
     (NOSTUTTER: stutters pc code = false)
     (TT: tree_thread code inp (tree, gm) (pc, gm, b)),
-    epsilon_step rer (pc, gm, b) code dir inp = EpsMatch.
+    epsilon_step rer (pc, gm, b) code forward inp = EpsMatch.
 Proof.
-  intros tree gm inp code dir pc b TREESTEP NOSTUTTER TT.
+  intros tree gm inp code pc b TREESTEP NOSTUTTER TT.
   unfold tree_bfs_step in TREESTEP. destruct tree; inversion TREESTEP. subst. clear TREESTEP.
   inversion TT; subst; try no_stutter.
   remember Match as TMATCH.
+  remember forward as dir.
   (* here we have to proceed by induction because there are many ways to get a Match tree *)
   (* it could be epsilon, it could be epsilon followed by epsilon etc *)
   induction TREE; intros; subst; try inversion HeqTMATCH.
@@ -112,7 +113,7 @@ Proof.
 
 Theorem generate_blocked:
   forall tree gm inp code pc b nexttree
-    (TREESTEP: tree_bfs_step tree gm (idx inp) = StepBlocked nexttree)
+    (TREESTEP: tree_bfs_step tree gm inp = StepBlocked nexttree)
     (NOSTUTTER: stutters pc code = false)
     (TT: tree_thread code inp (tree, gm) (pc, gm, b)),
     epsilon_step rer (pc,gm,b) code forward inp = EpsBlocked (pc+1,gm,CanExit) /\
@@ -198,6 +199,7 @@ Theorem no_tree_reset:
 Proof.
   intros gidl tree inp actions b PIKE H.
   remember (GroupAction (Reset gidl) tree) as TRESET.
+  remember forward as dir.
   induction H; inversion HeqTRESET; subst; auto.
   - pike_subset.
   - apply IHbool_tree; auto. pike_subset.
@@ -290,7 +292,7 @@ Qed.
 
 Theorem generate_choice:
   forall tree1 tree2 gm inp code pc b treeactive
-    (TREESTEP: tree_bfs_step (Choice tree1 tree2) gm (idx inp) = StepActive treeactive)
+    (TREESTEP: tree_bfs_step (Choice tree1 tree2) gm inp = StepActive treeactive)
     (NOSTUTTER: stutters pc code = false)
     (TT: tree_thread code inp (Choice tree1 tree2, gm) (pc, gm, b)),
   exists threadactive,
@@ -391,7 +393,7 @@ Qed.
 (* next we combine the generate lemmas together, for the general non-stuttering case *)
 Theorem generate_active:
   forall tree gm inp code pc b treeactive
-    (TREESTEP: tree_bfs_step tree gm (idx inp) = StepActive treeactive)
+    (TREESTEP: tree_bfs_step tree gm inp = StepActive treeactive)
     (NOSTUTTER: stutters pc code = false)
     (TT: tree_thread code inp (tree, gm) (pc, gm, b)),
   exists threadactive,
@@ -1243,7 +1245,7 @@ Proof.
     - (* Here we use that the code is stutter-well-formed *)
       simpl in SEEN. eapply stutter_inclusion; eauto.
   }
-  destruct (tree_bfs_step t gm (idx inp)) eqn:TREESTEP.
+  destruct (tree_bfs_step t gm inp) eqn:TREESTEP.
   (* active *)
   - left. eapply generate_active in TREESTEP as H; eauto. destruct H as [newthreads [EPS LTT2]].
     assert (pvs2 = PVS inp (newthreads ++ threadactive) best threadblocked nextprefix (add_thread threadseen (pc,gm,b))).
@@ -1253,7 +1255,7 @@ Proof.
     + eapply pikeinv; try (eapply add_inclusion; eauto); try constructor; eauto.
       apply ltt_app; eauto.
   (* match *)
-  - left. eapply generate_match with (dir:=forward) in TREESTEP as THREADSTEP; eauto.
+  - left. eapply generate_match in TREESTEP as THREADSTEP; eauto.
     assert (pvs2 = PVS inp [] (Some (inp,gm_of (pc,gm,b))) threadblocked None (add_thread threadseen (pc,gm,b))).
     { eapply pikevm_deterministic; eauto. constructor; auto. }
     subst. exists (PTS inp [] (Some (inp,gm)) treeblocked None (add_seentrees treeseen t)). split.
