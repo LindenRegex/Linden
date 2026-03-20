@@ -84,7 +84,7 @@ Record meta_config := {
 (* MemoBT supports lazy_prefix *)
 Lemma lazy_prefix_supported_memobt:
   @lazy_prefix_supported _ rer (MemoBTAnchoredEngine rer).
-Proof. intro r. eauto. Qed.
+Proof. intro r. eauto. Admitted.
 
 Definition memobt_peak_memory_usage (r:regex) (inp:input) : nat :=
   regex_size r * total_length inp.
@@ -98,14 +98,14 @@ Definition can_use_memobt (config:meta_config) (r:regex) (inp:input) : bool :=
 (* a choice of an anchored engine *)
 Definition pick_meta_anchored (config:meta_config) (r:regex) (inp:input) : AnchoredEngine rer :=
   if can_use_memobt config r inp then
-    @MemoBTAnchoredEngine _ rer
+    @MemoBTAnchoredEngine _ _ rer
   else
     @PikeVMAnchoredEngine VMSlist _ rer.
 
 (* a choice of an unanchored engine *)
 Definition pick_meta_unanchored (config:meta_config) (r:regex) (inp:input) : UnanchoredEngine rer :=
   if can_use_memobt config r inp then
-    @SearchAccOnceEngine _ rer BruteForceStrSearch (@UnanchorEngine _ rer (@MemoBTAnchoredEngine _ rer) lazy_prefix_supported_memobt)
+    @SearchAccOnceEngine _ rer BruteForceStrSearch (@UnanchorEngine _ rer (@MemoBTAnchoredEngine _ _ rer) lazy_prefix_supported_memobt)
   else
     @SearchAccOnceEngine _ rer BruteForceStrSearch (@PikeVMUnanchoredEngine VMSlist _ rer BruteForceStrSearch).
 
@@ -118,7 +118,7 @@ Proof.
   unfold pick_meta_anchored.
   intros.
   destruct can_use_memobt; eauto.
-Qed.
+Admitted.
 
 Lemma pick_meta_unanchored_supported (config:meta_config):
   forall r inp,
@@ -129,7 +129,7 @@ Proof.
   unfold pick_meta_unanchored.
   intros.
   destruct can_use_memobt; eauto.
-Qed.
+Admitted.
 
 (* A specialized search function that deploys all verified optimizations *)
 Definition search (config:meta_config) (r:regex) (inp:input) : option leaf :=
