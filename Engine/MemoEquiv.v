@@ -330,6 +330,8 @@ Section MemoEquiv.
     - repeat invert_rep. eapply IHTREE; repeat (econstructor; eauto); pike_subset.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     - destruct greedy; inversion TREESTEP.
+    - pike_subset.
+    - pike_subset.
     - repeat invert_rep. simpl. rewrite CHECK, ANCHOR. auto.
   Qed.
 
@@ -714,6 +716,9 @@ Section MemoEquiv.
       exists pcstart. exists b. split; try split; try lia.
       * simpl. rewrite JMP. auto.
       * apply tc_eq with (actions:=Areg (Group gid r1):: cont); try constructor; auto; pike_subset.
+    (* lookarounds *)
+    - pike_subset.
+    - pike_subset.
     - invert_rep.
       { invert_rep. invert_rep; try in_subset; try stutter. }
       exists pcstart. exists b. split; try split; try lia.

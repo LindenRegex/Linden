@@ -290,6 +290,9 @@ Proof.
     eapply tr_open; eauto.
     eapply IHTREE; eauto. pike_subset.
     repeat (econstructor; eauto).
+  (* lookarounds *)
+  - pike_subset.
+  - pike_subset.
   (* anchor *)
   - remember (Areg (Anchor a) :: cont) as anchorcont.
     induction ACT; inversion Heqanchorcont; subst;

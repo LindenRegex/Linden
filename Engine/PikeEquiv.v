@@ -535,6 +535,9 @@ Proof.
     exists pcstart. exists b. split; try split; try lia.
     * simpl. rewrite JMP. auto.
     * apply tt_eq with (actions:=Areg (Group gid r1):: cont); try constructor; auto; pike_subset.
+  (* lookarounds *)
+  - pike_subset.
+  - pike_subset.
   - invert_rep.
     { invert_rep. invert_rep; try in_subset; try stutter. }
     exists pcstart. exists b. split; try split; try lia.
