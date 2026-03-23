@@ -108,6 +108,7 @@ Proof.
     repeat (econstructor; eauto). pike_subset.
   - repeat invert_rep. pike_subset.
   - destruct greedy; inversion CHOICE.
+  - now destruct lk_result.
  Qed.
 
 
@@ -139,6 +140,7 @@ Proof.
     repeat (econstructor; eauto). pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
   - destruct greedy; inversion CHOICE.
+  - now destruct lk_result.
 Qed.
 
 

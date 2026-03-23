@@ -104,6 +104,19 @@ Section BooleanSemantics.
     forall r1 cont treecont inp b gid dir
       (TREECONT: bool_tree (Areg r1 :: Aclose gid :: cont) inp b dir treecont),
       bool_tree (Areg (Group gid r1) :: cont) inp b dir (GroupAction (Open gid) treecont)
+  | tree_lk:
+    forall lk r1 cont treecont treelk inp b gmlk dir
+      (TREELK: bool_tree [Areg r1] inp b (lk_dir lk) treelk)
+      (* since we have no backreferences, we do not care about the group map *)
+      (RES_LK: lk_result lk treelk GroupMap.empty inp = Some gmlk)
+      (TREECONT: bool_tree cont inp b dir treecont),
+      bool_tree (Areg (Lookaround lk r1) :: cont) inp b dir (LK lk treelk treecont)
+  | tree_lk_fail:
+    forall lk r1 cont treelk inp b dir
+      (TREELK: bool_tree [Areg r1] inp b (lk_dir lk) treelk)
+      (* since we have no backreferences, we do not care about the group map *)
+      (FAIL_LK: lk_result lk treelk GroupMap.empty inp = None),
+      bool_tree (Areg (Lookaround lk r1) :: cont) inp b dir (LKFail lk treelk)
   | tree_anchor:
     forall a cont treecont inp b dir
       (ANCHOR: anchor_satisfied rer a inp = true)
@@ -255,6 +268,36 @@ Proof.
   - simpl in H0. destruct H0 as [H0|IN]; try inversion H0; auto.
 Qed.
 
+Lemma lk_result_indep_none:
+  forall lk treelk gm1 gm2 inp,
+    lk_result lk treelk gm1 inp = None ->
+    lk_result lk treelk gm2 inp = None.
+Proof.
+  unfold lk_result.
+  intros.
+  destruct positivity.
+  - destruct tree_res eqn:Hres1; [now destruct l|].
+    now rewrite res_indep with (1:=Hres1).
+  - destruct tree_res eqn:Hres1; [|discriminate].
+    eapply res_indep_some in Hres1 as [? Hres]; eauto.
+    now rewrite Hres.
+Qed.
+
+Lemma lk_result_indep_some:
+  forall lk treelk gm1 gm2 gmlk1 inp,
+    lk_result lk treelk gm1 inp = Some gmlk1 ->
+    exists gmlk2, lk_result lk treelk gm2 inp = Some gmlk2.
+Proof.
+  unfold lk_result.
+  intros.
+  destruct positivity.
+  - destruct tree_res eqn:Hres1; [|discriminate].
+    eapply res_indep_some in Hres1 as [? Hres]; eauto.
+    destruct x.
+    eexists. now rewrite Hres.
+  - destruct tree_res eqn:Hres1; [now destruct l|injection H as <-].
+    eexists. now rewrite res_indep with (1:=Hres1).
+Qed.
 
 (** * Second Step: encoding equality  *)
 (* the two tree constructions are equal *)
@@ -331,6 +374,13 @@ Proof.
     { inversion H1. inversion H0. subst. repeat progress (constructor; auto). }
     apply encode_next in ENCODE.
     apply encode_next. apply encode_close. auto.
+  - eapply lk_result_indep_some in RES_LK as [? ?]; eauto.
+    econstructor; eauto.
+    + eapply IHTREE1; pike_subset.
+    + eapply IHTREE2; pike_subset. now inversion ENCODE.
+  - eapply lk_result_indep_none in FAIL_LK; eauto.
+    econstructor; eauto.
+    eapply IHTREE; pike_subset.
   - apply encode_next in ENCODE.
     econstructor; eauto.
 Qed.
@@ -398,6 +448,13 @@ Qed.
       subst. f_equal.
       + f_equal. apply IHbool_tree1; auto.
       + apply IHbool_tree2; auto.
+    - inversion H1; subst; eauto.
+      f_equal; eauto.
+      specialize (IHbool_tree1 treelk0 ltac:(eauto)). subst.
+      congruence.
+    - inversion H0; subst; eauto.
+      { specialize (IHbool_tree treelk0 ltac:(eauto)). subst. congruence. }
+      f_equal; eauto.
     - inversion H0; subst; rewrite ANCHOR0 in ANCHOR; inversion ANCHOR.
       f_equal. apply IHbool_tree. auto.
     - inversion H0; subst; rewrite ANCHOR0 in ANCHOR; inversion ANCHOR. auto.
