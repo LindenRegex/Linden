@@ -339,7 +339,7 @@ Proof.
   unfold input_search.
   intros inp1 inp2 inp3 p Hsearch Hss Hadv.
   destruct (str_search p (next_str inp1)) as [n|] eqn:Hss1; [injection Hsearch as Heq|discriminate].
-  destruct n as [|n]; [rewrite advance_input_n_0 in Heq; ss_solve|].
+  destruct n as [|n]; [rewrite advance_input_n_0 in Heq; subst; ss_solve|].
   destruct inp1 as [[|c next1] pref1]; [discriminate Hadv|].
   injection Hadv as <-.
   simpl.
@@ -359,12 +359,9 @@ Proof.
   intros inp1 inp2 inp3 p Hsearch [<- | Hlow] Hhigh; [assumption|].
   remember forward as dir.
   induction Hlow; subst.
-  + eapply input_search_advance; eauto.
-    destruct Hhigh; ss_solve.
-  + apply input_search_advance with (inp1 := inp2); eauto.
-    * apply IHHlow; eauto.
-      destruct Hhigh; ss_solve.
-    * destruct Hhigh; ss_solve.
+  - eapply input_search_advance; eauto; ss_solve.
+  - apply input_search_advance with (inp1 := inp2); eauto; try ss_solve.
+    apply IHHlow; eauto; ss_solve.
 Qed.
 
 (* input_search finds no result iff str_search finds no result *)
@@ -1144,11 +1141,10 @@ Proof.
     eapply extract_literal_prefix_contra in Hres; eauto.
     (* the rest of the result comes from IH *)
     pose proof (is_tree_productivity rer [Areg (lazy_prefix r)] (Input next1 (c :: pref1)) Groups.GroupMap.empty forward) as [t' Ht'].
-    assert (Hinp': input_prefix inp' (Input next1 (c :: pref1)) forward) by ss_solve.
     assert (Hsearch': input_search p (Input next1 (c::pref1)) = Some inp3). {
       eapply input_search_advance with (inp1:=Input (c::next1) pref1); eauto.
     }
-    specialize (IHHhigh ltac:(eauto) _ ltac:(eauto) Ht' ltac:(eauto) ltac:(eauto) ltac:(eauto)) as [gm' Hres'].
+    specialize (IHHhigh ltac:(eauto) _ ltac:(ss_solve) Ht' ltac:(eauto) ltac:(eauto) ltac:(eauto)) as [gm' Hres'].
     unfold first_leaf in *. simpl. unfold advance_input'.
     rewrite Hres. simpl.
     inversion TREECONT; [|exfalso; eauto using ss_advance].
@@ -1169,7 +1165,7 @@ Lemma exact_literal_result_unanchored {strs:StrSearch} :
 Proof.
   intros.
   eapply input_search_strict_suffix in H2 as Hstr.
-  eapply exact_literal_result_unanchored'; eauto using ip_eq; ss_solve.
+  eapply exact_literal_result_unanchored'; eauto; ss_solve.
 Qed.
 
 (** * Extracted literals size *)

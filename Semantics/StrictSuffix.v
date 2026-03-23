@@ -478,27 +478,58 @@ Section StrictSuffix.
 
 End StrictSuffix.
 
-(** Solver for strict_suffix *)
+From Stdlib Require Import Classes.RelationClasses.
+From StrictOrderSolver Require Import Solver.
 
-(* canonicalize into strict suffixes *)
+(** Solver for strict_suffixes *)
+Section StrictSuffixSolver.
+  Context {params: LindenParameters}.
+
+  #[export]
+  Instance StrictSuffixSO : StrictOrder (fun a b => strict_suffix a b forward).
+  Proof.
+    split.
+    - (* Irreflexivity *)
+      intros x H. eapply ss_irreflexive; eauto.
+    - (* Transitivity *)
+      intros x y z Hxy Hyz. eapply strict_suffix_trans; eauto.
+  Qed.
+
+  Lemma advance_input_flip:
+    forall inp1 inp2,
+      advance_input inp1 forward = Some inp2 <->
+        advance_input inp2 backward = Some inp1.
+  Proof.
+    intros [next1 pref1] [next2 pref2]. split; intro H.
+    - destruct next1 as [|c next1']; [discriminate|]. now injection H as <- <-.
+    - destruct pref2 as [|c pref1']; [discriminate|]. now injection H as <- <-.
+  Qed.
+
+End StrictSuffixSolver.
+
+(* canonicalize into forward strict suffixes *)
 Ltac ss_canon :=
   match goal with
+  (* split disjunctions *)
+  | [H: _ \/ _ |- _] => destruct H; subst
   (* generate strict_suffix *)
   | |- input_prefix _ _ _ =>
     rewrite input_prefix_strict_suffix
   | [H: input_prefix _ _ _ |- _] =>
-    rewrite input_prefix_strict_suffix in H;
-    destruct H; subst
+    rewrite input_prefix_strict_suffix in H
   (* simplify advance_input *)
   | [H: advance_input ?inp1 forward = Some _ |- _] =>
-    let next := fresh "next" in
-    destruct inp1 as [next ?pref], next as [|?c ?next]; [discriminate H|];
-    inversion H; clear H; subst
-  | [H: advance_input ?inp1 backward = Some _ |- _] =>
-    let pref := fresh "pref" in
-    destruct inp1 as [?next pref], pref as [|?c ?pref]; [discriminate H|];
-    inversion H; clear H; subst
+    eapply read_suffix in H; eauto
+  | [H: context[Input ?next (?c::?pref)] |- _] =>
+    (* make sure we don't prove it more than once *)
+    let thm := constr:(strict_suffix (Input next (c::pref)) (Input (c::next) pref) forward) in
+    lazymatch goal with
+    | [H': thm |- _] => fail "already proven"
+    | _ => assert thm by (apply ss_advance; simpl; reflexivity)
+    end
   (* flip backward to forward *)
+  | [H: advance_input ?inp1 backward = Some ?inp2 |- _] =>
+    rewrite <-advance_input_flip in H
   | [H: strict_suffix _ _ backward |- _] =>
     rewrite ss_backward_forward_iff in H
   | |- strict_suffix _ _ backward =>
@@ -512,24 +543,9 @@ Ltac ss_canon :=
 (* assumes statements are canonicalized with ss_canon *)
 Ltac ss_solve' :=
   match goal with
-  (* solve directly *)
-  | [H: ?h |- ?h] => eassumption
-  | [H: advance_input ?inp forward = Some ?inp |- _] => exfalso; eapply advance_input_not_self; eauto
-  | [H: strict_suffix ?inp ?inp _ |- _] => exfalso; eapply ss_irreflexive; eauto
-  | [H: strict_suffix ?inp1 ?inp2 forward |- _] =>
-    let H' := fresh "H" in
-    assert (H': strict_suffix inp2 inp1 forward) by (clear H; ss_solve');
-    exfalso; apply (ss_asymm inp1 inp2 forward H H')
-  | |- strict_suffix (Input ?next (?c::?pref)) (Input (?c::?next) ?pref) forward =>
-    eapply ss_advance; eauto
-  | [H: _ :: ?t = ?t |- _] =>
-    exfalso; eapply cons_different; eauto
-  (* find goal transitively *)
+  (* input_prefix might have generated disjunctions in the goal *)
   | |- _ \/ _ => (left; ss_solve') || (right; ss_solve')
-  | [H: strict_suffix _ ?inp3 ?dir |- strict_suffix ?inp1 ?inp3 ?dir] =>
-    eapply strict_suffix_trans with (2:=H);
-    ss_solve'
-  | _ => solve[eauto using ss_next', ss_advance]
+  | _ => strict_order (fun a b => strict_suffix a b forward) || easy
   end.
 
 Ltac ss_solve := solve[repeat ss_canon; ss_solve'].

@@ -23,8 +23,9 @@ jobs:
 
       - name: Install opam dependencies
         run: |
-          # keep the Warblre ref in sync with the README
+          # keep the refs in sync with the README
           opam pin add --no-action warblre.0.1.0 https://github.com/epfl-systemf/Warblre.git#a5a312072b892f4fb0343b8c2ac9d35d451c84f1
+          opam pin add --no-action strict-order-solver.0.1.0 https://github.com/epfl-systemf/StrictOrderSolver.git#6f8de4a8c3c694928c4a6e31f798d0e387f8d90f
           opam install . --deps-only
 
       - name: Dune build
