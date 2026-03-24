@@ -1,8 +1,8 @@
-From Stdlib Require Import List Lia.
+From Stdlib Require Import List Lia Bool.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
-From Linden Require Import Tree Semantics.
+From Linden Require Import Tree Semantics GroupMapLemmas.
 From Linden Require Import Parameters.
 From Linden Require Import Tactics.
 From Warblre Require Import Numeric Base.
@@ -14,6 +14,8 @@ Section PikeSubset.
 
 
   (** * PikeVM supported subset  *)
+
+  (* for lookarounds, we support only those that don't contain capture groups *)
 
   (* since the tree of r{0,1} will generate the tree of r{0,0},
      it's quite convenient to add r{0,0} to the language as well *)
@@ -48,7 +50,12 @@ Section PikeSubset.
       pike_regex r1 ->
       pike_regex (Group g r1)
   | pike_anchor:
-    forall a, pike_regex (Anchor a).
+    forall a, pike_regex (Anchor a)
+  | pike_lookaround:
+    forall lk r1,
+      pike_regex r1 ->
+      def_groups r1 = [] ->
+      pike_regex (Lookaround lk r1).
 
 
   (* lifting to actions *)
@@ -86,7 +93,16 @@ Section PikeSubset.
       pike_subtree (AnchorPass a t1)
   | pike_groupaction: forall ga t1,
       pike_subtree t1 ->
-      pike_subtree (GroupAction ga t1).
+      pike_subtree (GroupAction ga t1)
+  | pike_lk: forall lk tlk t1,
+      pike_subtree tlk ->
+      has_group_open tlk = false ->
+      pike_subtree t1 ->
+      pike_subtree (LK lk tlk t1)
+  | pike_lkfail: forall lk tlk,
+      pike_subtree tlk ->
+      has_group_open tlk = false ->
+      pike_subtree (LKFail lk tlk).
 
   (* used for the lists of trees gm and input manipulated by the PikeTree and MemoTree algorithms *)
   Definition pike_list (l: list (tree * group_map * input)) : Prop :=
@@ -247,10 +263,27 @@ Ltac in_subset :=
   | [ H : ~ pike_regex (Quantified _ _ _ _) |- _ ] => try solve[exfalso; apply H; pike_subset]
   | [ H : ~ pike_regex (Group _ _) |- _ ] => try solve[exfalso; apply H; pike_subset]
   | [ H : ~ pike_regex (Anchor _) |- _ ] => try solve[exfalso; apply H; pike_subset]
+  | [ H : ~ pike_regex (Lookaround _ _) |- _ ] => try solve[exfalso; apply H; pike_subset]
   end.
 
 Section PikeSubsetLemma.
   Context {params: LindenParameters}.
+
+  (* if a regex has no groups, its tree has no group actions *)
+  Lemma no_groups_no_group_open:
+    forall rer acts inp gm dir t,
+      def_groups_actions acts = [] ->
+      is_tree rer acts inp gm dir t ->
+      has_group_open t = false.
+  Proof.
+    intros rer acts inp gm dir t NO_GROUPS ISTREE.
+    induction ISTREE;
+      simpl in *; simpl_app_nil; rewrite ?orb_false_iff;
+      try (easy || eauto).
+    - destruct dir; simpl in *; simpl_app_nil; eauto.
+    - destruct greedy; subst; simpl; rewrite orb_false_iff; eauto.
+  Qed.
+
   (* prove that one can only construct pike subtrees from pike regexes *)
   Lemma pike_actions_pike_tree:
     forall rer cont inp gm dir t,
@@ -271,5 +304,11 @@ Section PikeSubsetLemma.
       + pike_subset. apply IHISTREE1. destruct plus; inversion H3. pike_subset.
     - destruct plus; inversion H3.
     - apply IHISTREE. pike_subset.
+    - apply IHISTREE1. pike_subset.
+    - eapply no_groups_no_group_open; eauto.
+      simpl. now rewrite app_nil_r.
+    - apply IHISTREE. pike_subset.
+    - eapply no_groups_no_group_open; eauto.
+      simpl. now rewrite app_nil_r.
   Qed.
 End PikeSubsetLemma.

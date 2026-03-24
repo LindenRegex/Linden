@@ -115,6 +115,16 @@ Section Tree.
     | LKFail _ tlk => max_gid_tree tlk
     end.
 
+  (* Whether the tree contains group creation *)
+  Fixpoint has_group_open (t: tree) : bool :=
+    match t with
+    | GroupAction (Open _) _ => true
+    | Mismatch | Match => false
+    | Choice t1 t2 => has_group_open t1 || has_group_open t2
+    | GroupAction _ t | Read _ t | ReadBackRef _ t | Progress t | AnchorPass _ t => has_group_open t
+    | LK _ tlk t => has_group_open tlk || has_group_open t
+    | LKFail _ tlk => has_group_open tlk
+    end.
 
   (** * Greedy and Lazy Choice *)
 

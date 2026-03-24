@@ -1,7 +1,7 @@
-From Stdlib Require Import List Lia.
+From Stdlib Require Import List Lia Bool.
 Import ListNotations.
 
-From Linden Require Import Regex Chars Groups.
+From Linden Require Import Regex Chars Groups GroupMapLemmas.
 From Linden Require Import Tree Semantics PikeSubset.
 From Warblre Require Import Base RegExpRecord.
 From Linden Require Import StrictSuffix.
@@ -397,6 +397,20 @@ Proof.
   constructor. constructor.
 Qed.
 
+(* if a regex has no groups, its tree has no group actions *)
+Lemma bool_tree_no_groups_no_group_open:
+  forall acts b inp dir t,
+    def_groups_actions acts = [] ->
+    bool_tree acts b inp dir t ->
+    has_group_open t = false.
+Proof.
+  intros acts b inp dir t NO_GROUPS ISTREE.
+  induction ISTREE;
+    simpl in *; simpl_app_nil; rewrite ?orb_false_iff;
+    try (easy || eauto).
+  - destruct dir; simpl in *; simpl_app_nil; eauto.
+  - destruct greedy; subst; simpl; rewrite orb_false_iff; eauto.
+Qed.
 
 (* Pike actions translate to Pike trees *)
 Theorem subset_semantics:
@@ -419,6 +433,10 @@ Proof.
     + eapply IHISTREE1. pike_subset.
     + eapply IHISTREE1. pike_subset.
   - destruct plus; inversion H3.
+  - eapply bool_tree_no_groups_no_group_open; eauto.
+    simpl. now rewrite app_nil_r.
+  - eapply bool_tree_no_groups_no_group_open; eauto.
+    simpl. now rewrite app_nil_r.
 Qed.
 
 (** * Determinism  *)
@@ -463,16 +481,16 @@ Qed.
 (* the other direction of implication is obtained using only determinism and productivity *)
 
   Theorem bool_to_istree:
-    forall acts b inp dir t,
+    forall acts b inp gm dir t,
       bool_encoding b inp acts dir ->
       pike_actions acts ->
       bool_tree acts inp b dir t ->
-      is_tree rer acts inp GroupMap.empty dir t.
+      is_tree rer acts inp gm dir t.
   Proof.
-    intros acts b inp dir t ENCODE H H0.
+    intros acts b inp gm dir t ENCODE H H0.
     (* productivity *)
-    assert (exists t', is_tree rer acts inp GroupMap.empty dir t') as [t' ISTREE].
-    { destruct (compute_tree rer acts inp  GroupMap.empty dir (S (actions_fuel acts inp dir))) eqn:PROD.
+    assert (exists t', is_tree rer acts inp gm dir t') as [t' ISTREE].
+    { destruct (compute_tree rer acts inp  gm dir (S (actions_fuel acts inp dir))) eqn:PROD.
       2: { generalize functional_terminates. intros H1. apply H1 in PROD; auto; lia. }
       exists t0. eapply compute_is_tree; eauto. }
     eapply encode_equal in ISTREE as BOOLTREE; eauto.
@@ -486,21 +504,30 @@ Qed.
       bool_tree [Areg r] inp CanExit dir t ->
       is_tree rer [Areg r] inp GroupMap.empty dir t.
   Proof.
-    intros r inp dir t H H0.
-    assert (bool_encoding CanExit inp [Areg r] dir) by (constructor; constructor).
-    eapply bool_to_istree; eauto; pike_subset.
+    intros r inp dir t SUBSET.
+    eapply bool_to_istree; eauto.
+    repeat constructor. pike_subset.
   Qed.
 
-
   Theorem booltree_istree_equiv:
+    forall acts b inp gm dir t,
+      bool_encoding b inp acts dir ->
+      pike_actions acts ->
+      bool_tree acts inp b dir t <-> is_tree rer acts inp gm dir t.
+  Proof.
+    intros acts b inp gm dir t ENCODE SUBSET. split.
+    - apply bool_to_istree; auto.
+    - apply encode_equal; auto.
+  Qed.
+
+  Theorem booltree_istree_equiv_regex:
     forall r inp dir t,
       pike_regex r ->
-      bool_tree [Areg r] inp CanExit dir t <->
-      is_tree rer [Areg r] inp GroupMap.empty dir t.
+      bool_tree [Areg r] inp CanExit dir t <-> is_tree rer [Areg r] inp GroupMap.empty dir t.
   Proof.
-    intros r inp dir t SUBSET. split.
-    - apply bool_to_istree_regex; auto.
-    - apply boolean_correct; auto.
+    intros r inp dir t SUBSET.
+    eapply booltree_istree_equiv; eauto.
+    repeat constructor. pike_subset.
   Qed.
 
 End BooleanSemantics.
