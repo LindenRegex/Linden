@@ -1,5 +1,8 @@
-From Linden Require Import Groups Tactics.
+From Linden Require Import Chars Regex Tree Semantics.
+From Linden Require Import Groups Tactics Parameters.
 From Stdlib Require Import List DecidableClass Lia PeanoNat.
+From Warblre Require Import Base RegExpRecord.
+Import ListNotations.
 
 (** * Lemmas related to group maps *)
 
@@ -232,4 +235,57 @@ Proof.
   destruct (in_dec Nat.eq_dec gid gidl) as [Hin | Hnotin].
   - rewrite gm_reset_find by assumption. constructor.
   - rewrite gm_reset_find_other by assumption. apply Hvalid.
+Qed.
+
+Definition def_groups_action {params: LindenParameters} (a:action) : list group_id :=
+  match a with
+  | Areg r => def_groups r
+  | Acheck _ => []
+  | Aclose gi => [gi]
+  end.
+
+Fixpoint def_groups_actions {params: LindenParameters} (acts:list action) : list group_id :=
+  match acts with
+  | [] => []
+  | a::t => def_groups_action a ++ def_groups_actions t
+  end.
+
+Ltac simpl_app_nil :=
+  repeat match goal with
+  | [H: _ ++ _ = [] |- _] =>
+    apply app_eq_nil in H; destruct H
+  | [H: _ = [] |- _] => rewrite H in *; clear H
+  end.
+
+(* if a list of actions contains no groups, any matching leaf produces an empty group map *)
+Lemma no_groups_empty_gm {params: LindenParameters} (rer: RegExpRecord) :
+  forall acts inp gm dir tree leaf,
+    def_groups_actions acts = [] ->
+    is_tree rer acts inp gm dir tree ->
+    tree_res tree gm inp dir = Some leaf ->
+    snd leaf = gm.
+Proof.
+  intros acts inp gm dir tree leaf Hnogroups Htree Hleaf.
+  generalize dependent leaf.
+  induction Htree; intros leaf Hleaf;
+    (* simplify *)
+    subst; simpl in *; simpl_app_nil;
+    (* remove cases with groups *)
+    try discriminate;
+    (* remove trivial cases *)
+    inversion Hleaf; eauto.
+  - eapply read_char_success_advance, advance_input_success in READ as <-.
+    eauto.
+  - destruct (tree_res t1), (tree_res t2); eauto.
+  - destruct dir; simpl in IHHtree; simpl_app_nil; eapply IHHtree; eauto.
+  - destruct greedy; simpl in Hleaf; eauto.
+    + destruct (tree_res titer); eauto.
+    + destruct (tree_res tskip); eauto.
+  - unfold lk_result in RES_LK. destruct positivity.
+    + destruct (tree_res treelk) eqn:Hres; [destruct l|discriminate].
+      injection RES_LK as <-.
+      specialize (IHHtree1 eq_refl (i, g) eq_refl) as <-.
+      eauto.
+    + destruct (tree_res treelk); [discriminate|inversion RES_LK; subst; eauto].
+  - rewrite <-read_backref_success_advance with (1:=READ_BACKREF) in Hleaf; eauto.
 Qed.
