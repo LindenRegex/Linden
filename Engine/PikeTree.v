@@ -45,7 +45,12 @@ Section PikeTree.
   (* this corresponds to an atomic step of a single tree *)
   Definition tree_bfs_step (t:tree) (gm:group_map) (inp:input): step_result :=
     match t with
-    | Mismatch | ReadBackRef _ _ | LK _ _ _ | LKFail _ _ => StepDead
+    | Mismatch | ReadBackRef _ _ | LKFail _ _ => StepDead
+    | LK lk tlk t1 =>
+      match lk_result lk tlk gm inp with
+      | Some gm' => StepActive [(t1, gm')]
+      | None => StepDead
+      end
     | Match => StepMatch
     | Choice t1 t2 => StepActive [(t1,gm); (t2,gm)]
     | Read c t1 => StepBlocked t1
@@ -223,13 +228,21 @@ Section PikeTree.
   | tr_groupaction:
     forall t act gm inp l seen
       (TR: tree_nd t (GroupMap.update (idx inp) act gm) inp seen l),
-      tree_nd (GroupAction act t) gm inp seen l.
-  (* To keep this relation as simple as possible, it does not compute
-  the results of a tree which does not correspond to the regexes
-  supported by the engine. We could support them, but we won't need them
-  and it would require adding a direction as argument *)
-
-
+      tree_nd (GroupAction act t) gm inp seen l
+  | tr_lookaround:
+    forall lk tlk t gm gm' inp l seen
+      (LK_RES: lk_result lk tlk gm inp = Some gm')
+      (TR: tree_nd t gm' inp seen l),
+      tree_nd (LK lk tlk t) gm inp seen l
+  (* When the tree is constructed by `is_tree`, this case can never happen *)
+  (* since LK tree node is constructed only when `lk_result` returns `Some`. *)
+  (* However, here we operate on arbitrary trees so we must handle this case. *)
+  | tr_lookaroundnone:
+    forall lk tlk t gm inp seen
+      (LK_RES: lk_result lk tlk gm inp = None),
+      tree_nd (LK lk tlk t) gm inp seen None
+  | tr_lookaroundfail:
+    forall lk tlk gm inp seen, tree_nd (LKFail lk tlk) gm inp seen None.
 
   (* the normal result, obtained with function tree_res without skipping anything, is a possible result *)
   Lemma tree_res_nd:
@@ -237,7 +250,16 @@ Section PikeTree.
       pike_subtree t ->
       tree_nd t gm inp seen (tree_res t gm inp forward).
   Proof.
-    intros t. induction t; intros; simpl; try solve[inversion H]; try solve[pike_subset; constructor; auto].
+    induction t; intros; simpl; try solve[pike_subset]; try solve[constructor; auto].
+    (* lookarounds *)
+    destruct positivity eqn:Hpos, tree_res eqn:Hres; try destruct l.
+    2, 3: eapply tr_lookaroundnone; unfold lk_result; now rewrite Hpos, Hres.
+    - eapply tr_lookaround.
+      + unfold lk_result. now rewrite Hpos, Hres.
+      + eapply IHt2; pike_subset.
+    - eapply tr_lookaround.
+      + unfold lk_result. now rewrite Hpos, Hres.
+      + eapply IHt2; pike_subset.
   Qed.
 
   (* when there is nothing in seen, there is only one possible result *)
@@ -251,8 +273,12 @@ Section PikeTree.
     remember initial_seentrees as init.
     induction H; simpl; pike_subset; auto.
     - subst. rewrite initial_nothing in SEEN. inversion SEEN.
-    - pike_subset. specialize (IHtree_nd1 H3 (@eq_refl _ _)).
-      specialize (IHtree_nd2 H4 (@eq_refl _ _)). subst. auto.
+    - pike_subset. specialize (IHtree_nd1 H3 eq_refl).
+      specialize (IHtree_nd2 H4 eq_refl). subst. auto.
+    - unfold lk_result in LK_RES.
+      destruct positivity, (tree_res tlk); easy || (try destruct l0; injection LK_RES as <-; eauto).
+    - unfold lk_result in LK_RES.
+      destruct positivity, (tree_res tlk); now try destruct l.
   Qed.
 
   (** * List Results  *)
@@ -428,32 +454,53 @@ Section PikeTree.
 
   (** * Non deterministic results lemmas  *)
 
-  (* a tree having no results is independent of the gm and the inp *)
-  Lemma no_tree_result:
-    forall t gm1 gm2 inp1 inp2
-      (NORES: tree_res t gm1 inp1 forward = None),
-      tree_res t gm2 inp2 forward = None.
+  (* when lk_result returns none, it is independent of the gm and the inp *)
+  Lemma lk_result_indep_none:
+    forall lk tlk gm1 gm2 inp1 inp2,
+      lk_result lk tlk gm1 inp1 = None ->
+      lk_result lk tlk gm2 inp2 = None.
   Proof.
-    intros. rewrite first_tree_leaf. rewrite first_tree_leaf in NORES.
-    destruct (tree_leaves t gm1 inp1 forward) eqn:HTL.
-    2: { inversion NORES. }
-    eapply leaves_indep in HTL. rewrite HTL. auto.
+    unfold lk_result.
+    intros lk tlk gm1 gm2 inp1 inp2 H.
+    destruct positivity, tree_res eqn:Hres.
+    - now destruct l.
+    - erewrite res_indep; eauto.
+    - now eapply res_indep_some in Hres as [l' ->].
+    - easy.
   Qed.
 
-  (* the same is true for a non-deterministic result *)
+  (* when lk_result returns some, it is independent of the gm and the inp *)
+  Lemma lk_result_indep_some:
+    forall lk tlk gm1 gm2 inp1 inp2 res1,
+      lk_result lk tlk gm1 inp1 = Some res1 ->
+      exists res2, lk_result lk tlk gm2 inp2 = Some res2.
+  Proof.
+    unfold lk_result.
+    intros lk tlk gm1 gm2 inp1 inp2 res1 H.
+    destruct positivity, tree_res eqn:Hres; try discriminate.
+    - eapply res_indep_some in Hres as [l' ->].
+      destruct l'. eauto.
+    - erewrite res_indep; eauto.
+  Qed.
+
+  (* a tree_nd having no results is independent of the gm and the inp *)
   Lemma no_tree_result_nd:
     forall t seen gm1 gm2 inp1 inp2
       (NORES: tree_nd t gm1 inp1 seen None),
       tree_nd t gm2 inp2 seen None.
   Proof.
-    intros t. induction t; intros;
+    induction t; intros;
       try solve[inversion NORES; subst; try solve[constructor; auto]; try solve [constructor; eapply IHt; eauto]].
-    inversion NORES; subst.
-    + apply tr_skip. auto.
-    + destruct l1; destruct l2; inversion H.
-      apply tr_choice; auto.
-      * eapply IHt1; eauto.
-      * eapply IHt2; eauto.
+    - inversion NORES; subst.
+      + apply tr_skip. auto.
+      + destruct l1, l2; inversion H.
+        apply tr_choice; eauto.
+    - inversion NORES; subst.
+      + apply tr_skip. auto.
+      + eapply lk_result_indep_some in LK_RES as [gm'' LK_RES''].
+        eapply tr_lookaround; eauto.
+      + eapply tr_lookaroundnone.
+        eapply lk_result_indep_none; eauto.
   Qed.
 
   (* skipping over a new tree doesn't change the result if the tree that is being skipped does not have results *)
@@ -467,10 +514,10 @@ Section PikeTree.
     intros t seen tseen gm inp res NORES TREEND SUBSET.
     remember (add_seentrees seen tseen) as add.
     induction TREEND; subst; try solve[constructor; auto];
-      try solve [constructor; apply IHTREEND; auto; eapply no_tree_result; eauto].
+      try solve [econstructor; eauto; apply IHTREEND; auto; eapply res_indep; eauto].
     apply in_add in SEEN as [EQ | SEEN].
-    + subst. rewrite <- NORES. apply tree_res_nd; auto.
-    + apply tr_skip. auto.
+    - subst. rewrite <- NORES. apply tree_res_nd; auto.
+    - apply tr_skip. auto.
   Qed.
 
   (* same lemma generalizes to lists of trees *)
@@ -484,7 +531,7 @@ Section PikeTree.
     intros l seen tseen gm inp res NORES LISTND SUBSET.
     remember (add_seentrees seen tseen) as add.
     induction LISTND; subst; econstructor; eauto.
-    eapply add_seen; eauto. eapply no_tree_result; eauto.
+    eapply add_seen; eauto. eapply res_indep; eauto.
   Qed.
 
   (* skipping over a new tree doesn't change the result if the tree that is being skipped can produce a None result *)
@@ -497,7 +544,7 @@ Section PikeTree.
     intros t seen tseen gm inp res NORES TREEND.
     remember (add_seentrees seen tseen) as add.
     induction TREEND; subst; try solve[constructor; auto];
-      try solve [constructor; apply IHTREEND; auto; eapply no_tree_result_nd; eauto].
+      try solve [econstructor; eauto; apply IHTREEND; auto; eapply no_tree_result_nd; eauto].
     - apply in_add in SEEN as [EQ | SEEN].
       + subst. apply NORES.
       + apply tr_skip. auto.
@@ -580,7 +627,7 @@ Section PikeTree.
     intros tseen t res seen gm inp SIZE TREEND.
     remember (add_seentrees seen tseen) as add.
     induction TREEND; subst; simpl in SIZE;
-      try solve [constructor; apply IHTREEND; auto; lia].
+      try solve [econstructor; eauto; apply IHTREEND; auto; lia].
     - apply in_add in SEEN as [EQ | SEEN].
       + subst. exfalso. eapply PeanoNat.Nat.lt_irrefl. eauto.
       + apply tr_skip. auto.
@@ -760,11 +807,40 @@ Section PikeTree.
         eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
         econstructor; eauto.
     (* LK *)
-    - simpl. constructor; pike_subset; auto.
+    - constructor; try (destruct lk_result eqn:Hlk; injection H0 as <-); pike_subset; auto.
+      (* lk_result succeeded *)
+      + intros res STATEND. inversion STATEND; subst.
+        apply SAMERES.
+        inversion ACTIVE; subst.
+        apply add_parent_tree in TR.
+        2: { simpl. lia. }
+        assert (PARENT: tree_nd (LK lk t1 t2) gm inp seen l1).
+        { eapply tr_lookaround; eauto. }
+        (* case analysis: did t contribute to the result? *)
+        destruct l1 as [leaf1|].
+        * econstructor; eauto. simpl.
+          eapply tlr_cons; eauto.
+          apply list_result_nd; auto.
+        (* when the tree did not contribute, adding it to seen does not change the results *)
+        * econstructor; eauto.
+          eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
+          econstructor; eauto.
+      (* lk_result failed *)
+      + intros res STATEND. inversion STATEND; subst. apply SAMERES.
+        econstructor; eauto. econstructor; eauto.
+        * eapply tr_lookaroundnone; eauto.
+        * eapply list_add_seen with (gm:=gm) (inp:=inp) in ACTIVE; eauto; pike_subset.
+          unfold lk_result in Hlk. simpl.
+          destruct positivity, tree_res; now try destruct l.
+        * eauto.
     (* LKFail *)
-    - simpl. constructor; pike_subset; auto.
+    - simpl. constructor; pike_subset; auto. intros res STATEND. inversion STATEND; subst. apply SAMERES.
+      econstructor; eauto. econstructor; eauto.
+      + eapply tr_lookaroundfail.
+      + eapply list_add_seen with (gm:=gm) (inp:=inp) in ACTIVE; eauto. pike_subset.
+      + eauto.
     (* match *)
-    - destruct t; inversion STEP; subst. constructor; pike_subset; auto.
+    - destruct t; inversion STEP; try now destruct lk_result; subst. constructor; pike_subset; auto.
       intros res STATEND. inversion STATEND; subst.
       inversion ACTIVE; subst. simpl.
       apply SAMERES. eapply sr with (r2:=Some (inp,gm)); eauto.
@@ -773,7 +849,7 @@ Section PikeTree.
       + apply tr_match.
       + apply list_result_nd; auto.
     (* blocked *)
-    - destruct t; inversion STEP; subst. constructor; pike_subset; auto.
+    - destruct t; inversion STEP; try now destruct lk_result; subst. constructor; pike_subset; auto.
       intros res STATEND. inversion STATEND; subst.
       apply SAMERES.
       rewrite suppl_app. rewrite list_result_app. simpl. rewrite list_result_cons.
