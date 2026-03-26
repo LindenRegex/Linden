@@ -231,7 +231,7 @@ Section PikeTree.
       tree_nd (GroupAction act t) gm inp seen l
   | tr_lookaround:
     forall lk tlk t gm gm' inp l seen
-      (LK_RES: lk_result lk tlk gm inp = Some gm')
+      (RES_LK: lk_result lk tlk gm inp = Some gm')
       (TR: tree_nd t gm' inp seen l),
       tree_nd (LK lk tlk t) gm inp seen l
   (* When the tree is constructed by `is_tree`, this case can never happen *)
@@ -239,7 +239,7 @@ Section PikeTree.
   (* However, here we operate on arbitrary trees so we must handle this case. *)
   | tr_lookaroundnone:
     forall lk tlk t gm inp seen
-      (LK_RES: lk_result lk tlk gm inp = None),
+      (RES_LK: lk_result lk tlk gm inp = None),
       tree_nd (LK lk tlk t) gm inp seen None
   | tr_lookaroundfail:
     forall lk tlk gm inp seen, tree_nd (LKFail lk tlk) gm inp seen None.
@@ -275,9 +275,9 @@ Section PikeTree.
     - subst. rewrite initial_nothing in SEEN. inversion SEEN.
     - pike_subset. specialize (IHtree_nd1 H3 eq_refl).
       specialize (IHtree_nd2 H4 eq_refl). subst. auto.
-    - unfold lk_result in LK_RES.
-      destruct positivity, (tree_res tlk); easy || (try destruct l0; injection LK_RES as <-; eauto).
-    - unfold lk_result in LK_RES.
+    - unfold lk_result in RES_LK.
+      destruct positivity, (tree_res tlk); easy || (try destruct l0; injection RES_LK as <-; eauto).
+    - unfold lk_result in RES_LK.
       destruct positivity, (tree_res tlk); now try destruct l.
   Qed.
 
@@ -497,7 +497,7 @@ Section PikeTree.
         apply tr_choice; eauto.
     - inversion NORES; subst.
       + apply tr_skip. auto.
-      + eapply lk_result_indep_some in LK_RES as [gm'' LK_RES''].
+      + eapply lk_result_indep_some in RES_LK as [gm'' RES_LK''].
         eapply tr_lookaround; eauto.
       + eapply tr_lookaroundnone.
         eapply lk_result_indep_none; eauto.

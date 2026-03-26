@@ -119,6 +119,7 @@ Section PikeSubset.
     | Quantified _ 0 NoI.Inf r1 | Quantified _ 0 (NoI.N 1) r1 => is_pike_regex r1
     | Group _ r1 => is_pike_regex r1
     | Anchor _ => true
+    | Lookaround _ r1 => is_pike_regex r1 && def_groups r1 == []
     | _ => false
     end.
 
@@ -129,11 +130,13 @@ Section PikeSubset.
     intros r. split; intros H.
     - induction r; try econstructor; simpl in *; boolprop; eauto; try discriminate.
       (* quatified *)
-      destruct min; [|discriminate].
-      destruct delta; [|constructor; eauto].
-      destruct n; [constructor|].
-      destruct n; [constructor; eauto|discriminate].
-    - induction H; simpl in *; boolprop; eauto.
+      + destruct min; [|discriminate].
+        destruct delta; [|constructor; eauto].
+        destruct n; [constructor|].
+        destruct n; [constructor; eauto|discriminate].
+      (* lookaround *)
+      + now eqdec.
+    - induction H; simpl in *; boolprop; eqdec; eauto.
   Qed.
 
 

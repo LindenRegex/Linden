@@ -51,7 +51,7 @@ Lemma initial_tree_thread:
     tree_thread code inp (tree, GroupMap.empty) (0, GroupMap.empty, CanExit).
 Proof.
   intros r code tree inp COMPILE TREE SUBSET.
-  unfold compilation in COMPILE. destruct (compile r 0) as [c fresh] eqn:COMP.
+  unfold compilation in COMPILE. destruct (compile r 0 0) as [[c fresh] ?] eqn:COMP.
   apply compile_nfa_rep with (prev := []) in COMP as REP; auto. simpl in REP.
   apply fresh_correct in COMP. simpl in COMP. subst.
   subst. eapply tt_eq; eauto.
@@ -1024,17 +1024,19 @@ Proof.
   - assert (pc = lbl) by lia. subst.
     rewrite CHECK in GET. inversion GET.
   - assert (pc = lbl) by lia. subst.
+    rewrite ORACLE in GET. inversion GET.
+  - assert (pc = lbl) by lia. subst.
     rewrite KILL in GET. inversion GET.
 Qed.
 
 
 (* every compiled code is well-formed *)
 Lemma compile_stutter_wf:
-  forall r code fresh,
-    compile r 0 = (code, fresh) ->
+  forall r code fresh lk_idx,
+    compile r 0 0 = (code, fresh, lk_idx) ->
     stutter_wf code.
 Proof.
-  intros r code fresh H.
+  intros r code fresh lk_idx H.
   eapply compile_nfa_rep with (prev:=[]) in H as REP; simpl; auto.
   simpl in REP. apply fresh_correct in H. simpl in H. subst.
   unfold stutter_wf. unfold stutters. unfold get_pc.
@@ -1053,7 +1055,7 @@ Theorem compilation_stutter_wf:
     stutter_wf code.
 Proof.
   unfold compilation. intros r code H.
-  destruct (compile r 0) as [r_code fresh] eqn:COMP. subst.
+  destruct (compile r 0 0) as [[r_code fresh] lk_idx] eqn:COMP. subst.
   apply compile_stutter_wf in COMP.
   unfold stutter_wf, stutters, get_pc.
   intros pc gm b nextpc nextgm nextb inp H H0.

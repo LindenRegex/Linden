@@ -28,6 +28,7 @@ Section NFA.
   | ResetRegs: list group_id -> bytecode
   | BeginLoop: bytecode
   | EndLoop: label -> bytecode    (* also contains the backedge instead of adding a jump *)
+  | OracleQuery: nat -> bool -> bytecode
   | KillThread: bytecode         (* for unsupported features *)
   .
 
@@ -99,7 +100,8 @@ Section NFA.
 
   Definition next_pcs (pc:label) (b:bytecode) : list label :=
     match b with
-    | Consume _ | CheckAnchor _ | SetRegOpen _ | SetRegClose _ | ResetRegs _ | BeginLoop => [S pc]
+    | Consume _ | CheckAnchor _ | SetRegOpen _ | SetRegClose _
+      | ResetRegs _ | BeginLoop | OracleQuery _ _ => [S pc]
     | Accept | KillThread => []
     | Jmp l | EndLoop l => [l]
     | Fork l1 l2 => [l1; l2]
@@ -112,38 +114,38 @@ Section NFA.
     then Fork l1 l2
     else Fork l2 l1.
 
-  (* also returns the next fresh label *)
-  Fixpoint compile (r:regex) (fresh:label) : code * label :=
+  (* also returns the next fresh label and lookaround index *)
+  Fixpoint compile (r:regex) (fresh:label) (lk_idx:nat): code * label * nat :=
     match r with
-    | Epsilon => ([], fresh)
-    | Character cd => ([Consume cd], S fresh)
+    | Epsilon => ([], fresh, lk_idx)
+    | Character cd => ([Consume cd], S fresh, lk_idx)
     | Disjunction r1 r2 =>
-        let (bc1, f1) := compile r1 (S fresh) in
-        let (bc2, f2) := compile r2 (S f1) in
-        ([Fork (S fresh) (S f1)] ++ bc1 ++ [Jmp f2] ++ bc2, f2)
+        let '(bc1, f1, lk_idx1) := compile r1 (S fresh) lk_idx in
+        let '(bc2, f2, lk_idx2) := compile r2 (S f1) lk_idx1 in
+        ([Fork (S fresh) (S f1)] ++ bc1 ++ [Jmp f2] ++ bc2, f2, lk_idx2)
     | Sequence r1 r2 =>
-        let (bc1, f1) := compile r1 fresh in
-        let (bc2, f2) := compile r2 f1 in
-        (bc1 ++ bc2, f2)
-    | Quantified greedy 0 (NoI.N 0) r1 => ([], fresh)
+        let '(bc1, f1, lk_idx1) := compile r1 fresh lk_idx in
+        let '(bc2, f2, lk_idx2) := compile r2 f1 lk_idx1 in
+        (bc1 ++ bc2, f2, lk_idx2)
+    | Quantified greedy 0 (NoI.N 0) r1 => ([], fresh, lk_idx)
     | Quantified greedy 0 (NoI.N 1) r1 =>
-        let (bc1, f1) := compile r1 (S (S (S fresh))) in
-        ([greedy_fork greedy (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1)
+        let '(bc1, f1, lk_idx1) := compile r1 (S (S (S fresh))) lk_idx in
+        ([greedy_fork greedy (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1, lk_idx1)
     | Quantified greedy 0 (NoI.Inf) r1 =>
-        let (bc1, f1) := compile r1 (S (S (S fresh))) in
-        ([greedy_fork greedy (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1)
+        let '(bc1, f1, lk_idx1) := compile r1 (S (S (S fresh))) lk_idx in
+        ([greedy_fork greedy (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1, lk_idx1)
     | Group gid r1 =>
-        let (bc1, f1) := compile r1 (S fresh) in
-        ([SetRegOpen gid] ++ bc1 ++ [SetRegClose gid], S f1)
-    | Anchor a => ([CheckAnchor a], S fresh)
-    | _ => ([KillThread], S fresh) (* unsupported features *)
+        let '(bc1, f1, lk_idx1) := compile r1 (S fresh) lk_idx in
+        ([SetRegOpen gid] ++ bc1 ++ [SetRegClose gid], S f1, lk_idx1)
+    | Anchor a => ([CheckAnchor a], S fresh, lk_idx)
+    | Lookaround lk _ => ([OracleQuery lk_idx (positivity lk)], S fresh, S lk_idx)
+    | _ => ([KillThread], S fresh, lk_idx) (* unsupported features *)
     end.
 
   (* adds an accept at the end of the code *)
   Definition compilation (r:regex) : code :=
-    match (compile r 0) with
-    | (c,fresh) => c ++ [Accept]
-    end.
+    let '(c, _, _) := compile r 0 0 in
+    c ++ [Accept].
 
   (** * Inductive NFA characterization *)
   (* like a representation predicate *)
@@ -199,6 +201,11 @@ Section NFA.
     forall c a lbl
       (CHECK: get_pc c lbl = Some (CheckAnchor a)),
       nfa_rep (Anchor a) c lbl (S lbl)
+  | nfa_rep_lookaround:
+    forall c i r1 lk lbl
+      (* FIXME: be more precise about `i`? *)
+      (ORACLE: get_pc c lbl = Some (OracleQuery i (positivity lk))),
+      nfa_rep (Lookaround lk r1) c lbl (S lbl)
   | nfa_unsupported:
     forall c r lbl
       (UNSUPPORTED: ~ pike_regex r)
@@ -226,47 +233,47 @@ Section NFA.
 
   (* correctness of the returned fresh label *)
   Lemma fresh_correct:
-    forall r fresh l next,
-      compile r fresh = (l, next) ->
+    forall r fresh l next lk_idx lk_idx',
+      compile r fresh lk_idx = (l, next, lk_idx') ->
       fresh + List.length l = next.
   Proof.
     Ltac inv_comp H := inversion H; subst; simpl; lia.
     intros r.
-    induction r; intros fresh l next COMPILE; try solve[inv_comp COMPILE].
+    induction r; intros fresh l next lk_idx lk_idx' COMPILE; try solve[inv_comp COMPILE].
     - inversion COMPILE.
-      destruct (compile r1 (S fresh)) as [bc1 f1] eqn:COMP1. destruct (compile r2 (S f1)) as [bc2 f2] eqn:COMP2.
+      destruct (compile r1 (S fresh)) as [[bc1 f1] lk_idx1] eqn:COMP1. destruct (compile r2 (S f1)) as [[bc2 f2] lk_idx2] eqn:COMP2.
       inversion H0. subst f2. apply IHr1 in COMP1. apply IHr2 in COMP2. simpl.
       rewrite <- COMP1 in COMP2. simpl in COMP2. rewrite length_app. simpl. lia.
     - inversion COMPILE.
-      destruct (compile r1 fresh) as [bc1 f1] eqn:COMP1. destruct (compile r2 f1) as [bc2 f2] eqn:COMP2.
+      destruct (compile r1 fresh) as [[bc1 f1] lk_idx1] eqn:COMP1. destruct (compile r2 f1) as [[bc2 f2] lk_idx2] eqn:COMP2.
       inversion H0. subst f2. apply IHr1 in COMP1. apply IHr2 in COMP2.
       rewrite <- COMP1 in COMP2. rewrite length_app. lia.
     - inversion COMPILE. destruct min.
       2: { inversion H0. simpl. lia. }
       destruct delta.
       + destruct n; try destruct n; try solve[inversion H0; simpl; lia].
-        destruct (compile r (S (S (S fresh)))) as [bc1 f1] eqn:COMP1.
+        destruct (compile r (S (S (S fresh)))) as [[bc1 f1] lk_idx1] eqn:COMP1.
         inversion H0. apply IHr in COMP1.
         subst. simpl. rewrite length_app. simpl. lia.
-      + destruct (compile r (S (S (S fresh)))) as [bc1 f1] eqn:COMP1.
+      + destruct (compile r (S (S (S fresh)))) as [[bc1 f1] lk_idx1] eqn:COMP1.
         inversion H0. apply IHr in COMP1.
         subst. simpl. rewrite length_app. simpl. lia.
     - inversion COMPILE.
-      destruct (compile r (S fresh)) as [bc1 f1] eqn:COMP1. inversion H0. apply IHr in COMP1.
+      destruct (compile r (S fresh)) as [[bc1 f1] lk_idx1] eqn:COMP1. inversion H0. apply IHr in COMP1.
       subst. simpl. rewrite length_app. simpl. lia.
   Qed.
 
   (* this shows that the compilation function adheres to the representation predicate *)
   Theorem compile_nfa_rep:
-    forall r c start endl prev,
-      compile r start = (c, endl) ->
+    forall r c start lk_idx endl prev lk_idx',
+      compile r start lk_idx = (c, endl, lk_idx') ->
       start = List.length prev ->
       nfa_rep r (prev ++ c) start endl.
   Proof.
     intros r. induction r; intros.
     - inversion H. subst. rewrite app_nil_r. constructor.
     - inversion H. subst. constructor. apply get_first.
-    - inversion H. destruct (compile r1 (S start)) as [bc1 end1] eqn:COMP1. destruct (compile r2 (S end1)) as [bc2 end2] eqn:COMP2.
+    - inversion H. destruct (compile r1 (S start)) as [[bc1 end1] lk_idx1] eqn:COMP1. destruct (compile r2 (S end1)) as [[bc2 end2] lk_idx2] eqn:COMP2.
       inversion H2. subst. apply nfa_rep_disj with (end1:=end1).
       + rewrite get_first. simpl. auto.
       + apply IHr1 with (prev:=prev ++ [Fork (S (length prev)) (S end1)]) in COMP1.
@@ -285,7 +292,7 @@ Section NFA.
           auto.
         * apply fresh_correct in COMP1. rewrite <- COMP1. simpl.
           rewrite length_app. simpl. rewrite length_app. simpl. lia.
-    - inversion H. destruct (compile r1 start) as [bc1 end1] eqn:COMP1. destruct (compile r2 end1) as [bc2 end2] eqn:COMP2.
+    - inversion H. destruct (compile r1 start) as [[bc1 end1] lk_idx1] eqn:COMP1. destruct (compile r2 end1) as [[bc2 end2] lk_idx2] eqn:COMP2.
       inversion H2. subst. econstructor.
       + apply IHr1 with (prev:=prev) in COMP1; auto.
         rewrite app_assoc. apply nfa_rep_extend. eauto.
@@ -300,7 +307,7 @@ Section NFA.
       (* Zero repetitions *)
       + inversion H2. subst. constructor.
       (* Question Mark *)
-      + destruct (compile r (S (S (S start)))) as [bc1 end1] eqn:COMP1. inversion H2. subst. constructor.
+      + destruct (compile r (S (S (S start)))) as [[bc1 end1] lk_idx1] eqn:COMP1. inversion H2. subst. constructor.
         * rewrite get_first. simpl. auto.
         * rewrite get_second. simpl. auto.
         * rewrite get_third. simpl. auto.
@@ -317,7 +324,7 @@ Section NFA.
           apply fresh_correct in COMP1. subst. apply get_first_0.
           simpl. rewrite length_app. simpl. lia.
       (* Star *)
-      + destruct (compile r (S (S (S start)))) as [bc1 end1] eqn:COMP1. inversion H2. subst. constructor.
+      + destruct (compile r (S (S (S start)))) as [[bc1 end1] lk_idx1] eqn:COMP1. inversion H2. subst. constructor.
         * rewrite get_first. simpl. auto.
         * rewrite get_second. simpl. auto.
         * rewrite get_third. simpl. auto.
@@ -334,18 +341,17 @@ Section NFA.
           apply fresh_correct in COMP1. subst. apply get_first_0.
           simpl. rewrite length_app. simpl. lia.
       (* Unsupported *)
-      + assert (([KillThread], S start) = (c,endl)).
+      + assert (([KillThread], S start, lk_idx) = (c,endl, lk_idx')).
         { destruct delta'; auto. lia. destruct delta'; auto. lia. }
         inversion H1. subst. apply nfa_unsupported.
         * unfold not. intros. inversion H0; subst; lia.
         * rewrite get_first. simpl. auto.
-    - inversion H. subst. apply nfa_unsupported.
-      + unfold not. intros. inversion H0.
-      + rewrite get_first. simpl. auto.
-    - inversion H. destruct (compile r (S start)) as [bc1 end1] eqn:COMP1. inversion H2. subst.
+    - inversion H. subst. eapply nfa_rep_lookaround.
+      rewrite get_first. simpl. eauto.
+    - inversion H. destruct (compile r (S start)) as [[bc1 end1] lk_idx1] eqn:COMP1. inversion H2. subst.
       constructor.
       + rewrite get_first. simpl. auto.
-      +  apply IHr with (prev:=prev ++ [SetRegOpen id]) in COMP1.
+      + apply IHr with (prev:=prev ++ [SetRegOpen id]) in COMP1.
         2: { rewrite length_app. simpl. lia. }
         replace (prev ++ SetRegOpen id :: bc1 ++ [SetRegClose id]) with ((prev ++ SetRegOpen id :: bc1) ++ [SetRegClose id]).
         2:{ rewrite <- app_assoc. auto. }
@@ -476,5 +482,6 @@ Ltac invert_rep :=
    | [ H : nfa_rep (Quantified _ _ _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
    | [ H : nfa_rep (Group _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
    | [ H : nfa_rep (Anchor _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep (Lookaround _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
    | _ => try no_stutter
    end.

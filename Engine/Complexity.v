@@ -31,7 +31,7 @@ Section CodeWF.
   Lemma compilation_nonempty:
     forall r, nonempty (compilation r).
   Proof.
-    intros. unfold compilation. destruct compile. unfold nonempty, size.
+    intros. unfold compilation. destruct compile as [[? ?] ?]. unfold nonempty, size.
     rewrite length_app. simpl. lia.
   Qed.
 
@@ -134,6 +134,9 @@ Section CodeWF.
       rewrite CHECK in GET. inversion GET. subst.
       simpl in IN. destruct IN; lia.
     - assert (pc = lbl) by lia. subst.
+      rewrite ORACLE in GET. inversion GET. subst.
+      simpl in IN. inversion IN; lia.
+    - assert (pc = lbl) by lia. subst.
       rewrite KILL in GET. inversion GET. subst.
       simpl in IN. inversion IN.
   Qed.
@@ -141,7 +144,7 @@ Section CodeWF.
   Theorem compiled_wf:
     forall r, code_wf (compilation r) (size (compilation r)).
   Proof.
-    intros r.  destruct (compile r 0) as [c endl] eqn:COMP.
+    intros r.  destruct (compile r 0 0) as [[c endl] lk_idx] eqn:COMP.
     eapply compile_nfa_rep with (prev:=[]) in COMP as REP; simpl in *; auto.
     unfold compilation. rewrite COMP. unfold code_wf.
     apply fresh_correct in COMP as FRESH. simpl in FRESH. subst.
@@ -234,33 +237,34 @@ Section CodeSize.
   Definition codesize (r:regex) := S (compsize r).
 
   Lemma compile_size:
-    forall r start endl code,
+    forall r start lk_idx endl code lk_idx',
       pike_regex r ->
-      compile r start = (code, endl) ->
+      compile r start lk_idx = (code, endl, lk_idx') ->
       length (code) = compsize r.
   Proof.
-    intros r start endl code SUBSET COMP.
+    intros r start lk_idx endl code lk_idx' SUBSET COMP.
     generalize dependent start. generalize dependent endl. generalize dependent code.
+    generalize dependent lk_idx. generalize dependent lk_idx'.
     induction r; simpl; intros;
       try solve [inversion COMP; subst; auto]; try solve[pike_subset].
-    - destruct (compile r1 (S start)) eqn:C1. destruct (compile r2 (S l)) eqn:C2.
+    - destruct (compile r1 (S start)) as [[bc1 end1] lk_idx1] eqn:C1. destruct (compile r2 (S end1)) as [[bc2 end2] lk_idx2] eqn:C2.
       erewrite <- IHr1; eauto. 2: pike_subset.
       erewrite <- IHr2; eauto. 2: pike_subset.
       inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-    - destruct (compile r1 start) eqn:C1. destruct (compile r2 l) eqn:C2.
+    - destruct (compile r1 start) as [[bc1 end1] lk_idx1] eqn:C1. destruct (compile r2 end1) as [[bc2 end2] lk_idx2] eqn:C2.
       erewrite <- IHr1; eauto. 2: pike_subset.
       erewrite <- IHr2; eauto. 2: pike_subset.
       inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
     - destruct min; destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst; try solve[pike_subset].
       + inversion COMP. auto.
-      + destruct (compile r (S (S (S start)))) eqn:C1.
+      + destruct (compile r (S (S (S start)))) as [[bc1 end1] lk_idx1] eqn:C1.
         erewrite <- IHr; eauto. 2: pike_subset.
         inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-      + destruct (compile r (S (S (S start)))) eqn:C1.
+      + destruct (compile r (S (S (S start)))) as [[bc1 end1] lk_idx1] eqn:C1.
         erewrite <- IHr; eauto. 2: pike_subset.
         inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
       + inversion SUBSET; subst; lia.
-    - destruct (compile r (S start)) eqn:C1.
+    - destruct (compile r (S start)) as [[bc1 end1] lk_idx1] eqn:C1.
       erewrite <- IHr; eauto. 2: pike_subset.
       inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
   Qed.
@@ -270,7 +274,7 @@ Section CodeSize.
       pike_regex r ->
       size (compilation r) = codesize r.
   Proof.
-    unfold codesize, size, compilation. intros r H. destruct (compile r 0) eqn:COMP.
+    unfold codesize, size, compilation. intros r H. destruct (compile r 0 0) as [[? ?] ?] eqn:COMP.
     apply compile_size in COMP; auto. rewrite <- COMP. rewrite length_app. simpl. lia.
   Qed.
 
@@ -737,7 +741,7 @@ Section PikeVMComplexity.
     - unfold pike_vm_initial_state. rewrite <- compilation_size; auto.
       constructor; auto.
       + intros t H. destruct H. 2: inversion H.
-        subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
+        subst. simpl. unfold compilation. destruct (compile r 0 0) as [[? ?] ?] eqn:C. unfold size. rewrite length_app.
         simpl. lia.
       + intros t H. inversion H.
       + constructor.
@@ -756,7 +760,7 @@ Section PikeVMComplexity.
     - unfold pike_vm_initial_state_unanchored. rewrite <- compilation_size; auto.
       constructor; auto.
       + intros t H. destruct H. 2: inversion H.
-        subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
+        subst. simpl. unfold compilation. destruct (compile r 0 0) as [[? ?] ?] eqn:C. unfold size. rewrite length_app.
         simpl. lia.
       + intros t H. inversion H.
       + constructor.
