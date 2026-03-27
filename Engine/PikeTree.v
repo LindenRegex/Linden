@@ -420,7 +420,7 @@ Section PikeTree.
     unfold initial_future_unanchored, future_tree_shape.
     intros t r inp tree future PIKEREG [tree' [FUTURESHAPE FUTUREINIT]] T TREE.
     assert (pike_subtree t). {
-      eapply pike_actions_pike_tree; eauto using bool_to_istree_regex; pike_subset.
+      eapply pike_actions_pike_tree; try eapply bool_to_istree_regex with (gm:=GroupMap.empty); eauto; pike_subset.
     }
     destruct FUTUREINIT as [future|].
     {

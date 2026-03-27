@@ -499,12 +499,12 @@ Qed.
   Qed.
 
   Theorem bool_to_istree_regex:
-    forall r inp dir t,
+    forall r inp dir gm t b,
       pike_regex r ->
-      bool_tree [Areg r] inp CanExit dir t ->
-      is_tree rer [Areg r] inp GroupMap.empty dir t.
+      bool_tree [Areg r] inp b dir t ->
+      is_tree rer [Areg r] inp gm dir t.
   Proof.
-    intros r inp dir t SUBSET.
+    intros r inp dir gm t b SUBSET.
     eapply bool_to_istree; eauto.
     repeat constructor. pike_subset.
   Qed.
