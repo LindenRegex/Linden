@@ -16,6 +16,7 @@
  (name linden)
  (synopsis "Formal Verification for JavaScript Regular Expressions")
  (depends
-  (rocq-prover (= 9.0.0))
+  (rocq-core (= 9.1.1))
+  (rocq-stdlib (= 9.0.0))
   (warblre (= 0.1.0))
   (strict-order-solver (= 0.1.0))))
