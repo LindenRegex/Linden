@@ -4,4 +4,5 @@
  (name Linden)
  (package linden)
  (generate_project_file)
+ (flags -set "Generate Goal Names")
  (theories Warblre Ltac2 Stdlib StrictOrderSolver))
