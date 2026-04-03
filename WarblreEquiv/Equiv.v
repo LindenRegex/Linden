@@ -542,7 +542,7 @@ Section Equiv.
       destruct List.Update.Nat.One.update as [cap'|] eqn:Heqcap'; simpl; try discriminate.
       intros Hres' Ht'. injection Ht' as <-. simpl.
       eapply Hequivcont with (ms := match_state (MatchState.input ms) (MatchState.endIndex ms') cap'); eauto.
-      - eapply equiv_gm_ms_close_group; eauto.
+      - eapply equiv_gm_ms_close_group with (dir:=dir); destruct dir; eauto.
       - eapply equiv_open_groups_close_group; eauto.
       - eapply ms_matches_inp_close_group; eauto.
       - apply ms_valid_wrt_checks_inpcap with (winp' := MatchState.input ms') (cap' := MatchState.captures ms'). destruct ms'; simpl. eauto using ms_valid_wrt_checks_tail.
