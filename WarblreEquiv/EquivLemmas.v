@@ -1792,7 +1792,7 @@ Section EquivLemmas.
       ms_matches_inp ms (Input next pref) ->
       (rlen >= 0)%Z ->
       ((endMatch >? Z.of_nat (length (MatchState.input ms)))%Z = true <->
-        Z.to_nat rlen >? length next = true).
+        (Z.to_nat rlen >? length next) = true).
   Proof.
     intros ms next pref rlen endMatch -> Hmsinp Hrlennneg.
     inversion Hmsinp as [str0 end_ind cap next' pref' Hlenpref Heqstr0 Heqms Heqnext']. subst next' pref' str0. simpl.
@@ -1807,7 +1807,7 @@ Section EquivLemmas.
       ms_matches_inp ms (Input next pref) ->
       (rlen >= 0)%Z ->
       ((beginMatch <? 0)%Z = true <->
-        Z.to_nat rlen >? length pref = true).
+        (Z.to_nat rlen >? length pref) = true).
   Proof.
     intros ms next pref rlen beginMatch -> Hmsinp Hrlennneg.
     inversion Hmsinp as [str0 end_ind cap next' pref' Hlenpref Heqstr0 Heqms Heqnext']. subst next' pref' str0. simpl.
