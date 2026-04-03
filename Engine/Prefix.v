@@ -391,8 +391,8 @@ Variant literal : Type :=
 (* this indicates a match cannot exist, as opposed to Prefix [] which means we do not know anything about the match *)
 | Impossible.
 
-Notation Nothing := (Exact []).
-Notation Unknown := (Prefix []).
+Abbreviation Nothing := (Exact []).
+Abbreviation Unknown := (Prefix []).
 
 Definition literal_eq_dec: forall (l1 l2: literal), { l1 = l2 } + { l1 <> l2 }.
 Proof. decide equality; apply string_eq_dec. Defined.
