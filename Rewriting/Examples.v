@@ -32,17 +32,14 @@ Section Utilities.
       inversion TREE2; subst. simpl in CONT. replace t2 with t1 by (eapply is_tree_determ; eauto). reflexivity.
   Qed.
 
+  Create HintDb is_tree.
   Hint Constructors is_tree: is_tree.
   Lemma is_tree_skip_epsilon_r a i gm dir tr:
     is_tree rer a i gm dir tr ->
     is_tree rer (a ++ [Areg Epsilon]) i gm dir tr.
   Proof.
     induction 1; subst; simpl; eauto with is_tree.
-    - rewrite <- app_assoc in IHis_tree; eauto with is_tree.
-    - destruct greedy, plus; simpl.
-      all: try change (NoI.N (S n)) with (NoI.N 1 + NoI.N n)%NoI.
-      all: try change (NoI.Inf) with (NoI.N 1 + NoI.Inf)%NoI.
-      all: eauto with is_tree.
+    rewrite <- app_assoc in IHis_tree; eauto with is_tree.
   Qed.
 
   Lemma seq_equiv_dir: forall x x' y y' dir, x ≅[rer][dir] x' -> y ≅[rer][dir] y' -> Sequence x y ≅[rer][dir] Sequence x' y'.

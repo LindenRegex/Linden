@@ -206,6 +206,7 @@ End Definitions.
 
 
 (** * Automation *)
+Create HintDb tree_equiv.
 #[export]
 Hint Unfold
   tree_equiv
@@ -222,9 +223,11 @@ Hint Unfold
   tree_nequiv_compute_dir
   : tree_equiv.
 
+Create Rewrite HintDb tree_equiv.
 Hint Rewrite app_nil_l app_nil_r : tree_equiv.
 Hint Rewrite <- app_assoc : tree_equiv.
 
+Create HintDb tree_equiv_simpl.
 Hint Unfold seq_list : tree_equiv_simpl.
 
 Ltac tree_equiv_simpl :=
@@ -253,6 +256,7 @@ Ltac tree_equiv_inv :=
   tree_equiv_prepare;
   [ .. | intros * Hl Hr; tree_inv Hl; [ tree_inv Hr | .. ] ].
 
+Create HintDb tree_equiv_symbex.
 Hint Unfold
      compute_tr
      anchor_satisfied is_boundary is_input_boundary
@@ -260,6 +264,7 @@ Hint Unfold
      andb orb negb xorb
   : tree_equiv_symbex.
 
+Create Rewrite HintDb tree_equiv_symbex.
 Hint Rewrite
   PeanoNat.Nat.leb_le
   PeanoNat.Nat.leb_nle
@@ -290,6 +295,7 @@ Ltac leaves_equiv_step :=
 Ltac leaves_equiv_t :=
   first [ reflexivity | repeat leaves_equiv_step ].
 
+Create Rewrite HintDb charset.
 Hint Rewrite
   @CharSet.exist_canonicalized_equiv
   @CharSet.exist_spec
@@ -307,9 +313,11 @@ Hint Rewrite
   Bool.negb_false_iff
   : charset.
 
+Create HintDb charset.
 Hint Unfold CharSet.Exists
   : charset.
 
+Create HintDb lia.
 Hint Extern 1 => lia : lia.
 
 

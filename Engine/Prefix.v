@@ -36,6 +36,7 @@ Proof.
       * right. intros H. now inversion H.
 Defined.
 
+Create HintDb prefix.
 Hint Constructors starts_with : prefix.
 
 Lemma starts_with_cons_iff: forall h1 t1 h2 t2,
@@ -585,6 +586,7 @@ Fixpoint extract_actions_literal (acts : list action) : literal :=
   | a :: rest => chain_literals (extract_action_literal a) (extract_actions_literal rest)
   end.
 
+Create Rewrite HintDb prefix.
 Hint Unfold
   prefix
   chain_literals
