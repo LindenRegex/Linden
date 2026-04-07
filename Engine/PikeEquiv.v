@@ -54,10 +54,9 @@ Proof.
   unfold compilation in COMPILE. destruct (compile r 0 0) as [[c fresh] ?] eqn:COMP.
   apply compile_nfa_rep with (prev := []) in COMP as REP; auto. simpl in REP.
   apply fresh_correct in COMP. simpl in COMP. subst.
-  subst. eapply tt_eq; eauto.
-  2: { repeat (constructor; auto). }
-  apply cons_bc with (pcmid := length c).
-  - constructor. apply nfa_rep_extend. auto.
+  subst. eapply tt_eq; eauto; pike_subset.
+  eapply cons_bc with (pcmid := length c).
+  - rep.
   - constructor. replace (length c) with (length c + 0) by auto. rewrite get_prefix. auto.
 Qed.
 
@@ -104,8 +103,7 @@ Proof.
   - simpl. repeat invert_rep.
     rewrite ACCEPT. auto.
   - repeat invert_rep. pike_subset.
-  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto). pike_subset.
+  - repeat invert_rep. eapply IHTREE; simpl; rep; pike_subset.
   - repeat invert_rep. pike_subset.
   - destruct greedy; inversion CHOICE.
   - now destruct lk_result.
@@ -133,11 +131,9 @@ Proof.
     repeat invert_rep. split; try split; eauto.
     + simpl. rewrite CONSUME. rewrite CHECK. auto.
     + intros. rewrite ADVANCE in H. inversion H. subst.
-      eapply tt_eq; eauto.
-      2: { pike_subset. }
-      replace (pc + 1) with (S pc) by lia. eauto.
-  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto). pike_subset.
+      replace (pc + 1) with (S pc) by lia.
+      eapply tt_eq; eauto; pike_subset.
+  - repeat invert_rep. eapply IHTREE; simpl; rep; pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
   - destruct greedy; inversion CHOICE.
   - now destruct lk_result.
@@ -157,15 +153,13 @@ Proof.
   remember forward as dir.
   induction TREE; intros; subst; try inversion HeqTOPEN; subst.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto). pike_subset.
+  - repeat invert_rep. eapply IHTREE; simpl; rep; pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
   - destruct greedy; inversion CHOICE.
   - repeat invert_rep. simpl. rewrite OPEN. split; auto.
-    eapply tt_eq; eauto.
-    2: { pike_subset. }
     replace (pc+1) with (S pc) by lia.
-    apply cons_bc with (pcmid:=end1); repeat (econstructor; eauto).
+    eapply tt_eq; eauto; pike_subset.
+    rep.
 Qed.
 
 
@@ -183,11 +177,10 @@ Proof.
   remember forward as dir.
   induction TREE; intros; subst; try inversion HeqTCLOSE; subst.
   - repeat invert_rep. simpl. rewrite CLOSE. split; auto.
-    econstructor; eauto. 2: pike_subset.
-    replace (pc + 1) with (S pc) by lia. auto.
+    replace (pc + 1) with (S pc) by lia.
+    econstructor; eauto; pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto). pike_subset.
+  - repeat invert_rep. eapply IHTREE; simpl; rep; pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
   - destruct greedy; inversion CHOICE.
 Qed.
@@ -239,8 +232,7 @@ Proof.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
   - assert (CHECK: check_read rer cd inp forward = CannotRead) by (apply cannot_read_correct; auto).
     repeat invert_rep. simpl. rewrite CONSUME. rewrite CHECK. auto.
-  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto). pike_subset.
+  - repeat invert_rep. eapply IHTREE; simpl; rep; pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
   - destruct greedy; inversion CHOICE.
   - repeat invert_rep. simpl. rewrite CHECK. rewrite ANCHOR. auto.
@@ -261,8 +253,7 @@ Proof.
   - repeat invert_rep. pike_subset. simpl. exists pcmid.
     rewrite END. split; auto. econstructor; eauto.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto). pike_subset.
+  - repeat invert_rep. eapply IHTREE; simpl; rep; pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
   - destruct greedy; inversion CHOICE.
 Qed.
@@ -280,15 +271,12 @@ Proof.
   remember forward as dir.
   induction TREE; intros; subst; try inversion HeqTANCHOR; subst.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto). pike_subset.
+  - repeat invert_rep. eapply IHTREE; simpl; rep; pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
   - destruct greedy; inversion CHOICE.
   - repeat invert_rep. simpl. rewrite CHECK. rewrite ANCHOR. split; auto.
-    eapply tt_eq; eauto.
-    2: { pike_subset. }
     replace (pc+1) with (S pc) by lia.
-    assumption.
+    eapply tt_eq; eauto; pike_subset.
 Qed.
 
 
@@ -312,16 +300,9 @@ Proof.
     + unfold epsilon_step. rewrite FORK. auto.
     + constructor.
       * constructor. constructor.
-        apply tt_eq with (actions:=Areg r2::cont); auto.
-        2: { pike_subset. }
-        repeat (econstructor; eauto).
-      * apply tt_eq with (actions:=Areg r1::cont); auto.
-        2: { pike_subset. }
-        eapply cons_bc with (pcmid:=end1).
-        ** constructor; auto.
-        ** eapply jump_bc; eauto.
-  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto). pike_subset.
+        apply tt_eq with (actions:=Areg r2::cont); auto; rep; pike_subset.
+      * apply tt_eq with (actions:=Areg r1::cont); auto; rep; pike_subset.
+  - repeat invert_rep. eapply IHTREE; simpl; rep; pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
   - (* when the choice comes from a quantifier *)
     destruct (destruct_delta (NoI.N 1 + plus)%NoI) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]].
@@ -338,22 +319,16 @@ Proof.
           * apply tt_begin; auto.
             replace (S (S pc)) with (S pc +1) in RESET by lia.
             apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 (NoI.N 0) r1)::cont); auto.
-            2: { pike_subset. }
-            apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-            repeat (econstructor; eauto).
+            replace (S pc+1+1) with (S (S (S pc))) by lia.
+            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 (NoI.N 0) r1)::cont); auto; pike_subset; rep.
         +                           (* lazy qmark *)
           simpl. rewrite FORK. exists [(S end1, gm, b); (S pc, gm, b)]. split; auto.
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
             replace (S (S pc)) with (S pc + 1) in RESET by lia.
             apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 (NoI.N 0) r1)::cont); auto.
-            2: { pike_subset. }
-            apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-            repeat (econstructor; eauto).
+            replace (S pc+1+1) with (S (S (S pc))) by lia.
+            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 (NoI.N 0) r1)::cont); auto; pike_subset; rep.
           * apply tt_eq with (actions:=cont); auto. pike_subset.
       }
     + { (* Star *)
@@ -367,28 +342,22 @@ Proof.
           * apply tt_begin; auto.
             replace (S (S pc)) with (S pc +1) in RESET by lia.
             apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 +∞ r1)::cont); auto.
-            2: { pike_subset. }
-            apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-            repeat (econstructor; eauto).
-            replace (S (S pc)) with (S pc + 1) by lia. auto.
+            replace (S pc+1+1) with (S (S (S pc))) by lia.
+            replace (S pc+1) with (S (S pc)) in RESET by lia.
+            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 +∞ r1)::cont); pike_subset; rep 8.
         +                           (* lazy star *)
           simpl. rewrite FORK. exists [(S end1, gm, b); (S pc, gm, b)]. split; auto.
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
             replace (S (S pc)) with (S pc + 1) in RESET by lia.
             apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 +∞ r1)::cont); auto.
-            2: { pike_subset. }
-            apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-            repeat (econstructor; eauto).
-            replace (S (S pc)) with (S pc + 1) by lia. auto.
+            replace (S pc+1+1) with (S (S (S pc))) by lia.
+            replace (S pc+1) with (S (S pc)) in RESET by lia.
+            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 +∞ r1)::cont); auto; pike_subset; rep 8.
           * apply tt_eq with (actions:=cont); auto. pike_subset.
       }
     (* Unsupported *)
-        + rewrite DUN in SUBSET. inversion SUBSET; subst. inversion H1; subst. inversion H0; subst; lia.
+    + rewrite DUN in SUBSET. inversion SUBSET; subst. inversion H1; subst. inversion H0; subst; lia.
 Qed.
 
 
@@ -497,8 +466,7 @@ Proof.
     * apply tt_eq with (actions:=Areg (Disjunction r1 r2) :: cont); try constructor; auto; pike_subset.
   - invert_rep.
     + invert_rep. invert_rep; try in_subset.
-      eapply IHTREE; eauto. pike_subset.
-      repeat (econstructor; eauto).
+      eapply IHTREE; simpl; rep; pike_subset.
     + exists pcstart. exists b. split; try split; try lia.
       * simpl. rewrite JMP. auto.
       * apply tt_eq with (actions:=Areg (Sequence r1 r2) :: cont); try constructor; auto; pike_subset.
@@ -646,14 +614,6 @@ Inductive pike_inv (code:code): pike_tree_state -> pike_vm_state -> Prop :=
 
 (** * Representation Unicity lemmas  *)
 
-(* tree-thread equivalence can only happen for a single gm *)
-Lemma tt_same_gm:
-  forall t gm1 pc gm2 b code inp,
-    tree_thread code inp (t,gm1) (pc,gm2,b) -> gm1 = gm2.
-Proof.
-  intros t gm1 pc gm2 b code inp H. inversion H; auto.
-Qed.
-
 
 (* A representation cannot start with Reset or BeginLoop *)
 Inductive start_rep: bytecode -> Prop :=
@@ -665,15 +625,16 @@ Inductive start_rep: bytecode -> Prop :=
 | start_open: forall gid, start_rep (SetRegOpen gid)
 | start_close: forall gid, start_rep (SetRegClose gid)
 | start_end: forall lbl, start_rep (EndLoop lbl)
+| start_oracle_query: forall i, start_rep (OracleQuery i)
 | start_kill: start_rep KillThread.
 
 Lemma nfa_rep_start:
-  forall r code pc pcend,
-    nfa_rep r code pc pcend ->
+  forall r code pc pcend lk_idx lk_idx',
+    nfa_rep r code pc pcend lk_idx lk_idx' ->
     pc = pcend \/
       (exists i, get_pc code pc = Some i /\ start_rep i).
 Proof.
-  intros r code pc pcend H. induction H;
+  intros r code pc pcend lk_idx lk_idx' H. induction H;
     try solve[left; simpl; auto];
     try solve[right; eexists; split; eauto; constructor].
   - destruct IHnfa_rep1 as [SAME1 | [i [START1 REP1]]]; subst.
@@ -686,12 +647,12 @@ Proof.
 Qed.
 
 Lemma action_rep_start:
-  forall a code pc pcend,
-    action_rep a code pc pcend ->
+  forall a code pc pcend lk_idx lk_idx',
+    action_rep a code pc pcend lk_idx lk_idx' ->
     pc = pcend \/
       (exists i, get_pc code pc = Some i /\ start_rep i).
 Proof.
-  intros a code pc pcend H. destruct a.
+  intros a code pc pcend lk_idx lk_idx' H. destruct a.
   - inversion H. subst. apply nfa_rep_start in NFA. auto.
   - inversion H. subst. right. exists (EndLoop pcend). split; auto. constructor.
   - inversion H. subst. right. exists (SetRegClose g). split; auto. constructor.
@@ -939,24 +900,24 @@ Proof.
 Qed.
 
 Lemma nfa_rep_incr:
-  forall r code start endl,
-    nfa_rep r code start endl ->
+  forall r code start endl lk_idx lk_idx',
+    nfa_rep r code start endl lk_idx lk_idx' ->
     start <= endl.
 Proof.
-  intros r code start endl H. induction H; try lia.
+  induction 1; try lia.
 Qed.
 
 (* every jump in the code jumps to a strictly bigger label *)
 (* this will help prevent loops of stuttering steps in the PikeVM *)
 Lemma compile_jumps:
-  forall r code start endl pc next,
-    nfa_rep r code start endl ->
+  forall r code start endl lk_idx lk_idx' pc next,
+    nfa_rep r code start endl lk_idx lk_idx' ->
     pc >= start ->
     pc < endl ->
     get_pc code pc = Some (Jmp next) ->
     pc < next.
 Proof.
-  intros r code start endl pc next REP GE LT GET.
+  intros r code start endl lk_idx lk_idx' pc next REP GE LT GET.
   generalize dependent pc. induction REP; intros.
   - lia.
   - assert (pc = lbl) by lia. subst.
@@ -1240,7 +1201,7 @@ Proof.
   destruct (stutters pc code) eqn:STUTTERS.
   {
     (* stuttering step *)
-    right. apply stutter_step in TT as H; auto.
+    right. eapply stutter_step in TT as H; auto.
     destruct H as [nextpc [nextb [EPSSTEP TT2]]]; subst.
     assert (pvs2 = (PVS inp ([(nextpc, gm, nextb)] ++ threadactive) best threadblocked nextprefix (add_thread threadseen (pc,gm,b)))).
     { eapply pikevm_deterministic; eauto. eapply pvs_active; eauto. }
@@ -1253,7 +1214,7 @@ Proof.
   (* active *)
   - left. eapply generate_active in TREESTEP as H; eauto. destruct H as [newthreads [EPS LTT2]].
     assert (pvs2 = PVS inp (newthreads ++ threadactive) best threadblocked nextprefix (add_thread threadseen (pc,gm,b))).
-    { eapply pikevm_deterministic; eauto. constructor; auto. }
+    { eapply pikevm_deterministic; eauto. constructor; eauto. }
     subst. exists (PTS inp (l ++ treeactive) best treeblocked future (add_seentrees treeseen t)). split.
     + eapply pts_active; eauto.
     + eapply pikeinv; try (eapply add_inclusion; eauto); try constructor; eauto.
@@ -1261,7 +1222,7 @@ Proof.
   (* match *)
   - left. eapply generate_match in TREESTEP as THREADSTEP; eauto.
     assert (pvs2 = PVS inp [] (Some (inp,gm_of (pc,gm,b))) threadblocked None (add_thread threadseen (pc,gm,b))).
-    { eapply pikevm_deterministic; eauto. constructor; auto. }
+    { eapply pikevm_deterministic; eauto. constructor; eauto. }
     subst. exists (PTS inp [] (Some (inp,gm)) treeblocked None (add_seentrees treeseen t)). split.
     + constructor; auto.
     + eapply pikeinv; try (eapply add_inclusion; eauto); try constructor; eauto.

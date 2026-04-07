@@ -43,15 +43,15 @@ Section CodeWF.
       next < size.
 
   Lemma nfa_wf:
-    forall r c startl endl pc next i,
-      nfa_rep r c startl endl ->
+    forall r c startl endl lk_idx lk_idx' pc next i,
+      nfa_rep r c startl endl lk_idx lk_idx' ->
       pc >= startl ->
       pc < endl ->
       get_pc c pc = Some i ->
       In next (next_pcs pc i) ->
       next <= endl.
   Proof.
-    intros r c startl endl pc next i REP GE LT GET IN.
+    intros r c startl endl lk_idx lk_idx' pc next i REP GE LT GET IN.
     generalize dependent pc. induction REP; intros.
     - lia.
     (* char *)
@@ -144,7 +144,7 @@ Section CodeWF.
   Theorem compiled_wf:
     forall r, code_wf (compilation r) (size (compilation r)).
   Proof.
-    intros r.  destruct (compile r 0 0) as [[c endl] lk_idx] eqn:COMP.
+    intros r. destruct (compile r 0 0) as [[c endl] lk_idx] eqn:COMP.
     eapply compile_nfa_rep with (prev:=[]) in COMP as REP; simpl in *; auto.
     unfold compilation. rewrite COMP. unfold code_wf.
     apply fresh_correct in COMP as FRESH. simpl in FRESH. subst.
@@ -162,7 +162,7 @@ Section CodeWF.
     assert (GETI: get_pc c pc = Some i).
     { unfold get_pc in GET. rewrite nth_error_app1 in GET; auto. }
     assert (POS: pc >= 0) by lia.
-    specialize (nfa_wf r c 0 (length c) pc next i REP POS H1 GETI IN) as WF.
+    specialize (nfa_wf r c 0 (length c) 0 lk_idx pc next i REP POS H1 GETI IN) as WF.
     unfold size. rewrite length_app. simpl. lia.
   Qed.
 

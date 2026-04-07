@@ -28,7 +28,7 @@ Section NFA.
   | ResetRegs: list group_id -> bytecode
   | BeginLoop: bytecode
   | EndLoop: label -> bytecode    (* also contains the backedge instead of adding a jump *)
-  | OracleQuery: nat -> bool -> bytecode
+  | OracleQuery: nat -> bytecode
   | KillThread: bytecode         (* for unsupported features *)
   .
 
@@ -101,7 +101,7 @@ Section NFA.
   Definition next_pcs (pc:label) (b:bytecode) : list label :=
     match b with
     | Consume _ | CheckAnchor _ | SetRegOpen _ | SetRegClose _
-      | ResetRegs _ | BeginLoop | OracleQuery _ _ => [S pc]
+      | ResetRegs _ | BeginLoop | OracleQuery _ => [S pc]
     | Accept | KillThread => []
     | Jmp l | EndLoop l => [l]
     | Fork l1 l2 => [l1; l2]
@@ -138,7 +138,7 @@ Section NFA.
         let '(bc1, f1, lk_idx1) := compile r1 (S fresh) lk_idx in
         ([SetRegOpen gid] ++ bc1 ++ [SetRegClose gid], S f1, lk_idx1)
     | Anchor a => ([CheckAnchor a], S fresh, lk_idx)
-    | Lookaround lk _ => ([OracleQuery lk_idx (positivity lk)], S fresh, S lk_idx)
+    | Lookaround lk _ => ([OracleQuery lk_idx], S fresh, S lk_idx)
     | _ => ([KillThread], S fresh, lk_idx) (* unsupported features *)
     end.
 
@@ -150,67 +150,67 @@ Section NFA.
   (** * Inductive NFA characterization *)
   (* like a representation predicate *)
 
-  (* nfa_rep r code pc1 pc2 means that the bytecode for r is represented in code, from pc1 to pc2 (excluded)  *)
-  Inductive nfa_rep : regex -> code -> label -> label -> Prop :=
+  (* nfa_rep r code pc1 pc2 lk_idx1 lk_idx2 means that *)
+  (* the bytecode for r is represented in code, from pc1 to pc2 (excluded), with lookaround indices used from lk_idx1 to lk_idx2 (excluded) *)
+  Inductive nfa_rep : regex -> code -> label -> label -> nat -> nat -> Prop :=
   | nfa_rep_epsilon:
-    forall c lbl,
-      nfa_rep Epsilon c lbl lbl
+    forall c lbl lk_idx,
+      nfa_rep Epsilon c lbl lbl lk_idx lk_idx
   | nfa_rep_char:
-    forall c cd lbl
+    forall c cd lbl lk_idx
       (CONSUME: get_pc c lbl = Some (Consume cd)),
-      nfa_rep (Character cd) c lbl (S lbl)
+      nfa_rep (Regex.Character cd) c lbl (S lbl) lk_idx lk_idx
   | nfa_rep_disj:
-    forall c r1 r2 start end1 end2
+    forall c r1 r2 start end1 end2 lk_idx lk_idx1 lk_idx2
       (FORK: get_pc c start = Some (Fork (S start) (S end1)))
-      (NFA1: nfa_rep r1 c (S start) end1)
+      (NFA1: nfa_rep r1 c (S start) end1 lk_idx lk_idx1)
       (JMP: get_pc c end1 = Some (Jmp end2))
-      (NFA2: nfa_rep r2 c (S end1) end2),
+      (NFA2: nfa_rep r2 c (S end1) end2 lk_idx1 lk_idx2),
       nfa_rep
-        (Disjunction r1 r2) c start end2
+        (Disjunction r1 r2) c start end2 lk_idx lk_idx2
   | nfa_rep_seq:
-    forall c r1 r2 start end1 end2
-      (NFA1: nfa_rep r1 c start end1)
-      (NFA2: nfa_rep r2 c end1 end2),
-      nfa_rep (Sequence r1 r2) c start end2
+    forall c r1 r2 start end1 end2 lk_idx lk_idx1 lk_idx2
+      (NFA1: nfa_rep r1 c start end1 lk_idx lk_idx1)
+      (NFA2: nfa_rep r2 c end1 end2 lk_idx1 lk_idx2),
+      nfa_rep (Sequence r1 r2) c start end2 lk_idx lk_idx2
   | nfa_rep_done:
-    forall c r1 greedy lbl,
-      nfa_rep (Quantified greedy 0 (NoI.N 0) r1) c lbl lbl
+    forall c r1 greedy lbl lk_idx,
+      nfa_rep (Quantified greedy 0 (NoI.N 0) r1) c lbl lbl lk_idx lk_idx
   | nfa_rep_qmark:
-    forall c r1 greedy start end1
+    forall c r1 greedy start end1 lk_idx lk_idx1
       (FORK: get_pc c start = Some (greedy_fork greedy (S start) (S end1)))
       (BEGIN: get_pc c (S start) = Some (BeginLoop))
       (RESET: get_pc c (S (S start)) = Some (ResetRegs (def_groups r1)))
-      (NFA1: nfa_rep r1 c (S (S (S start))) end1)
+      (NFA1: nfa_rep r1 c (S (S (S start))) end1 lk_idx lk_idx1)
       (END: get_pc c end1 = Some (EndLoop (S end1))),
-      nfa_rep (Quantified greedy 0 (NoI.N 1) r1) c start (S end1)
+      nfa_rep (Quantified greedy 0 (NoI.N 1) r1) c start (S end1) lk_idx lk_idx1
   | nfa_rep_star:
-    forall c r1 greedy start end1
+    forall c r1 greedy start end1 lk_idx lk_idx1
       (FORK: get_pc c start = Some (greedy_fork greedy (S start) (S end1)))
       (BEGIN: get_pc c (S start) = Some (BeginLoop))
       (RESET: get_pc c (S (S start)) = Some (ResetRegs (def_groups r1)))
-      (NFA1: nfa_rep r1 c (S (S (S start))) end1)
+      (NFA1: nfa_rep r1 c (S (S (S start))) end1 lk_idx lk_idx1)
       (END: get_pc c end1 = Some (EndLoop start)),
-      nfa_rep (Quantified greedy 0 (NoI.Inf) r1) c start (S end1)
+      nfa_rep (Quantified greedy 0 (NoI.Inf) r1) c start (S end1) lk_idx lk_idx1
   | nfa_rep_group:
-    forall c r1 gid start end1
+    forall c r1 gid start end1 lk_idx lk_idx1
       (OPEN: get_pc c start = Some (SetRegOpen gid))
-      (NFA1: nfa_rep r1 c (S start) end1)
+      (NFA1: nfa_rep r1 c (S start) end1 lk_idx lk_idx1)
       (CLOSE: get_pc c end1 = Some (SetRegClose gid)),
-      nfa_rep (Group gid r1) c start (S end1)
+      nfa_rep (Group gid r1) c start (S end1) lk_idx lk_idx1
   | nfa_rep_anchor:
-    forall c a lbl
+    forall c a lbl lk_idx
       (CHECK: get_pc c lbl = Some (CheckAnchor a)),
-      nfa_rep (Anchor a) c lbl (S lbl)
+      nfa_rep (Anchor a) c lbl (S lbl) lk_idx lk_idx
   | nfa_rep_lookaround:
     forall c i r1 lk lbl
-      (* FIXME: be more precise about `i`? *)
-      (ORACLE: get_pc c lbl = Some (OracleQuery i (positivity lk))),
-      nfa_rep (Lookaround lk r1) c lbl (S lbl)
+      (ORACLE: get_pc c lbl = Some (OracleQuery i)),
+      nfa_rep (Lookaround lk r1) c lbl (S lbl) i (S i)
   | nfa_unsupported:
-    forall c r lbl
+    forall c r lbl lk_idx
       (UNSUPPORTED: ~ pike_regex r)
       (KILL: get_pc c lbl = Some KillThread),
-      nfa_rep r c lbl (S lbl).
+      nfa_rep r c lbl (S lbl) lk_idx lk_idx.
 
   (** * Compile Characterization  *)
 
@@ -219,11 +219,11 @@ Section NFA.
   Proof. intros. simpl. auto. Qed.
 
   Lemma nfa_rep_extend:
-    forall r c start endl suffix,
-      nfa_rep r c start endl ->
-      nfa_rep r (c++suffix) start endl.
+    forall r c start endl lk_idx lk_idx' suffix,
+      nfa_rep r c start endl lk_idx lk_idx' ->
+      nfa_rep r (c++suffix) start endl lk_idx lk_idx'.
   Proof.
-    intros r c start endl suffix H. generalize dependent suffix.
+    intros r c start endl lk_idx lk_idx' suffix H. generalize dependent suffix.
     induction H; intros; econstructor;
       try (erewrite get_suffix; eauto); try apply IHnfa_rep;
       try apply IHnfa_rep1; try apply IHnfa_rep2. auto.
@@ -268,13 +268,13 @@ Section NFA.
     forall r c start lk_idx endl prev lk_idx',
       compile r start lk_idx = (c, endl, lk_idx') ->
       start = List.length prev ->
-      nfa_rep r (prev ++ c) start endl.
+      nfa_rep r (prev ++ c) start endl lk_idx lk_idx'.
   Proof.
     intros r. induction r; intros.
     - inversion H. subst. rewrite app_nil_r. constructor.
     - inversion H. subst. constructor. apply get_first.
     - inversion H. destruct (compile r1 (S start)) as [[bc1 end1] lk_idx1] eqn:COMP1. destruct (compile r2 (S end1)) as [[bc2 end2] lk_idx2] eqn:COMP2.
-      inversion H2. subst. apply nfa_rep_disj with (end1:=end1).
+      inversion H2. subst. apply nfa_rep_disj with (end1:=end1) (lk_idx1:=lk_idx1).
       + rewrite get_first. simpl. auto.
       + apply IHr1 with (prev:=prev ++ [Fork (S (length prev)) (S end1)]) in COMP1.
         2: { rewrite length_app. simpl. lia. }
@@ -366,25 +366,27 @@ Section NFA.
   Qed.
 
 
+
   (** * Lifting the representation predicate to continuations  *)
   (* This is useful to relate the continuations used in the tree semantics to the code produced by the NFA compiler *)
 
-  (* action_rep a c pc1 pc2 indicates that the bytecode for a is located in code c between labels pc1 and pc2  *)
-  Inductive action_rep : action -> code -> label -> label -> Prop :=
+  (* action_rep a c pc1 pc2 lk_idx1 lk_idx2 indicates that the bytecode for a is located in code c between labels pc1 and pc2, *)
+  (* with lookaround indices used from lk_idx1 to lk_idx2 (excluded)   *)
+  Inductive action_rep : action -> code -> label -> label -> nat -> nat -> Prop :=
   | areg_bc:
-    forall r c pcstart pcend
-      (NFA: nfa_rep r c pcstart pcend),
-      action_rep (Areg r) c pcstart pcend
+    forall r c pcstart pcend lk_idx lk_idx'
+      (NFA: nfa_rep r c pcstart pcend lk_idx lk_idx'),
+      action_rep (Areg r) c pcstart pcend lk_idx lk_idx'
   | acheck_bc:
-    forall c str pc pcnext
+    forall c str pc pcnext lk_idx
       (END: get_pc c pc = Some (EndLoop pcnext)),
-      action_rep (Acheck str) c pc pcnext
+      action_rep (Acheck str) c pc pcnext lk_idx lk_idx
   | aclose_bc:
-    forall c gid pc
+    forall c gid pc lk_idx
       (CLOSE: get_pc c pc = Some (SetRegClose gid)),
-      action_rep (Aclose gid) c pc (S pc).
+      action_rep (Aclose gid) c pc (S pc) lk_idx lk_idx.
 
-  (* continuation_rep cont c pc n means that the bytecode for cont is located in c at labels pc *)
+  (* actions_rep cont c pc means that the bytecode for cont is located in c at labels pc *)
   (* inside the representation of the continuation, there might be extra jump instructions *)
   (* this representation has to end on an accept instruction, at the end of the bytecode *)
   Inductive actions_rep : actions -> code -> label -> Prop :=
@@ -395,8 +397,8 @@ Section NFA.
       (ACCEPT: get_pc c pc = Some Accept),
       actions_rep [] c pc
   | cons_bc:
-    forall a cont c pcstart pcmid
-      (ACTION: action_rep a c pcstart pcmid)
+    forall a cont c pcstart pcmid lk_idx lk_idx'
+      (ACTION: action_rep a c pcstart pcmid lk_idx lk_idx')
       (CONT: actions_rep cont c pcmid),
       actions_rep (a::cont) c pcstart
   | jump_bc:
@@ -472,16 +474,26 @@ Ltac invert_rep :=
    | [ H : actions_rep (Aclose _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
    | [ H : actions_rep (Acheck _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
    | [ H : actions_rep [] _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : action_rep (Areg _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : action_rep (Aclose _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : action_rep (Acheck _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Epsilon) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Regex.Character _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Disjunction _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Sequence _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Quantified _ _ _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Group _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Anchor _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Lookaround _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : action_rep (Areg _) _ _ _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : action_rep (Aclose _) _ _ _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : action_rep (Acheck _) _ _ _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep (Epsilon) _ _ _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep (Regex.Character _) _ _ _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep (Disjunction _ _) _ _ _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep (Sequence _ _) _ _ _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep (Quantified _ _ _ _) _ _ _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep (Group _ _) _ _ _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep (Anchor _) _ _ _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep (Lookaround _ _) _ _ _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
    | _ => try no_stutter
    end.
+
+Create HintDb rep.
+Hint Constructors nfa_rep : rep.
+Hint Constructors action_rep : rep.
+Hint Constructors actions_rep : rep.
+Hint Resolve nfa_rep_extend : rep.
+
+Ltac rep_impl n := unshelve eauto n with rep; eauto.
+Tactic Notation "rep" integer(n) := rep_impl n.
+Tactic Notation "rep" := rep 7.

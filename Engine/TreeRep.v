@@ -211,18 +211,16 @@ Proof.
     2: { in_subset. }
     eapply tr_choice; eauto.
     + eapply IHTREE1; eauto. pike_subset.
-      eapply cons_bc with (pcmid:=end1); try constructor; eauto.
-      eapply jump_bc; eauto.
+      rep.
     + eapply IHTREE2; eauto. pike_subset.
-      repeat (econstructor; eauto).
+      rep.
   (* sequence *)
   - remember (Areg (Sequence r1 r2) :: cont) as seqcont.
     induction ACT; inversion Heqseqcont; subst;
       try solve[eapply tr_jmp; eauto]; clear IHACT.
     invert_rep. inversion NFA; subst.
     2: { in_subset. }
-    eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto).
+    eapply IHTREE; simpl; rep; pike_subset.
   (* quantified, forced *)
   - pike_subset.
   (* quantified, done *)
@@ -249,14 +247,13 @@ Proof.
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.
            eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+           rep.
         ** eapply IHTREE2; eauto. pike_subset.
       * eapply tr_choice; eauto.
         ** eapply IHTREE2; eauto. pike_subset.
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+           eapply IHTREE1; eauto. pike_subset. rep.
     (* Star *)
     + destruct plus; inversion DINF. clear DINF.
       simpl in ACT.
@@ -269,15 +266,13 @@ Proof.
       * eapply tr_choice; eauto.
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+           eapply IHTREE1; eauto. pike_subset. rep.
         ** eapply IHTREE2; eauto. pike_subset.
       * eapply tr_choice; eauto.
         ** eapply IHTREE2; eauto. pike_subset.
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+           eapply IHTREE1; eauto. pike_subset. rep.
     (* Unsupported *)
     + rewrite DUN in SUBSET. inversion SUBSET; subst.
       inversion H1; subst. inversion H0; subst; lia.
@@ -335,8 +330,9 @@ Lemma actions_rep_unicity:
     bool_tree rer a2 inp b forward t2 ->
     t1 = t2.
 Proof.
-  intros. eapply actions_tree_rep in H1; eauto.
-  eapply actions_tree_rep in H2; eauto.
+  intros.
+  eapply actions_tree_rep in H1 as Htr1; eauto.
+  eapply actions_tree_rep in H2 as Htr2; eauto.
   eapply tree_rep_determ; eauto.
 Qed.
 
