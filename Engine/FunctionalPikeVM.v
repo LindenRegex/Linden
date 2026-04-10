@@ -77,25 +77,21 @@ Fixpoint pike_vm_loop (c:code) (pvs:pike_vm_state) (fuel:nat) : pike_vm_state :=
 Definition vm_fuel (r:regex) (inp:input) : nat :=
   complexity r inp.
 
-Inductive matchres : Type :=
-| OutOfFuel
-| Finished: option leaf -> matchres.
-
-Definition getres (pvs:pike_vm_state) : matchres :=
+Definition getres (pvs:pike_vm_state) : option leaf :=
   match pvs with
-  | PVS_final best => Finished best
-  | _ => OutOfFuel
+  | PVS_final best => best
+  | _ => None
   end.
 
 (* Functional version of the PikeVM *)
-Definition pike_vm_match (r:regex) (inp:input) : matchres :=
+Definition pike_vm_match (r:regex) (inp:input) : option leaf :=
   let code := compilation r in
   let fuel := vm_fuel r inp in
   let pvsinit := pike_vm_initial_state inp in
   getres (pike_vm_loop code pvsinit fuel).
 
 (* Functional version of the unanchored PikeVM *)
-Definition pike_vm_match_unanchored {strs:StrSearch} (r:regex) (inp:input) : matchres :=
+Definition pike_vm_match_unanchored {strs:StrSearch} (r:regex) (inp:input) : option leaf :=
   let code := compilation r in
   let fuel := vm_fuel r inp in
   let pvsinit := pike_vm_initial_state_unanchored (extract_literal rer r) inp in
@@ -166,48 +162,48 @@ Proof.
     erewrite step_loop; eauto.
 Qed.
 
+(* the function always terminates *)
+Theorem pike_vm_loop_terminates:
+  forall r inp,
+    pike_regex r ->
+    exists result, pike_vm_loop (compilation r) (pike_vm_initial_state inp) (vm_fuel r inp) = PVS_final result.
+Proof.
+  intros r inp Hsubset. unfold vm_fuel.
+  pose proof pikevm_complexity rer r inp Hsubset as [result TERM].
+  exists result. now apply steps_loop.
+Qed.
+
+(* the function always terminates *)
+Theorem pike_vm_loop_terminates_unanchored {strs:StrSearch}:
+  forall r inp,
+    pike_regex r ->
+    exists result, pike_vm_loop (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (vm_fuel r inp) = PVS_final result.
+Proof.
+  intros r inp Hsubset. unfold vm_fuel.
+  pose proof pikevm_complexity_unanchored rer r inp Hsubset as [result TERM].
+  exists result. now apply steps_loop.
+Qed.
+
 (* when the function finishes, it returns the correct result *)
 Theorem pike_vm_match_correct:
-  forall r inp result,
-    pike_vm_match r inp = Finished result ->
-    trc_pike_vm rer (compilation r) (pike_vm_initial_state inp) (PVS_final result).
+  forall r inp,
+    pike_regex r ->
+    trc_pike_vm rer (compilation r) (pike_vm_initial_state inp) (PVS_final (pike_vm_match r inp)).
 Proof.
-  unfold pike_vm_match, getres. intros r inp result H.
-  match_destr; inversion H; subst.
+  unfold pike_vm_match, getres. intros r inp Hsubset.
   eapply loop_trc; eauto.
+  now pose proof pike_vm_loop_terminates r inp Hsubset as [result ->].
 Qed.
 
 (* when the function finishes, it returns the correct result *)
 Theorem pike_vm_match_correct_unanchored {strs:StrSearch}:
-  forall r inp result,
-    pike_vm_match_unanchored r inp = Finished result ->
-    trc_pike_vm rer (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (PVS_final result).
+  forall r inp,
+    pike_regex r ->
+    trc_pike_vm rer (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (PVS_final (pike_vm_match_unanchored r inp)).
 Proof.
-  unfold pike_vm_match_unanchored, getres. intros r inp result H.
-  match_destr; inversion H; subst.
+  unfold pike_vm_match_unanchored, getres. intros r inp Hsubset.
   eapply loop_trc; eauto.
-Qed.
-
-(* the function always terminates *)
-Theorem pike_vm_match_terminates:
-  forall r inp,
-    pike_regex r ->
-    exists result, pike_vm_match r inp = Finished result.
-Proof.
-  intros r inp SUBSET. unfold pike_vm_match, vm_fuel.
-  apply pikevm_complexity with (VMS:=VMS) (rer:=rer) (inp:=inp) in SUBSET as [result TERM].
-  exists result. apply steps_loop in TERM. rewrite TERM. auto.
-Qed.
-
-(* the function always terminates *)
-Theorem pike_vm_match_terminates_unanchored {strs:StrSearch}:
-  forall r inp,
-    pike_regex r ->
-    exists result, pike_vm_match_unanchored r inp = Finished result.
-Proof.
-  intros r inp SUBSET. unfold pike_vm_match_unanchored, vm_fuel.
-  apply pikevm_complexity_unanchored with (strs:=strs) (VMS:=VMS) (rer:=rer) (inp:=inp) in SUBSET as [result TERM]; auto.
-  exists result. apply steps_loop in TERM. rewrite TERM. auto.
+  now pose proof pike_vm_loop_terminates_unanchored r inp Hsubset as [result ->].
 Qed.
 
 End FunctionalPikeVM.
@@ -242,7 +238,7 @@ Section Example.
   Example nq_inp: input := Input [a;b] [].
 
   Lemma nullable_quant:
-    pike_vm_match (rer_of nq_regex) nq_regex nq_inp = Finished (Some (Input [] [b;a], GroupMap.empty)).
+    pike_vm_match (rer_of nq_regex) nq_regex nq_inp = Some (Input [] [b;a], GroupMap.empty).
   Proof. reflexivity. Qed.
 
 (** * Example from the paper - Figure 15  *)
@@ -279,7 +275,7 @@ Example final_gm : GroupMap.t :=
   GroupMap.close 1 1 (GroupMap.open 0 1 GroupMap.empty).
 
 Lemma paper_pikevm_exec:
-  pike_vm_match (rer_of paper_regex) paper_regex paper_input = Finished (Some (Input [] [b;a], final_gm)).
+  pike_vm_match (rer_of paper_regex) paper_regex paper_input = Some (Input [] [b;a], final_gm).
 Proof. reflexivity. Qed.
 
 End Example.

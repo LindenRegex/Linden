@@ -46,19 +46,14 @@ Class AnchoredEngine := {
 (* we show that the PikeVM fits the scheme of an anchored engine *)
 #[refine]
 Instance PikeVMAnchoredEngine: AnchoredEngine := {
-  exec r inp := match pike_vm_match rer r inp with
-                | OutOfFuel => None
-                | Finished res => res
-                end;
+  exec r inp := pike_vm_match rer r inp;
   supported_regex := pike_regex;
 }.
   (* exec_correct *)
   intros r inp tree ol Hsubset Htree.
-  pose proof (pike_vm_match_terminates rer r inp Hsubset) as [res Hmatch].
-  rewrite Hmatch.
   split.
-  - intros Hleaf.
-    subst. eauto using pike_vm_match_correct, pike_vm_correct.
+  - intros <-.
+    eauto using pike_vm_match_correct, pike_vm_correct.
   - intros <-.
     symmetry. eauto using pike_vm_match_correct, pike_vm_correct.
 Qed.

@@ -54,18 +54,14 @@ Fixpoint memobt_loop (c:code) (mbt:mbt_state) (fuel:nat) : mbt_state :=
 Definition memobt_fuel (r:regex) (inp:input) : nat :=
   mbt_complexity r inp.
 
-Inductive matchres : Type :=
-| OutOfFuel
-| Finished: option leaf -> memoset -> matchres.
-
-Definition getres (mbt:mbt_state) : matchres :=
+Definition getres (mbt:mbt_state) : option leaf * memoset :=
   match mbt with
-  | MBT_final best ms => Finished best ms
-  | _ => OutOfFuel
+  | MBT_final best ms => (best, ms)
+  | _ => (None, initial_memoset)
   end.
 
 (* Functional version of the MemoBT *)
-Definition memobt_match (r:regex) (inp:input) : matchres :=
+Definition memobt_match (r:regex) (inp:input) : option leaf * memoset :=
   let code := compilation r in
   let fuel := memobt_fuel r inp in
   let mbtinit := initial_state inp in
@@ -135,27 +131,29 @@ Proof.
     erewrite step_loop; eauto.
 Qed.
 
+(* the function always terminates *)
+Theorem memobt_loop_terminates:
+  forall r inp,
+    pike_regex r ->
+    exists result ms, memobt_loop (compilation r) (initial_state inp initial_memoset) (memobt_fuel r inp) = MBT_final result ms.
+Proof.
+  intros r inp Hsubset. unfold memobt_fuel.
+  pose proof memobt_complexity_empty_memoset rer r inp Hsubset as [result [finalms [TERM VAL]]].
+  exists result. exists finalms. now apply steps_loop.
+Qed.
+
 (* when the function finishes, it returns the correct result *)
 Theorem memobt_match_correct:
   forall r inp result ms,
-    memobt_match r inp = Finished result ms ->
+    pike_regex r ->
+    memobt_match r inp = (result, ms) ->
     trc_memo_bt rer (compilation r) (initial_state inp initial_memoset) (MBT_final result ms).
 Proof.
-  unfold memobt_match, getres. intros r inp result ms H.
-  match_destr; inversion H; subst.
+  unfold memobt_match, getres. intros r inp result ms Hsubset H.
   eapply loop_trc; eauto.
-Qed.
-
-
-(* the function always terminates *)
-Theorem memobt_match_terminates:
-  forall r inp,
-    pike_regex r ->
-    exists result ms, memobt_match r inp = Finished result ms.
-Proof.
-  intros r inp SUBSET. unfold memobt_match, memobt_fuel.
-  eapply memobt_complexity_empty_memoset with (rer:=rer) (r:=r) (inp:=inp) in SUBSET as [result [finalms [TERM VAL]]].
-  exists result. exists finalms. apply steps_loop in TERM. rewrite TERM. auto.
+  pose proof memobt_loop_terminates r inp Hsubset as [result' [ms' Hres]].
+  rewrite Hres in *.
+  now injection H as <- <-.
 Qed.
 
 End FunctionMemoBT.
