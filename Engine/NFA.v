@@ -9,6 +9,10 @@ From Warblre Require Import Numeric.
 
 Section NFA.
   Context {params: LindenParameters}.
+  Definition nfa_oracle := input -> bool.
+  Definition nfa_oracles := list nfa_oracle.
+  Definition nfa_oracle_idx := nat.
+
 
   (** * NFA Bytecode *)
   (* the bytecode generated for the PikeVM algorithm *)
@@ -46,6 +50,17 @@ Section NFA.
     rewrite nth_error_app2; try f_equal; lia.
   Qed.
 
+  Lemma get_suffix:
+    forall c suffix pc i,
+      get_pc c pc = Some i ->
+      get_pc (c++suffix) pc = Some i.
+  Proof.
+    unfold get_pc. intros c suffix pc i H.
+    assert (pc < length c).
+    { apply nth_error_Some. rewrite H. unfold not. intros. inversion H0. }
+    rewrite nth_error_app1; auto.
+  Qed.
+
   Corollary get_first:
     forall c prev,
       get_pc (prev ++ c) (length prev) = get_pc c 0.
@@ -78,25 +93,63 @@ Section NFA.
     apply get_prefix.
   Qed.
 
-  Lemma get_suffix:
-    forall c suffix pc i,
-      get_pc c pc = Some i ->
-      get_pc (c++suffix) pc = Some i.
+  Lemma get_nil :
+    forall pc i,
+      get_pc [] pc <> Some i.
+  Proof. destruct pc; easy. Qed.
+
+  Lemma get_single :
+    forall pc i1 i2,
+      get_pc [i1] pc = Some i2 ->
+      i1 = i2 /\ pc = 0.
   Proof.
-    unfold get_pc. intros c suffix pc i H.
-    assert (pc < length c).
-    { apply nth_error_Some. rewrite H. unfold not. intros. inversion H0. }
-    rewrite nth_error_app1; auto.
+    intros. destruct pc; simpl in H.
+    - split; congruence.
+    - now eapply get_nil in H.
   Qed.
 
-  Lemma get_prev:
-    forall prev suffix pc i,
-      get_pc (prev ++ suffix) pc = Some i ->
-      pc < length prev ->
-      get_pc prev pc = Some i.
+  Lemma get_app :
+    forall pc i c1 c2,
+      get_pc (c1 ++ c2) pc = Some i ->
+      get_pc c1 pc = Some i \/ get_pc c2 (pc - length c1) = Some i.
   Proof.
-    unfold get_pc. intros. rewrite nth_error_app1 in H; auto.
+    unfold get_pc.
+    intros.
+    destruct (Nat.ltb pc (length c1)) as [|] eqn:Hpc.
+    - left.
+      rewrite PeanoNat.Nat.ltb_lt in Hpc.
+      erewrite <-nth_error_app1; eauto.
+    - right.
+      rewrite PeanoNat.Nat.ltb_ge in Hpc.
+      erewrite <-nth_error_app2; eauto.
   Qed.
+
+  Lemma get_cons :
+    forall pc i i' c,
+      get_pc (i' :: c) pc = Some i ->
+      i' = i \/ get_pc c (pc - 1) = Some i.
+  Proof.
+    intros. destruct pc; simpl in H |- *.
+    - left. congruence.
+    - right. now rewrite PeanoNat.Nat.sub_0_r.
+  Qed.
+
+  Ltac get_pc :=
+    match goal with
+    | |- get_pc (?prev ++ ?c) ?pc = Some ?i =>
+      (eapply get_first || eapply get_second || eapply get_third); eauto
+    | [H: get_pc [] ?pc = Some ?i |- _] =>
+      exfalso;
+      eapply get_nil; eauto
+    | [H: get_pc [?i1] ?pc = Some ?i2 |- _] =>
+      eapply get_single in H as [?H1 ?H2];
+      subst;
+      inversion H1; try congruence || eauto
+    | [H: get_pc (?i' :: ?c) ?pc = Some ?i |- _] =>
+      eapply get_cons in H as [H|H]; try get_pc || congruence || eauto
+    | [H: get_pc (?c1 ++ ?c2) ?pc = Some ?i |- _] =>
+      eapply get_app in H as [H|H]; try get_pc || congruence || eauto
+    end.
 
   Definition next_pcs (pc:label) (b:bytecode) : list label :=
     match b with
@@ -115,7 +168,7 @@ Section NFA.
     else Fork l2 l1.
 
   (* also returns the next fresh label and lookaround index *)
-  Fixpoint compile (r:regex) (fresh:label) (lk_idx:nat): code * label * nat :=
+  Fixpoint compile (r:regex) (fresh:label) (lk_idx:nfa_oracle_idx): code * label * nfa_oracle_idx :=
     match r with
     | Epsilon => ([], fresh, lk_idx)
     | Character cd => ([Consume cd], S fresh, lk_idx)
@@ -152,7 +205,7 @@ Section NFA.
 
   (* nfa_rep r code pc1 pc2 lk_idx1 lk_idx2 means that *)
   (* the bytecode for r is represented in code, from pc1 to pc2 (excluded), with lookaround indices used from lk_idx1 to lk_idx2 (excluded) *)
-  Inductive nfa_rep : regex -> code -> label -> label -> nat -> nat -> Prop :=
+  Inductive nfa_rep : regex -> code -> label -> label -> nfa_oracle_idx -> nfa_oracle_idx -> Prop :=
   | nfa_rep_epsilon:
     forall c lbl lk_idx,
       nfa_rep Epsilon c lbl lbl lk_idx lk_idx
@@ -204,7 +257,7 @@ Section NFA.
       nfa_rep (Anchor a) c lbl (S lbl) lk_idx lk_idx
   | nfa_rep_lookaround:
     forall c i r1 lk lbl
-      (ORACLE: get_pc c lbl = Some (OracleQuery i)),
+      (ORACLE: get_pc c lbl = Some (OracleQuery i lk r1)),
       nfa_rep (Lookaround lk r1) c lbl (S lbl) i (S i)
   | nfa_unsupported:
     forall c r lbl lk_idx
@@ -272,10 +325,9 @@ Section NFA.
   Proof.
     intros r. induction r; intros.
     - inversion H. subst. rewrite app_nil_r. constructor.
-    - inversion H. subst. constructor. apply get_first.
+    - inversion H. subst. constructor. get_pc.
     - inversion H. destruct (compile r1 (S start)) as [[bc1 end1] lk_idx1] eqn:COMP1. destruct (compile r2 (S end1)) as [[bc2 end2] lk_idx2] eqn:COMP2.
-      inversion H2. subst. apply nfa_rep_disj with (end1:=end1) (lk_idx1:=lk_idx1).
-      + rewrite get_first. simpl. auto.
+      inversion H2. subst. apply nfa_rep_disj with (end1:=end1) (lk_idx1:=lk_idx1); try get_pc.
       + apply IHr1 with (prev:=prev ++ [Fork (S (length prev)) (S end1)]) in COMP1.
         2: { rewrite length_app. simpl. lia. }
         replace (prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
@@ -284,7 +336,7 @@ Section NFA.
         apply nfa_rep_extend. auto.
       + apply fresh_correct in COMP1. rewrite <- COMP1.
         replace (S (length prev) + length bc1) with (length prev + (S (length bc1))) by lia.
-        rewrite get_prefix. rewrite cons_app. rewrite app_assoc. apply get_first.
+        rewrite get_prefix. rewrite cons_app. rewrite app_assoc. get_pc.
       + apply IHr2 with (prev:= prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) in COMP2.
         * replace (prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
             ((prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) ++ bc2).
@@ -302,15 +354,12 @@ Section NFA.
     - inversion H. destruct min.
       2: { inversion H2. subst. apply nfa_unsupported.
           - unfold not. intros. inversion H0.
-          - rewrite get_first. simpl. auto. }
+          - get_pc. }
       destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst delta.
       (* Zero repetitions *)
       + inversion H2. subst. constructor.
       (* Question Mark *)
-      + destruct (compile r (S (S (S start)))) as [[bc1 end1] lk_idx1] eqn:COMP1. inversion H2. subst. constructor.
-        * rewrite get_first. simpl. auto.
-        * rewrite get_second. simpl. auto.
-        * rewrite get_third. simpl. auto.
+      + destruct (compile r (S (S (S start)))) as [[bc1 end1] lk_idx1] eqn:COMP1. inversion H2. subst. constructor; try get_pc.
         * apply IHr with (prev:=prev ++ [greedy_fork greedy (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
           ** rewrite <- app_assoc in COMP1. simpl in COMP1.
              replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
@@ -324,10 +373,7 @@ Section NFA.
           apply fresh_correct in COMP1. subst. apply get_first_0.
           simpl. rewrite length_app. simpl. lia.
       (* Star *)
-      + destruct (compile r (S (S (S start)))) as [[bc1 end1] lk_idx1] eqn:COMP1. inversion H2. subst. constructor.
-        * rewrite get_first. simpl. auto.
-        * rewrite get_second. simpl. auto.
-        * rewrite get_third. simpl. auto.
+      + destruct (compile r (S (S (S start)))) as [[bc1 end1] lk_idx1] eqn:COMP1. inversion H2. subst. constructor; try get_pc.
         * apply IHr with (prev:=prev ++ [greedy_fork greedy (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
           ** rewrite <- app_assoc in COMP1. simpl in COMP1.
              replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
@@ -345,12 +391,11 @@ Section NFA.
         { destruct delta'; auto. lia. destruct delta'; auto. lia. }
         inversion H1. subst. apply nfa_unsupported.
         * unfold not. intros. inversion H0; subst; lia.
-        * rewrite get_first. simpl. auto.
+        * get_pc.
     - inversion H. subst. eapply nfa_rep_lookaround.
-      rewrite get_first. simpl. eauto.
+      get_pc.
     - inversion H. destruct (compile r (S start)) as [[bc1 end1] lk_idx1] eqn:COMP1. inversion H2. subst.
-      constructor.
-      + rewrite get_first. simpl. auto.
+      constructor; try get_pc.
       + apply IHr with (prev:=prev ++ [SetRegOpen id]) in COMP1.
         2: { rewrite length_app. simpl. lia. }
         replace (prev ++ SetRegOpen id :: bc1 ++ [SetRegClose id]) with ((prev ++ SetRegOpen id :: bc1) ++ [SetRegClose id]).
@@ -359,7 +404,7 @@ Section NFA.
       + replace (prev ++ SetRegOpen id :: bc1 ++ [SetRegClose id]) with ((prev ++ SetRegOpen id :: bc1) ++ [SetRegClose id]).
         2:{ rewrite <- app_assoc. auto. }
         apply get_first_0. apply fresh_correct in COMP1. subst. rewrite length_app. simpl. lia.
-    - inversion H. subst. constructor. apply get_first.
+    - inversion H. subst. constructor. get_pc.
     - inversion H. subst. apply nfa_unsupported.
       + unfold not. intros. inversion H0.
       + rewrite get_first. simpl. auto.
@@ -372,7 +417,7 @@ Section NFA.
 
   (* action_rep a c pc1 pc2 lk_idx1 lk_idx2 indicates that the bytecode for a is located in code c between labels pc1 and pc2, *)
   (* with lookaround indices used from lk_idx1 to lk_idx2 (excluded)   *)
-  Inductive action_rep : action -> code -> label -> label -> nat -> nat -> Prop :=
+  Inductive action_rep : action -> code -> label -> label -> nfa_oracle_idx -> nfa_oracle_idx -> Prop :=
   | areg_bc:
     forall r c pcstart pcend lk_idx lk_idx'
       (NFA: nfa_rep r c pcstart pcend lk_idx lk_idx'),
