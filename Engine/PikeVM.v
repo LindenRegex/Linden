@@ -340,6 +340,9 @@ Definition pvs_reverse (pvs: pike_vm_state) : pike_vm_state :=
   | PVS_final best => PVS_final (leaf_reverse best)
   end.
 
+Definition nfa_oracle_reverse (o: nfa_oracle) : nfa_oracle := fun i => o (input_reverse i).
+Definition nfa_oracles_reverse (os: nfa_oracles) : nfa_oracles := List.map nfa_oracle_reverse os.
+
 Notation involutive f := (forall x, f (f x) = x).
 
 Lemma map_map_involutive {A}: forall (f : A -> A) l,
@@ -369,6 +372,37 @@ Proof.
   destruct x as [inp active best blocked nextprefix seen|best]; simpl.
   - now rewrite input_reverse_involutive, leaf_reverse_involutive.
   - now rewrite leaf_reverse_involutive.
+Qed.
+
+Lemma nfa_oracle_reverse_involutive : involutive nfa_oracle_reverse.
+Proof.
+  intros o.
+  unfold nfa_oracle_reverse.
+  extensionality i.
+  now rewrite input_reverse_involutive.
+Qed.
+
+Lemma nfa_oracles_reverse_involutive : involutive nfa_oracles_reverse.
+Proof.
+  induction x; simpl.
+  - reflexivity.
+  - now rewrite IHx, nfa_oracle_reverse_involutive.
+Qed.
+
+Lemma nfa_oracles_reverse_get :
+  forall os i o,
+    nth_error os i = Some o ->
+    nth_error (nfa_oracles_reverse os) i = Some (nfa_oracle_reverse o).
+Proof.
+  induction os; intros [|i]; simpl; congruence || eauto.
+Qed.
+
+Lemma nfa_oracles_reverse_none :
+  forall os i,
+    nth_error os i = None ->
+    nth_error (nfa_oracles_reverse os) i = None.
+Proof.
+  induction os; intros [|i]; simpl; congruence || eauto.
 Qed.
 
 Lemma advance_input_reverse_none : forall inp dir,
@@ -418,15 +452,20 @@ Proof.
 Qed.
 
 Lemma epsilon_step_reverse :
-  forall t c dir inp,
-    epsilon_step t c dir inp = epsilon_step t c (direction_reverse dir) (input_reverse inp).
+  forall t c dir os inp,
+    epsilon_step t c dir os inp = epsilon_step t c (direction_reverse dir) (nfa_oracles_reverse os) (input_reverse inp).
 Proof.
-  intros [[pc gm] b] c dir inp.
+  intros [[pc gm] b] c dir os inp.
   simpl. destruct get_pc as [inst|]; [|reflexivity]; destruct inst; try easy.
   - now rewrite check_read_reverse.
   - unfold anchor_dir. destruct dir; now rewrite anchor_satisfied_reverse, ?flip_anchor_involutive.
   - now rewrite idx_dir_reverse.
   - now rewrite idx_dir_reverse.
+  - destruct nth_error eqn:Hnth.
+    + eapply nfa_oracles_reverse_get in Hnth as ->.
+      unfold nfa_oracle_reverse.
+      now rewrite input_reverse_involutive.
+    + now eapply nfa_oracles_reverse_none in Hnth as ->.
 Qed.
 
 Lemma next_prefix_counter_reverse {strs:StrSearch}:
@@ -448,12 +487,12 @@ Tactic Notation "reverse" := autorewrite with invo using try (easy || congruence
 
 (* the PikeVM in a forward direction corresponds to a mapped version in the backward direction *)
 Lemma pikevm_step_reverse :
-  forall c dir pvs pvs_next1 pvs_next2,
-    pike_vm_step c dir pvs pvs_next1 ->
-    pike_vm_step c (direction_reverse dir) (pvs_reverse pvs) pvs_next2 ->
+  forall c dir os pvs pvs_next1 pvs_next2,
+    pike_vm_step c dir os pvs pvs_next1 ->
+    pike_vm_step c (direction_reverse dir) (nfa_oracles_reverse os) (pvs_reverse pvs) pvs_next2 ->
     pvs_next1 = pvs_reverse pvs_next2.
 Proof.
-  intros c dir pvs pvs_next1 pvs_next2 H1 H2.
+  intros c dir os pvs pvs_next1 pvs_next2 H1 H2.
   inversion H1; subst; simpl in *.
   - inversion H2; subst. simpl. reverse.
   - inversion H2; subst. simpl.

@@ -87,20 +87,26 @@ Definition getres (pvs:pike_vm_state) : matchres :=
   | _ => OutOfFuel
   end.
 
+Definition nfa_oracles_dir (os: nfa_oracles) (dir: Direction) : nfa_oracles :=
+  match dir with
+  | forward => os
+  | backward => nfa_oracles_reverse os
+  end.
+
 Parameter nfa_oracles_create : (regex -> nfa_oracles).
 (* Functional version of the PikeVM *)
 Definition pike_vm_match (r:regex) (inp:input) (dir:Direction) : matchres :=
   let code := compilation r in
   let fuel := vm_fuel r inp dir in
   let pvsinit := pike_vm_initial_state inp in
-  getres (pike_vm_loop code dir (nfa_oracles_create r) pvsinit fuel).
+  getres (pike_vm_loop code dir (nfa_oracles_dir (nfa_oracles_create r) dir) pvsinit fuel).
 
 (* Functional version of the unanchored PikeVM *)
 Definition pike_vm_match_unanchored {strs:StrSearch} (r:regex) (inp:input) (dir:Direction): matchres :=
   let code := compilation r in
   let fuel := vm_fuel r inp dir in
   let pvsinit := pike_vm_initial_state_unanchored (extract_literal rer r) inp dir in
-  getres (pike_vm_loop code dir (nfa_oracles_create r) pvsinit fuel).
+  getres (pike_vm_loop code dir (nfa_oracles_dir (nfa_oracles_create r) dir) pvsinit fuel).
 
 
 (** * Smallstep correspondence  *)
@@ -154,11 +160,11 @@ Proof.
 Qed.
 
 Theorem steps_loop:
-  forall c dir pvs1 pvs2 fuel,
-    steps (pike_vm_step rer c dir) pvs1 fuel (PVS_final pvs2) ->
-    pike_vm_loop c dir pvs1 fuel = (PVS_final pvs2).
+  forall c dir os pvs1 pvs2 fuel,
+    steps (pike_vm_step rer c dir os) pvs1 fuel (PVS_final pvs2) ->
+    pike_vm_loop c dir os pvs1 fuel = (PVS_final pvs2).
 Proof.
-  intros c dir pvs1 pvs2 fuel H. remember (PVS_final pvs2) as result.
+  intros c dir os pvs1 pvs2 fuel H. remember (PVS_final pvs2) as result.
   induction H; subst.
   - destruct n; simpl; auto.
   - destruct x.
@@ -170,7 +176,7 @@ Qed.
 Theorem pike_vm_match_correct:
   forall r dir inp result,
     pike_vm_match r inp dir = Finished result ->
-    trc_pike_vm rer (compilation r) dir (pike_vm_initial_state inp) (PVS_final result).
+    trc_pike_vm rer (compilation r) dir (nfa_oracles_dir (nfa_oracles_create r) dir) (pike_vm_initial_state inp) (PVS_final result).
 Proof.
   unfold pike_vm_match, getres. intros r dir inp result H.
   match_destr; inversion H; subst.
@@ -181,7 +187,7 @@ Qed.
 Theorem pike_vm_match_correct_unanchored {strs:StrSearch}:
   forall r dir inp result,
     pike_vm_match_unanchored r inp dir = Finished result ->
-    trc_pike_vm rer (compilation r) dir (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (PVS_final result).
+    trc_pike_vm rer (compilation r) dir (nfa_oracles_dir (nfa_oracles_create r) dir) (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (PVS_final result).
 Proof.
   unfold pike_vm_match_unanchored, getres. intros r dir inp result H.
   match_destr; inversion H; subst.
@@ -195,7 +201,7 @@ Theorem pike_vm_match_terminates:
     exists result, pike_vm_match r inp dir = Finished result.
 Proof.
   intros r inp dir SUBSET. unfold pike_vm_match, vm_fuel.
-  apply pikevm_complexity with (VMS:=VMS) (rer:=rer) (inp:=inp) (dir:=dir) in SUBSET as [result TERM].
+  apply pikevm_complexity with (VMS:=VMS) (rer:=rer) (inp:=inp) (dir:=dir) (os:=nfa_oracles_dir (nfa_oracles_create r) dir) in SUBSET as [result TERM].
   exists result. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
@@ -206,7 +212,7 @@ Theorem pike_vm_match_terminates_unanchored {strs:StrSearch}:
     exists result, pike_vm_match_unanchored r inp dir = Finished result.
 Proof.
   intros r inp dir SUBSET. unfold pike_vm_match_unanchored, vm_fuel.
-  apply pikevm_complexity_unanchored with (strs:=strs) (VMS:=VMS) (rer:=rer) (inp:=inp) (dir:=dir) in SUBSET as [result TERM]; auto.
+  apply pikevm_complexity_unanchored with (strs:=strs) (VMS:=VMS) (rer:=rer) (inp:=inp) (dir:=dir) (os:=nfa_oracles_dir (nfa_oracles_create r) dir) in SUBSET as [result TERM]; auto.
   exists result. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
@@ -214,7 +220,7 @@ Qed.
 Lemma trc_pike_vm_reverse:
   forall c dir os pvs result1 result2,
     trc_pike_vm rer c dir os pvs (PVS_final result1) ->
-    trc_pike_vm rer c (direction_reverse dir) os (pvs_reverse pvs) (PVS_final result2) ->
+    trc_pike_vm rer c (direction_reverse dir) (nfa_oracles_reverse os) (pvs_reverse pvs) (PVS_final result2) ->
     result1 = leaf_reverse result2.
 Proof.
   intros c dir os pvs result1 result2 H1.
@@ -240,7 +246,8 @@ Lemma pike_vm_match_reverse :
     result1 = leaf_reverse result2.
 Proof.
   intros r inp dir result1 result2 H1%pike_vm_match_correct H2%pike_vm_match_correct.
-  eapply trc_pike_vm_reverse; eauto.
+  eapply trc_pike_vm_reverse; destruct dir; eauto; simpl.
+  now rewrite nfa_oracles_reverse_involutive.
 Qed.
 
 (* expresses unanchored matching in the reverse direction in terms of the the other direction *)
@@ -252,8 +259,7 @@ Lemma pike_vm_match_reverse_unanchored {strs:StrSearch}:
 Proof.
   intros r inp dir result1 result2 H1%pike_vm_match_correct_unanchored H2%pike_vm_match_correct_unanchored.
   unfold pike_vm_initial_state_unanchored in *.
-  eapply trc_pike_vm_reverse; eauto.
-  now rewrite next_prefix_counter_reverse.
+  eapply trc_pike_vm_reverse; destruct dir; eauto; simpl; now rewrite next_prefix_counter_reverse, ?nfa_oracles_reverse_involutive.
 Qed.
 
 End FunctionalPikeVM.
