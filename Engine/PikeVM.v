@@ -125,7 +125,7 @@ Definition idx_dir (inp:input) (dir:Direction): nat :=
   end.
 
 (* an atomic step for a thread *)
-Definition epsilon_step (t:thread) (c:code) (dir:Direction) (i:input): epsilon_result :=
+Definition epsilon_step (t:thread) (c:code) (dir:Direction) (os:nfa_oracles) (i:input): epsilon_result :=
   let '(pc, gm, b) := t in
   match get_pc c pc with
   | None => EpsDead
@@ -150,6 +150,12 @@ Definition epsilon_step (t:thread) (c:code) (dir:Direction) (i:input): epsilon_r
                         | CannotExit => EpsDead
                         | CanExit => EpsActive [upd_label t next]
                         end
+      | OracleQuery n _ _ => match nth_error os n with
+                             | None => EpsDead
+                             | Some oracle =>
+                                 if oracle i then EpsActive [advance_thread t]
+                                 else EpsDead
+                             end
       | KillThread => EpsDead
       end
   end.
@@ -189,17 +195,17 @@ Definition pike_vm_initial_state (inp:input) : pike_vm_state :=
 
 
 (* small-step semantics for the PikeVM algorithm *)
-Variant pike_vm_step (c:code) (dir:Direction): pike_vm_state -> pike_vm_state -> Prop :=
+Variant pike_vm_step (c:code) (dir:Direction) (os:nfa_oracles): pike_vm_state -> pike_vm_state -> Prop :=
 | pvs_final:
 (* moving to a final state when there are no more active or blocked threads *)
   forall inp best seen,
-    pike_vm_step c dir (PVS inp [] best [] None seen) (PVS_final best)
+    pike_vm_step c dir os (PVS inp [] best [] None seen) (PVS_final best)
 | pvs_acc:
 (* if there are no more active or blocked threads and we know where the next prefix matches, *)
 (* we accelerate to that point *)
   forall inp best n lit strs nextinp seen
     (ADVANCE: advance_input_n inp (S n) dir = nextinp),
-    pike_vm_step c dir (PVS inp [] best [] (Some (n, lit, strs)) seen) (PVS nextinp [pike_vm_initial_thread] best [] (next_prefix_counter nextinp dir lit) initial_seenpcs)
+    pike_vm_step c dir os (PVS inp [] best [] (Some (n, lit, strs)) seen) (PVS nextinp [pike_vm_initial_thread] best [] (next_prefix_counter nextinp dir lit) initial_seenpcs)
 | pvs_end:
   (* when the list of active is empty and we've reached the end of string *)
   (* in practice, this rule is never used because we can have no blocked threads *)
@@ -207,60 +213,60 @@ Variant pike_vm_step (c:code) (dir:Direction): pike_vm_state -> pike_vm_state ->
   (* and for relating it to the functional version *)
   forall inp best thr blocked nextprefix seen
     (ADVANCE: advance_input inp dir = None),
-    pike_vm_step c dir (PVS inp [] best (thr::blocked) nextprefix seen) (PVS_final best)
+    pike_vm_step c dir os (PVS inp [] best (thr::blocked) nextprefix seen) (PVS_final best)
 | pvs_nextchar:
   (* when the list of active threads is empty (but not blocked), restart from the blocked ones, proceeding to the next character *)
   (* reset the set of seen pcs *)
   forall inp1 inp2 best thr blocked seen
     (ADVANCE: advance_input inp1 dir = Some inp2),
-    pike_vm_step c dir (PVS inp1 [] best (thr::blocked) None seen) (PVS inp2 (thr::blocked) best [] None initial_seenpcs)
+    pike_vm_step c dir os (PVS inp1 [] best (thr::blocked) None seen) (PVS inp2 (thr::blocked) best [] None initial_seenpcs)
 | pvs_nextchar_generate:
   (* when the list of active threads is empty (but not blocked), restart from the blocked ones, proceeding to the next character *)
   (* since the nextprefix counter reached zero, we must also append as lowest priority the initial thread *)
   (* reset the set of seen pcs *)
   forall inp1 inp2 best lit strs thr blocked seen
     (ADVANCE: advance_input inp1 dir = Some inp2),
-    pike_vm_step c dir (PVS inp1 [] best (thr::blocked) (Some (0, lit, strs)) seen) (PVS inp2 ((thr::blocked) ++ [pike_vm_initial_thread]) best [] (next_prefix_counter inp2 dir lit) initial_seenpcs)
+    pike_vm_step c dir os (PVS inp1 [] best (thr::blocked) (Some (0, lit, strs)) seen) (PVS inp2 ((thr::blocked) ++ [pike_vm_initial_thread]) best [] (next_prefix_counter inp2 dir lit) initial_seenpcs)
 | pvs_nextchar_filter:
   (* when the list of active threads is empty (but not blocked), restart from the blocked ones, proceeding to the next character *)
   (* since the nextprefix counter is nonzero, we do not append the initial thread *)
   (* reset the set of seen pcs *)
   forall inp1 inp2 best n lit strs thr blocked seen
     (ADVANCE: advance_input inp1 dir = Some inp2),
-    pike_vm_step c dir (PVS inp1 [] best (thr::blocked) (Some (S n, lit, strs)) seen) (PVS inp2 (thr::blocked) best [] (Some (n, lit, strs)) initial_seenpcs)
+    pike_vm_step c dir os (PVS inp1 [] best (thr::blocked) (Some (S n, lit, strs)) seen) (PVS inp2 (thr::blocked) best [] (Some (n, lit, strs)) initial_seenpcs)
 | pvs_skip:
   (* when the pc has already been seen at this current index, we skip it entirely *)
   forall inp t active best blocked nextprefix seen
     (SEEN: seen_thread seen t = true),
-    pike_vm_step c dir (PVS inp (t::active) best blocked nextprefix seen) (PVS inp active best blocked nextprefix seen)
+    pike_vm_step c dir os (PVS inp (t::active) best blocked nextprefix seen) (PVS inp active best blocked nextprefix seen)
 | pvs_active:
   (* generated new active threads: add them in front of the low-priority ones *)
   forall inp t active best blocked nextprefix seen nextactive
     (UNSEEN: seen_thread seen t = false)
-    (STEP: epsilon_step t c dir inp = EpsActive nextactive),
-    pike_vm_step c dir (PVS inp (t::active) best blocked nextprefix seen) (PVS inp (nextactive++active) best blocked nextprefix (add_thread seen t))
+    (STEP: epsilon_step t c dir os inp = EpsActive nextactive),
+    pike_vm_step c dir os (PVS inp (t::active) best blocked nextprefix seen) (PVS inp (nextactive++active) best blocked nextprefix (add_thread seen t))
 | pvs_match:
   (* a match is found, discard remaining low-priority active threads *)
   forall inp t active best blocked nextprefix seen
     (UNSEEN: seen_thread seen t = false)
-    (STEP: epsilon_step t c dir inp = EpsMatch),
-    pike_vm_step c dir (PVS inp (t::active) best blocked nextprefix seen) (PVS inp [] (Some (inp,gm_of t)) blocked None (add_thread seen t))
+    (STEP: epsilon_step t c dir os inp = EpsMatch),
+    pike_vm_step c dir os (PVS inp (t::active) best blocked nextprefix seen) (PVS inp [] (Some (inp,gm_of t)) blocked None (add_thread seen t))
 | pvs_blocked:
   (* add the new blocked thread after the previous ones *)
   forall inp t active best blocked nextprefix seen newt
     (UNSEEN: seen_thread seen t = false)
-    (STEP: epsilon_step t c dir inp = EpsBlocked newt),
-    pike_vm_step c dir (PVS inp (t::active) best blocked nextprefix seen) (PVS inp active best (blocked ++ [newt]) nextprefix (add_thread seen t)).
+    (STEP: epsilon_step t c dir os inp = EpsBlocked newt),
+    pike_vm_step c dir os (PVS inp (t::active) best blocked nextprefix seen) (PVS inp active best (blocked ++ [newt]) nextprefix (add_thread seen t)).
 
 (** * PikeVM properties  *)
 
 Theorem pikevm_deterministic:
-  forall c dir pvso pvs1 pvs2
-    (STEP1: pike_vm_step c dir pvso pvs1)
-    (STEP2: pike_vm_step c dir pvso pvs2),
+  forall c dir os pvso pvs1 pvs2
+    (STEP1: pike_vm_step c dir os pvso pvs1)
+    (STEP2: pike_vm_step c dir os pvso pvs2),
     pvs1 = pvs2.
 Proof.
-  intros c dir pvso pvs1 pvs2 STEP1 STEP2. inversion STEP1; subst.
+  intros c dir os pvso pvs1 pvs2 STEP1 STEP2. inversion STEP1; subst.
   - inversion STEP2; subst; auto.
   - inversion STEP2; subst; auto.
   - inversion STEP2; subst; auto; rewrite ADVANCE in ADVANCE0; inversion ADVANCE0.
@@ -280,11 +286,11 @@ Proof.
 Qed.
 
 Theorem pikevm_progress:
-  forall c dir inp active best blocked nextprefix seen,
+  forall c dir os inp active best blocked nextprefix seen,
   exists pvs_next,
-    pike_vm_step c dir (PVS inp active best blocked nextprefix seen) pvs_next.
+    pike_vm_step c dir os (PVS inp active best blocked nextprefix seen) pvs_next.
 Proof.
-  intros c dir inp active best blocked nextprefix seen.
+  intros c dir os inp active best blocked nextprefix seen.
   destruct active as [|[[pc gm] b] active].
   - destruct blocked as [|t blocked].
     + destruct nextprefix.
@@ -299,7 +305,7 @@ Proof.
       * eexists. apply pvs_end. eauto.
   - destruct (seen_thread seen (pc,gm,b)) eqn:SEEN.
     { eexists. apply pvs_skip. auto. }
-    destruct (epsilon_step (pc,gm,b) c dir inp) eqn:EPS.
+    destruct (epsilon_step (pc,gm,b) c dir os inp) eqn:EPS.
     + eexists. apply pvs_active; eauto.
     + eexists. apply pvs_match; eauto.
     + eexists. apply pvs_blocked; eauto.

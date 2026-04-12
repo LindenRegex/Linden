@@ -19,7 +19,7 @@ Section FunctionalPikeVM.
 (** * Functional Definition  *)
 
 (* a functional version of the small step *)
-Definition pike_vm_func_step (c:code) (dir:Direction) (pvs:pike_vm_state) : pike_vm_state :=
+Definition pike_vm_func_step (c:code) (dir:Direction) (os:nfa_oracles) (pvs:pike_vm_state) : pike_vm_state :=
   match pvs with
   | PVS_final _ => pvs
   | PVS inp active best blocked nextprefix seen =>
@@ -49,7 +49,7 @@ Definition pike_vm_func_step (c:code) (dir:Direction) (pvs:pike_vm_state) : pike
           | true => PVS inp active best blocked nextprefix seen (* pvs_skip *)
           | false =>
               let nextseen := add_thread seen t in
-              match (epsilon_step rer t c dir inp) with
+              match (epsilon_step rer t c dir os inp) with
               | EpsActive nextactive =>
                   PVS inp (nextactive++active) best blocked nextprefix nextseen (* pvs_active *)
               | EpsMatch =>
@@ -62,14 +62,14 @@ Definition pike_vm_func_step (c:code) (dir:Direction) (pvs:pike_vm_state) : pike
   end.
 
 (* looping the small step function until fuel runs out or a final state is reached *)
-Fixpoint pike_vm_loop (c:code) (dir:Direction) (pvs:pike_vm_state) (fuel:nat) : pike_vm_state :=
+Fixpoint pike_vm_loop (c:code) (dir:Direction) (os:nfa_oracles) (pvs:pike_vm_state) (fuel:nat) : pike_vm_state :=
   match pvs with
   | PVS_final _ => pvs
   | _ =>
       match fuel with
       | 0 => pvs
       | S fuel =>
-          pike_vm_loop c dir (pike_vm_func_step c dir pvs) fuel
+          pike_vm_loop c dir os (pike_vm_func_step c dir os pvs) fuel
       end
   end.
 
@@ -87,19 +87,20 @@ Definition getres (pvs:pike_vm_state) : matchres :=
   | _ => OutOfFuel
   end.
 
+Parameter nfa_oracles_create : (regex -> nfa_oracles).
 (* Functional version of the PikeVM *)
 Definition pike_vm_match (r:regex) (inp:input) (dir:Direction) : matchres :=
   let code := compilation r in
   let fuel := vm_fuel r inp dir in
   let pvsinit := pike_vm_initial_state inp in
-  getres (pike_vm_loop code dir pvsinit fuel).
+  getres (pike_vm_loop code dir (nfa_oracles_create r) pvsinit fuel).
 
 (* Functional version of the unanchored PikeVM *)
 Definition pike_vm_match_unanchored {strs:StrSearch} (r:regex) (inp:input) (dir:Direction): matchres :=
   let code := compilation r in
   let fuel := vm_fuel r inp dir in
   let pvsinit := pike_vm_initial_state_unanchored (extract_literal rer r) inp dir in
-  getres (pike_vm_loop code dir pvsinit fuel).
+  getres (pike_vm_loop code dir (nfa_oracles_create r) pvsinit fuel).
 
 
 (** * Smallstep correspondence  *)
@@ -113,29 +114,29 @@ Ltac match_destr:=
   end.
 
 Theorem func_step_correct:
-  forall c dir pvs1 pvs2,
-    pike_vm_func_step c dir pvs1 = pvs2 ->
-    pike_vm_step rer c dir pvs1 pvs2 \/ final_state pvs1.
+  forall c dir os pvs1 pvs2,
+    pike_vm_func_step c dir os pvs1 = pvs2 ->
+    pike_vm_step rer c dir os pvs1 pvs2 \/ final_state pvs1.
 Proof.
-  unfold pike_vm_func_step. intros c dir pvs1 pvs2 H.
+  unfold pike_vm_func_step. intros c dir os pvs1 pvs2 H.
   repeat match_destr; subst; try solve[left; constructor; auto].
   right. constructor.
 Qed.
 
 Corollary func_step_not_final:
-  forall c dir inp active best blocked nextprefix seen,
-    pike_vm_step rer c dir (PVS inp active best blocked nextprefix seen) (pike_vm_func_step c dir (PVS inp active best blocked nextprefix seen)).
+  forall c dir os inp active best blocked nextprefix seen,
+    pike_vm_step rer c dir os (PVS inp active best blocked nextprefix seen) (pike_vm_func_step c dir os (PVS inp active best blocked nextprefix seen)).
 Proof.
-  intros c dir inp active best blocked nextprefix seen. specialize (func_step_correct c dir (PVS inp active best blocked nextprefix seen) _ (@eq_refl _ _)).
+  intros c dir os inp active best blocked nextprefix seen. specialize (func_step_correct c dir os (PVS inp active best blocked nextprefix seen) _ (@eq_refl _ _)).
   intros [H|H]; auto. inversion H.
 Qed.
 
 Theorem loop_trc:
-  forall c dir pvs1 pvs2 fuel,
-    pike_vm_loop c dir pvs1 fuel = pvs2 ->
-    trc_pike_vm rer c dir pvs1 pvs2.
+  forall c dir os pvs1 pvs2 fuel,
+    pike_vm_loop c dir os pvs1 fuel = pvs2 ->
+    trc_pike_vm rer c dir os pvs1 pvs2.
 Proof.
-  intros c dir pvs1 pvs2 fuel H.
+  intros c dir os pvs1 pvs2 fuel H.
   generalize dependent pvs1. induction fuel; intros; simpl in H.
   { destruct pvs1; inversion H. constructor. constructor. }
   match_destr; subst.
@@ -144,11 +145,11 @@ Proof.
 Qed.
 
 Lemma step_loop:
-  forall c dir pvs1 pvs2 fuel,
-    pike_vm_step rer c dir pvs1 pvs2 ->
-    pike_vm_loop c dir pvs1 (S fuel) = pike_vm_loop c dir pvs2 fuel.
+  forall c dir os pvs1 pvs2 fuel,
+    pike_vm_step rer c dir os pvs1 pvs2 ->
+    pike_vm_loop c dir os pvs1 (S fuel) = pike_vm_loop c dir os pvs2 fuel.
 Proof.
-  intros c dir pvs1 pvs2 fuel H. destruct H; simpl;
+  intros c dir os pvs1 pvs2 fuel H. destruct H; simpl;
     now rewrite ?ADVANCE, ?SEEN, ?UNSEEN, ?STEP.
 Qed.
 
@@ -211,12 +212,12 @@ Qed.
 
 (* relating the final state of the reverse direction for the TRC *)
 Lemma trc_pike_vm_reverse:
-  forall c dir pvs result1 result2,
-    trc_pike_vm rer c dir pvs (PVS_final result1) ->
-    trc_pike_vm rer c (direction_reverse dir) (pvs_reverse pvs) (PVS_final result2) ->
+  forall c dir os pvs result1 result2,
+    trc_pike_vm rer c dir os pvs (PVS_final result1) ->
+    trc_pike_vm rer c (direction_reverse dir) os (pvs_reverse pvs) (PVS_final result2) ->
     result1 = leaf_reverse result2.
 Proof.
-  intros c dir pvs result1 result2 H1.
+  intros c dir os pvs result1 result2 H1.
   remember (PVS_final result1) as pvs_end.
   induction H1; intros H2; subst.
   - inversion H2; subst.

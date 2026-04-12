@@ -167,28 +167,31 @@ Section CodeWF.
   Qed.
 
   Lemma eps_step_blocked_wf:
-    forall t code dir inp newt,
-      epsilon_step rer t code dir inp = EpsBlocked newt ->
+    forall t code dir inp os newt,
+      epsilon_step rer t code dir os inp = EpsBlocked newt ->
       exists i, get_pc code (fst (fst t)) = Some i /\
-             In (fst (fst newt)) (next_pcs (fst (fst t)) i).
+            In (fst (fst newt)) (next_pcs (fst (fst t)) i).
   Proof.
-    unfold epsilon_step. intros [[pc gm]b] code dir inp newt H.
+    unfold epsilon_step. intros [[pc gm]b] code dir inp os newt H.
     destruct (get_pc code pc) eqn:GET; [|inversion H].
     destruct b0; inversion H; subst.
     - destruct (check_read rer c inp dir); inversion H1; subst.
       simpl; eexists; split; eauto; simpl; auto; lia.
     - destruct dir, anchor_satisfied; inversion H1; subst.
     - destruct b; inversion H1.
+    - destruct nth_error as [oracle|].
+      + destruct (oracle inp); inversion H1.
+      + inversion H1.
   Qed.
 
   Lemma eps_step_active_wf:
-    forall t code dir inp next newt,
-      epsilon_step rer t code dir inp = EpsActive next ->
+    forall t code dir inp os next newt,
+      epsilon_step rer t code dir os inp = EpsActive next ->
       In newt next ->
       exists i, get_pc code (fst (fst t)) = Some i /\
-             In (fst (fst newt)) (next_pcs (fst (fst t)) i).
+            In (fst (fst newt)) (next_pcs (fst (fst t)) i).
   Proof.
-    unfold epsilon_step. intros [[pc gm] b] code dir inp next newt H IN.
+    unfold epsilon_step. intros [[pc gm] b] code dir inp os next newt H IN.
     destruct (get_pc code pc) eqn:GET.
     2: { inversion H. subst. inversion IN. }
     destruct b0; inversion H; subst;
@@ -205,6 +208,11 @@ Section CodeWF.
     - destruct b; subst; inversion H1; subst;
         inversion IN; subst; try solve [inversion H0];
         simpl; eexists; split; eauto; simpl; auto; lia.
+    - destruct nth_error as [oracle|].
+      + destruct (oracle inp); inversion H1; subst;
+          inversion IN; subst; try solve [inversion H0];
+          simpl; eexists; split; eauto; simpl; auto; lia.
+      + inversion H1; now subst.
   Qed.
 
 End CodeWF.
@@ -611,17 +619,18 @@ Section PikeVMComplexity.
 
   (* epsilon_step cannot generate too many new threads *)
   Lemma eps_step_active:
-    forall t code dir inp next,
-      epsilon_step rer t code dir inp = EpsActive next ->
+    forall t code dir inp os next,
+      epsilon_step rer t code dir os inp = EpsActive next ->
       length next <= 2.
   Proof.
-    unfold epsilon_step. intros [[pc gm] b] code dir inp next H.
+    unfold epsilon_step. intros [[pc gm] b] code dir inp os next H.
     destruct (get_pc code pc) eqn:GET.
     2: { inversion H. simpl. lia. }
     destruct b0; try solve [inversion H; simpl; lia].
     - destruct (check_read rer c inp dir); try solve [inversion H; simpl; lia].
     - destruct dir, anchor_satisfied; try solve [inversion H; simpl; lia].
     - destruct b; try solve [inversion H; simpl; lia].
+    - destruct nth_error as [oracle|]; try destruct (oracle inp); injection H as <-; simpl; lia.
   Qed.
 
   Theorem increase_mult:
@@ -637,14 +646,14 @@ Section PikeVMComplexity.
   (* at each step, the measure strictly decreases *)
   (* the well-formedness of the seen set is preserved *)
   Theorem pikevm_decreases:
-    forall code dir pvs1 pvs2 m1,
+    forall code dir os pvs1 pvs2 m1,
       code_wf code (size code) ->
       nonempty code ->
-      pike_vm_step rer code dir pvs1 pvs2 ->
+      pike_vm_step rer code dir os pvs1 pvs2 ->
       vm_inv code dir pvs1 m1 ->
       exists m2, vm_inv code dir pvs2 m2 /\ m2 < m1.
   Proof.
-    intros code dir pvs1 pvs2 m1 CODEWF NONEMPTY STEP INV. inversion STEP; subst; simpl measure; inversion INV; subst;
+    intros code dir os pvs1 pvs2 m1 CODEWF NONEMPTY STEP INV. inversion STEP; subst; simpl measure; inversion INV; subst;
       try destruct t as [[pc gm] b].
     (* when reaching a final state, we end up with a measure of 0, while the previous measure was strictly positive *)
     - exists 0. split.
@@ -772,17 +781,17 @@ Section PikeVMComplexity.
   (** * Bounding the number of PikeVM steps  *)
 
   Lemma pike_vm_bound:
-    forall pvs code dir n,
+    forall pvs code dir os n,
       code_wf code (size code) ->
       nonempty code ->
       vm_inv code dir pvs n ->
-      exists result, steps (pike_vm_step rer code dir) pvs n (PVS_final result).
+      exists result, steps (pike_vm_step rer code dir os) pvs n (PVS_final result).
   Proof.
-    intros pvs code dir n WF NONEMPTY INV. generalize dependent pvs. induction n using (strong_ind); intros.
+    intros pvs code dir os n WF NONEMPTY INV. generalize dependent pvs. induction n using (strong_ind); intros.
     destruct pvs.
     2: { exists best. constructor. }
-    specialize (pikevm_progress rer code dir inp active best blocked nextprefix seen) as [next STEP].
-    specialize (pikevm_decreases code dir (PVS inp active best blocked nextprefix seen) next n WF NONEMPTY STEP INV) as [newm [INV2 DECR]].
+    specialize (pikevm_progress rer code dir os inp active best blocked nextprefix seen) as [next STEP].
+    specialize (pikevm_decreases code dir os (PVS inp active best blocked nextprefix seen) next n WF NONEMPTY STEP INV) as [newm [INV2 DECR]].
     specialize (H newm DECR next INV2) as [result STEPS].
     exists result. apply more_steps with (n:=S newm); try lia.
     econstructor; eauto.
@@ -791,14 +800,14 @@ Section PikeVMComplexity.
   (** * Complexity Theorem  *)
 
   Theorem pikevm_complexity:
-    forall (r:regex) (inp:input) (dir:Direction),
+    forall (r:regex) (inp:input) (dir:Direction) (os:nfa_oracles),
       (* for any supported regex r and input inp *)
       pike_regex r ->
       (* The initial state reaches a final state in at most (complexity r inp dir) steps. *)
-      exists result, steps (pike_vm_step rer (compilation r) dir)
+      exists result, steps (pike_vm_step rer (compilation r) dir os)
                   (pike_vm_initial_state inp) (complexity r inp dir) (PVS_final result).
   Proof.
-    intros r inp dir SUBSET.
+    intros r inp dir os SUBSET.
     apply pike_vm_bound.
     - apply compiled_wf.
     - apply compilation_nonempty.
@@ -806,14 +815,14 @@ Section PikeVMComplexity.
   Qed.
 
   Theorem pikevm_complexity_unanchored {strs:StrSearch}:
-    forall (r:regex) (inp:input) (dir:Direction),
+    forall (r:regex) (inp:input) (dir:Direction) (os:nfa_oracles),
       (* for any supported regex r and input inp *)
       pike_regex r ->
-      (* The initial state reaches a final state in at most (complexity r inp) steps. *)
-      exists result, steps (pike_vm_step rer (compilation r) dir)
+      (* The initial state reaches a final state in at most (complexity r inp dir) steps. *)
+      exists result, steps (pike_vm_step rer (compilation r) dir os)
                   (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (complexity r inp dir) (PVS_final result).
   Proof.
-    intros r inp dir SUBSET.
+    intros r inp dir os SUBSET.
     apply pike_vm_bound.
     - apply compiled_wf.
     - apply compilation_nonempty.
@@ -825,20 +834,20 @@ Section PikeVMComplexity.
 
   (* As a corollary, we can deduce that the PikeVM always terminates *)
   Theorem pike_vm_terminates:
-    forall r inp dir,
+    forall r inp dir os,
       pike_regex r ->
-      exists result, trc_pike_vm rer (compilation r) dir (pike_vm_initial_state inp) (PVS_final result).
+      exists result, trc_pike_vm rer (compilation r) dir os (pike_vm_initial_state inp) (PVS_final result).
   Proof.
-    intros r inp dir H. eapply pikevm_complexity in H as [result STEPS]; eauto.
+    intros r inp dir os H. eapply pikevm_complexity in H as [result STEPS]; eauto.
     exists result. eapply steps_trc; eauto.
   Qed.
 
   Theorem pike_vm_terminates_unanchored {strs:StrSearch}:
-    forall r inp dir,
+    forall r inp dir os,
       pike_regex r ->
-      exists result, trc_pike_vm rer (compilation r) dir (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (PVS_final result).
+      exists result, trc_pike_vm rer (compilation r) dir os (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (PVS_final result).
   Proof.
-    intros r inp dir H. eapply pikevm_complexity_unanchored in H as [result STEPS]; eauto.
+    intros r inp dir os H. eapply pikevm_complexity_unanchored in H as [result STEPS]; eauto.
     exists result. eapply steps_trc; eauto.
   Qed.
 
