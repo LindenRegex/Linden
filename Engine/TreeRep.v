@@ -64,6 +64,19 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
     (RESET: get_pc code pc = Some (ResetRegs gidl))
     (TR: tree_rep t code (S pc) inp b),
     tree_rep (GroupAction (Reset gidl) t) code pc inp b
+| tr_lookaround:
+  forall code pc inp b lk tlk i t r1 gm
+    (OQ: get_pc code pc = Some (OracleQuery i lk r1))
+    (TR: tree_rep t code (S pc) inp b)
+    (TREE: bool_tree rer [Areg r1] inp b (lk_dir lk) tlk)
+    (RES_LK: lk_result lk tlk GroupMap.empty inp = Some gm),
+    tree_rep (LK lk tlk t) code pc inp b
+| tr_lookaroundfail:
+  forall code pc inp b lk tlk i r1
+    (OQ: get_pc code pc = Some (OracleQuery i lk r1))
+    (TREE: bool_tree rer [Areg r1] inp b (lk_dir lk) tlk)
+    (FAIL_LK: lk_result lk tlk GroupMap.empty inp = None),
+    tree_rep (LKFail lk tlk) code pc inp b
 | tr_anchor:
   forall code pc inp b a t
     (ANCHOR: get_pc code pc = Some (CheckAnchor a))
@@ -131,6 +144,16 @@ Proof.
   - inversion H0; subst; auto; same_instr.
     specialize (IHtree_rep _ TR) as EQT.
     subst. split; auto.
+  - inversion H0; subst; auto; same_instr.
+    + f_equal.
+      * eapply bool_tree_determ; eauto.
+      * eapply IHtree_rep; eauto.
+    + eapply bool_tree_determ in TREE; eauto. subst.
+      congruence.
+  - inversion H0; subst; auto; same_instr.
+    + eapply bool_tree_determ in TREE; eauto. subst.
+      congruence.
+    + eapply bool_tree_determ in TREE; eauto. now subst.
   - inversion H0; subst; auto; same_instr;
       rewrite CHECK0 in CHECK; inversion CHECK; subst.
     specialize (IHtree_rep _ TR) as EQT.
@@ -283,8 +306,22 @@ Proof.
     invert_rep. inversion NFA; subst.
     2: { in_subset. }
     eapply tr_open; eauto.
-    eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto).
+    eapply IHTREE; eauto. pike_subset. rep.
+  (* lookaround *)
+  - remember (Areg (Lookaround lk r1) :: cont) as lkcont.
+    induction ACT; inversion Heqlkcont; subst;
+      try solve[eapply tr_jmp; eauto]; clear IHACT.
+    invert_rep. inversion NFA; subst.
+    2: { in_subset. }
+    eapply tr_lookaround; eauto.
+    eapply IHTREE2; eauto. pike_subset.
+  (* fail lookaround *)
+  - remember (Areg (Lookaround lk r1) :: cont) as lkcont.
+    induction ACT; inversion Heqlkcont; subst;
+      try solve[eapply tr_jmp; eauto]; clear IHACT.
+    invert_rep. inversion NFA; subst.
+    2: { in_subset. }
+    eapply tr_lookaroundfail; eauto.
   (* anchor *)
   - remember (Areg (Anchor a) :: cont) as anchorcont.
     induction ACT; inversion Heqanchorcont; subst;

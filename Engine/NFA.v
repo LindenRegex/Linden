@@ -32,7 +32,7 @@ Section NFA.
   | ResetRegs: list group_id -> bytecode
   | BeginLoop: bytecode
   | EndLoop: label -> bytecode    (* also contains the backedge instead of adding a jump *)
-  | OracleQuery: nat -> bytecode
+  | OracleQuery: nfa_oracle_idx -> lookaround -> regex -> bytecode
   | KillThread: bytecode         (* for unsupported features *)
   .
 
@@ -154,7 +154,7 @@ Section NFA.
   Definition next_pcs (pc:label) (b:bytecode) : list label :=
     match b with
     | Consume _ | CheckAnchor _ | SetRegOpen _ | SetRegClose _
-      | ResetRegs _ | BeginLoop | OracleQuery _ => [S pc]
+      | ResetRegs _ | BeginLoop | OracleQuery _ _ _ => [S pc]
     | Accept | KillThread => []
     | Jmp l | EndLoop l => [l]
     | Fork l1 l2 => [l1; l2]
@@ -191,7 +191,7 @@ Section NFA.
         let '(bc1, f1, lk_idx1) := compile r1 (S fresh) lk_idx in
         ([SetRegOpen gid] ++ bc1 ++ [SetRegClose gid], S f1, lk_idx1)
     | Anchor a => ([CheckAnchor a], S fresh, lk_idx)
-    | Lookaround lk _ => ([OracleQuery lk_idx], S fresh, S lk_idx)
+    | Lookaround lk r1 => ([OracleQuery lk_idx lk r1], S fresh, S lk_idx)
     | _ => ([KillThread], S fresh, lk_idx) (* unsupported features *)
     end.
 
