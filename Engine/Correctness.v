@@ -46,13 +46,14 @@ Definition trc_pike_vm (c:code) (dir:Direction) := @trc pike_vm_state (pike_vm_s
 
 (* The Pike invariant is preserved through the TRC *)
 Lemma vm_to_tree:
-  forall svm1 st1 svm2 code
+  forall svm1 st1 svm2 r code
+    (COMPILE: compilation r = code)
     (STWF: stutter_wf rer code)
-    (INVARIANT: pike_inv rer code st1 svm1)
+    (INVARIANT: pike_inv rer r st1 svm1)
     (TRCVM: trc_pike_vm code forward svm1 svm2),
-    exists st2, trc_pike_tree st1 st2 /\ pike_inv rer code st2 svm2.
+    exists st2, trc_pike_tree st1 st2 /\ pike_inv rer r st2 svm2.
 Proof.
-  intros svm1 st1 svm2 code STWF INVARIANT TRCVM.
+  intros svm1 st1 svm2 r code COMPILE STWF INVARIANT TRCVM.
   generalize dependent st1. induction TRCVM; intros.
   { exists st1. split; auto. apply trc_refl. }
   eapply PikeEquiv.invariant_preservation in STEP; eauto.
