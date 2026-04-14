@@ -160,6 +160,107 @@ Definition epsilon_step (t:thread) (c:code) (dir:Direction) (os:nfa_oracles) (i:
       end
   end.
 
+  Inductive bytecode': Type :=
+  | Accept'
+  | Consume': char_descr -> bytecode'
+  | CheckAnchor': anchor -> bytecode'
+  | Jmp': label -> bytecode'
+  | Fork': label -> label -> bytecode'
+  | SetRegOpen': group_id -> bytecode'
+  | SetRegClose': group_id -> bytecode'
+  | ResetRegs': list group_id -> bytecode'
+  | BeginLoop': bytecode'
+  | EndLoop': label -> bytecode'    (* also contains the backedge instead of adding a jump *)
+  | OracleQuery': nat -> bytecode'
+  | KillThread': bytecode'         (* for unsupported features *)
+  .
+
+  Definition code' : Type := list bytecode'.
+
+  Definition translate (instr: bytecode) : bytecode' :=
+    match instr with
+    | Accept => Accept'
+    | Consume cd => Consume' cd
+    | CheckAnchor a => CheckAnchor' a
+    | Jmp next => Jmp' next
+    | Fork l1 l2 => Fork' l1 l2
+    | SetRegOpen gid => SetRegOpen' gid
+    | SetRegClose gid => SetRegClose' gid
+    | ResetRegs gidl => ResetRegs' gidl
+    | BeginLoop => BeginLoop'
+    | EndLoop next => EndLoop' next
+    | OracleQuery n _ _ => OracleQuery' n
+    | KillThread => KillThread'
+    end.
+  Definition translate_code (c:code) : code' :=
+    List.map translate c.
+  Definition get_pc' (c:code') (pc:label) : option bytecode' :=
+    List.nth_error c pc.
+
+  Lemma translate_get_pc :
+    forall c pc,
+      get_pc' (translate_code c) pc = match get_pc c pc with
+                                      | None => None
+                                      | Some instr => Some (translate instr)
+                                      end.
+  Proof.
+    unfold get_pc, get_pc'.
+    induction c; intro pc; simpl.
+    - now rewrite !nth_error_nil.
+    - destruct pc; simpl.
+      + easy.
+      + easy.
+  Qed.
+
+Definition epsilon_step' (t:thread) (c:code') (dir:Direction) (os:nfa_oracles) (i:input): epsilon_result :=
+  let '(pc, gm, b) := t in
+  match get_pc' c pc with
+  | None => EpsDead
+  | Some instr =>
+      match instr with
+      | Accept' => EpsMatch
+      | Consume' cd => match check_read rer cd i dir with
+                        | CannotRead => EpsDead
+                        | CanRead => EpsBlocked (block_thread t)
+                        end
+      | CheckAnchor' a => match anchor_satisfied rer (anchor_dir a dir) i with
+                           | false => EpsDead
+                           | true => EpsActive [advance_thread t]
+                           end
+      | Jmp' next => EpsActive [upd_label t next]
+      | Fork' l1 l2 => EpsActive [upd_label t l1; upd_label t l2]
+      | SetRegOpen' gid => EpsActive [open_thread t gid (idx_dir i dir)]
+      | SetRegClose' gid => EpsActive [close_thread t gid (idx_dir i dir)]
+      | ResetRegs' gidl => EpsActive [reset_thread t gidl]
+      | BeginLoop' => EpsActive [begin_thread t]
+      | EndLoop' next => match b with
+                        | CannotExit => EpsDead
+                        | CanExit => EpsActive [upd_label t next]
+                        end
+      | OracleQuery' n => match nth_error os n with
+                         | None => EpsDead
+                         | Some oracle =>
+                            if oracle i then EpsActive [advance_thread t]
+                            else EpsDead
+                         end
+      | KillThread' => EpsDead
+      end
+  end.
+
+  Lemma epsilon_step_translate :
+    forall t c dir os inp,
+      epsilon_step t c dir os inp = epsilon_step' t (translate_code c) dir os inp.
+  Proof.
+    intros t c dir os inp.
+    destruct t as [[pc gm] b].
+    unfold epsilon_step, epsilon_step'.
+    rewrite translate_get_pc.
+    destruct get_pc; eauto.
+    destruct b0; simpl; easy.
+  Qed.
+
+
+
 
 (** * PikeVM Semantics  *)
 

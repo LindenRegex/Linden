@@ -173,7 +173,7 @@ Section NFA.
   Fixpoint compile (r:regex) (fresh:label) (lk_idx:nfa_oracle_idx): code * label * nfa_oracle_idx :=
     match r with
     | Epsilon => ([], fresh, lk_idx)
-    | Character cd => ([Consume cd], S fresh, lk_idx)
+    | Regex.Character cd => ([Consume cd], S fresh, lk_idx)
     | Disjunction r1 r2 =>
         let '(bc1, f1, lk_idx1) := compile r1 (S fresh) lk_idx in
         let '(bc2, f2, lk_idx2) := compile r2 (S f1) lk_idx1 in

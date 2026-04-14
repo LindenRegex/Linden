@@ -19,7 +19,7 @@ Section FunctionalPikeVM.
 (** * Functional Definition  *)
 
 (* a functional version of the small step *)
-Definition pike_vm_func_step (c:code) (dir:Direction) (os:nfa_oracles) (pvs:pike_vm_state) : pike_vm_state :=
+Definition pike_vm_func_step (c:code') (dir:Direction) (os:nfa_oracles) (pvs:pike_vm_state) : pike_vm_state :=
   match pvs with
   | PVS_final _ => pvs
   | PVS inp active best blocked nextprefix seen =>
@@ -49,7 +49,7 @@ Definition pike_vm_func_step (c:code) (dir:Direction) (os:nfa_oracles) (pvs:pike
           | true => PVS inp active best blocked nextprefix seen (* pvs_skip *)
           | false =>
               let nextseen := add_thread seen t in
-              match (epsilon_step rer t c dir os inp) with
+              match (epsilon_step' rer t c dir os inp) with
               | EpsActive nextactive =>
                   PVS inp (nextactive++active) best blocked nextprefix nextseen (* pvs_active *)
               | EpsMatch =>
@@ -62,7 +62,7 @@ Definition pike_vm_func_step (c:code) (dir:Direction) (os:nfa_oracles) (pvs:pike
   end.
 
 (* looping the small step function until fuel runs out or a final state is reached *)
-Fixpoint pike_vm_loop (c:code) (dir:Direction) (os:nfa_oracles) (pvs:pike_vm_state) (fuel:nat) : pike_vm_state :=
+Fixpoint pike_vm_loop (c:code') (dir:Direction) (os:nfa_oracles) (pvs:pike_vm_state) (fuel:nat) : pike_vm_state :=
   match pvs with
   | PVS_final _ => pvs
   | _ =>
@@ -100,14 +100,14 @@ Axiom nfa_oracles_create_correct:
 
 (* Functional version of the PikeVM *)
 Definition pike_vm_match (r:regex) (inp:input) (dir:Direction) : matchres :=
-  let code := compilation r in
+  let code := translate_code (compilation r) in
   let fuel := vm_fuel r inp dir in
   let pvsinit := pike_vm_initial_state inp in
   getres (pike_vm_loop code dir (nfa_oracles_dir (nfa_oracles_create r) dir) pvsinit fuel).
 
 (* Functional version of the unanchored PikeVM *)
 Definition pike_vm_match_unanchored {strs:StrSearch} (r:regex) (inp:input) (dir:Direction): matchres :=
-  let code := compilation r in
+  let code := translate_code (compilation r) in
   let fuel := vm_fuel r inp dir in
   let pvsinit := pike_vm_initial_state_unanchored (extract_literal rer r) inp dir in
   getres (pike_vm_loop code dir (nfa_oracles_dir (nfa_oracles_create r) dir) pvsinit fuel).
@@ -125,17 +125,17 @@ Ltac match_destr:=
 
 Theorem func_step_correct:
   forall c dir os pvs1 pvs2,
-    pike_vm_func_step c dir os pvs1 = pvs2 ->
+    pike_vm_func_step (translate_code c) dir os pvs1 = pvs2 ->
     pike_vm_step rer c dir os pvs1 pvs2 \/ final_state pvs1.
 Proof.
   unfold pike_vm_func_step. intros c dir os pvs1 pvs2 H.
-  repeat match_destr; subst; try solve[left; constructor; auto].
+  repeat match_destr; subst; try rewrite <-epsilon_step_translate in H3; try solve[left; constructor; auto].
   right. constructor.
 Qed.
 
 Corollary func_step_not_final:
   forall c dir os inp active best blocked nextprefix seen,
-    pike_vm_step rer c dir os (PVS inp active best blocked nextprefix seen) (pike_vm_func_step c dir os (PVS inp active best blocked nextprefix seen)).
+    pike_vm_step rer c dir os (PVS inp active best blocked nextprefix seen) (pike_vm_func_step (translate_code c) dir os (PVS inp active best blocked nextprefix seen)).
 Proof.
   intros c dir os inp active best blocked nextprefix seen. specialize (func_step_correct c dir os (PVS inp active best blocked nextprefix seen) _ (@eq_refl _ _)).
   intros [H|H]; auto. inversion H.
@@ -143,7 +143,7 @@ Qed.
 
 Theorem loop_trc:
   forall c dir os pvs1 pvs2 fuel,
-    pike_vm_loop c dir os pvs1 fuel = pvs2 ->
+    pike_vm_loop (translate_code c) dir os pvs1 fuel = pvs2 ->
     trc_pike_vm rer c dir os pvs1 pvs2.
 Proof.
   intros c dir os pvs1 pvs2 fuel H.
@@ -157,16 +157,16 @@ Qed.
 Lemma step_loop:
   forall c dir os pvs1 pvs2 fuel,
     pike_vm_step rer c dir os pvs1 pvs2 ->
-    pike_vm_loop c dir os pvs1 (S fuel) = pike_vm_loop c dir os pvs2 fuel.
+    pike_vm_loop (translate_code c) dir os pvs1 (S fuel) = pike_vm_loop (translate_code c) dir os pvs2 fuel.
 Proof.
   intros c dir os pvs1 pvs2 fuel H. destruct H; simpl;
-    now rewrite ?ADVANCE, ?SEEN, ?UNSEEN, ?STEP.
+    try rewrite <-epsilon_step_translate in *; now rewrite ?ADVANCE, ?SEEN, ?UNSEEN, ?STEP.
 Qed.
 
 Theorem steps_loop:
   forall c dir os pvs1 pvs2 fuel,
     steps (pike_vm_step rer c dir os) pvs1 fuel (PVS_final pvs2) ->
-    pike_vm_loop c dir os pvs1 fuel = (PVS_final pvs2).
+    pike_vm_loop (translate_code c) dir os pvs1 fuel = (PVS_final pvs2).
 Proof.
   intros c dir os pvs1 pvs2 fuel H. remember (PVS_final pvs2) as result.
   induction H; subst.
