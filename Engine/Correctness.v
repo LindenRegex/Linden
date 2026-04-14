@@ -68,6 +68,7 @@ Qed.
 Theorem pike_vm_to_pike_tree:
   forall r inp os tree result,
     pike_regex r ->
+    nfa_oracles_correct rer os r inp ->
     bool_tree rer [Areg r] inp CanExit forward tree ->
     trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp) (PVS_final result) ->
     trc_pike_tree (pike_tree_initial_state tree inp) (PTS_final result).
@@ -82,6 +83,7 @@ Qed.
 Theorem pike_vm_to_pike_tree_unanchored {strs:StrSearch}:
   forall r inp os tree result future_tree,
     pike_regex r ->
+    nfa_oracles_correct rer os r inp ->
     bool_tree rer [Areg r] inp CanExit forward tree ->
     trc_pike_vm (compilation r) forward os (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward) (PVS_final result) ->
     future_tree_shape rer r inp future_tree ->
@@ -114,6 +116,8 @@ Theorem pike_vm_correct:
   forall r inp os tree result,
     (* the regex `r` is in the supported subset *)
     pike_regex r ->
+    (* the oracles `os` are correct for `r` *)
+    nfa_oracles_correct rer os r inp ->
     (* `tree` is the tree of the regex `r` for the input `inp` *)
     is_tree rer [Areg r] inp GroupMap.empty forward tree ->
     (* the result of the PikeVM is `result` *)
@@ -136,6 +140,8 @@ Theorem pike_vm_correct_unanchored {strs:StrSearch}:
   forall r inp os tree result,
     (* the regex `r` is in the supported subset *)
     pike_regex r ->
+    (* the oracles `os` are correct for `r` *)
+    nfa_oracles_correct rer os r inp ->
     (* `tree` is the tree of the regex `[^]*?r` for the input `inp` *)
     is_tree rer [Areg (lazy_prefix r)] inp GroupMap.empty forward tree ->
     (* the result of the PikeVM is `result` *)
@@ -157,6 +163,7 @@ Qed.
 Theorem pike_vm_same_warblre:
   forall lr los wr inp,
     pike_regex lr ->
+    nfa_oracles_correct rer los lr inp ->
     equiv_regex wr lr ->
     RegExpRecord.capturingGroupsCount rer = StaticSemantics.countLeftCapturingParensWithin wr nil ->
     EarlyErrors.Pass_Regex wr nil ->
@@ -179,6 +186,7 @@ Qed.
 Theorem pike_vm_same_warblre_str0:
   forall lr los wr str0,
     pike_regex lr ->
+    nfa_oracles_correct rer los lr (init_input str0) ->
     equiv_regex wr lr ->
     RegExpRecord.capturingGroupsCount rer = StaticSemantics.countLeftCapturingParensWithin wr nil ->
     EarlyErrors.Pass_Regex wr nil ->
@@ -202,6 +210,8 @@ Theorem pike_vm_warblre:
     r = warblre_to_linden' rw 0 (buildnm rw) ->
     (* such that it is in the supported PikeVM subset *)
     pike_regex r ->
+    (* and the oracles `os` are correct for `r` *)
+    nfa_oracles_correct rer os r inp ->
     (* When PikeVM reaches a final result *)
     trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp) (PVS_final result) ->
     (* this result is equal to Warblre's execution result *)

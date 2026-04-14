@@ -94,6 +94,10 @@ Definition nfa_oracles_dir (os: nfa_oracles) (dir: Direction) : nfa_oracles :=
   end.
 
 Parameter nfa_oracles_create : (regex -> nfa_oracles).
+Axiom nfa_oracles_create_correct:
+  forall r inp,
+    nfa_oracles_correct rer (nfa_oracles_create r) r inp.
+
 (* Functional version of the PikeVM *)
 Definition pike_vm_match (r:regex) (inp:input) (dir:Direction) : matchres :=
   let code := compilation r in

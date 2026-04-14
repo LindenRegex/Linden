@@ -318,6 +318,63 @@ Section NFA.
       subst. simpl. rewrite length_app. simpl. lia.
   Qed.
 
+  (* the returned lk_idx is greater or equal to the input lk_idx *)
+  Lemma compile_lk_idx :
+    forall r fresh fresh' c lk_idx lk_idx',
+      compile r fresh lk_idx = (c, fresh', lk_idx') ->
+      lk_idx <= lk_idx'.
+  Proof.
+    induction r; simpl; intros;
+      try injection H as <- <- <-; try easy.
+    - destruct (compile r1 (S fresh)) eqn:Hcomp1, p, (compile r2 (S l)) eqn:Hcomp2, p.
+      injection H as <- <- <-.
+      transitivity n; eauto.
+    - destruct (compile r1 fresh) eqn:Hcomp1, p, (compile r2 l) eqn:Hcomp2, p.
+      injection H as <- <- <-.
+      transitivity n; eauto.
+    - destruct (compile r (S (S (S fresh)))) eqn:Hcomp, p.
+        destruct min; [destruct delta as [[|[|]]|]|];
+        injection H as <- <- <-; eauto.
+    - lia.
+    - destruct (compile r (S fresh)) eqn:Hcomp, p.
+      injection H as <- <- <-; eauto.
+  Qed.
+
+  (* the compiled oracle query indices are bounded by the compilation *)
+  Lemma compile_oracle_query_idx :
+    forall r fresh fresh' c lk_idx lk_idx' pc idx lk r1,
+      compile r fresh lk_idx = (c, fresh', lk_idx') ->
+      get_pc c pc = Some (OracleQuery idx lk r1) ->
+      lk_idx <= idx /\ idx < lk_idx'.
+  Proof.
+    induction r; simpl; intros;
+      try injection H as <- <- <-;
+      try solve[get_pc].
+    - destruct (compile r1 (S fresh)) eqn:Hcomp1, p, (compile r2 (S l)) eqn:Hcomp2, p.
+      injection H as <- <- <-.
+      get_pc.
+      + specialize IHr1 with (1:=Hcomp1) (2:=H0).
+        eapply compile_lk_idx in Hcomp1, Hcomp2.
+        lia.
+      + specialize IHr2 with (1:=Hcomp2) (2:=H0).
+        eapply compile_lk_idx in Hcomp1, Hcomp2.
+        lia.
+    - destruct (compile r1 fresh) eqn:Hcomp1, p, (compile r2 l) eqn:Hcomp2, p.
+      injection H as <- <- <-.
+      get_pc.
+      + specialize IHr1 with (1:=Hcomp1) (2:=H0).
+        eapply compile_lk_idx in Hcomp1, Hcomp2.
+        lia.
+      + specialize IHr2 with (1:=Hcomp2) (2:=H0).
+        eapply compile_lk_idx in Hcomp1, Hcomp2.
+        lia.
+    - destruct (compile r (S (S (S fresh)))) eqn:Hcomp, p.
+      destruct min; [destruct delta as [[|[|]]|]|];
+        injection H as <- <- <-; destruct greedy; simpl in H0; get_pc.
+    - destruct (compile r (S fresh)) eqn:Hcomp, p.
+      injection H as <- <- <-; get_pc.
+  Qed.
+
   (* this shows that the compilation function adheres to the representation predicate *)
   Theorem compile_nfa_rep:
     forall r c start lk_idx endl prev lk_idx',
@@ -632,6 +689,82 @@ Section NFA.
     intros.
     destruct compile eqn:Hcom, p.
     eapply nfa_oracles_get'; eauto; simpl; get_pc.
+  Qed.
+
+  Lemma nfa_oracle_get_correct':
+    forall r r1 inp lk lk_idx_start lk_idx_end lk_n os oracle fresh fresh' c pc
+      (Hsubset: pike_regex (Lookaround lk r1))
+      (Hcompile: compile r fresh lk_idx_start = (c, fresh', lk_idx_end))
+      (Hos: snd (nfa_oracles_correct' os r inp lk_idx_start))
+      (Hget: get_pc c pc = Some (OracleQuery (lk_idx_start+lk_n) lk r1))
+      (Hnth: nth_error os (lk_idx_start + lk_n) = Some oracle),
+      nfa_oracle_correct oracle inp lk r1.
+  Proof.
+    induction r; intros; simpl in *;
+      try injection Hcompile as <- <- <-;
+      try solve[get_pc].
+    - destruct (compile r1 (S fresh) lk_idx_start) eqn:Hcomp1, p, (compile r2 (S l) n) eqn:Hcomp2, p.
+      destruct (nfa_oracles_correct' os r1) eqn:Hos1, (nfa_oracles_correct' os r2) eqn:Hos2.
+      rewrite compile_oracles_correct_same_lk_idx with (1:=Hcomp1) (2:=Hos1), compile_oracles_correct_same_lk_idx with (1:=Hcomp2) (2:=Hos2) in *.
+      simpl in Hos.
+      injection Hcompile as <- <- <-.
+      assert (lk_idx_start <= n1) by eauto using compile_lk_idx.
+      get_pc.
+      + eapply IHr1; eauto.
+        now rewrite Hos1.
+      + assert (n1 <= lk_idx_start + lk_n < n2) by eauto using compile_oracle_query_idx.
+        replace (lk_idx_start + lk_n) with (n1 + (lk_n - (n1 - lk_idx_start))) in Hget, Hnth by lia.
+        eapply IHr2; eauto.
+        now rewrite Hos2.
+    - destruct (compile r1 fresh lk_idx_start) eqn:Hcomp1, p, (compile r2 l n) eqn:Hcomp2, p.
+      destruct (nfa_oracles_correct' os r1) eqn:Hos1, (nfa_oracles_correct' os r2) eqn:Hos2.
+      rewrite compile_oracles_correct_same_lk_idx with (1:=Hcomp1) (2:=Hos1), compile_oracles_correct_same_lk_idx with (1:=Hcomp2) (2:=Hos2) in *.
+      simpl in Hos.
+      injection Hcompile as <- <- <-.
+      assert (lk_idx_start <= n1) by eauto using compile_lk_idx.
+      get_pc.
+      + eapply IHr1; eauto.
+        now rewrite Hos1.
+      + assert (n1 <= lk_idx_start + lk_n < n2) by eauto using compile_oracle_query_idx.
+        replace (lk_idx_start + lk_n) with (n1 + (lk_n - (n1 - lk_idx_start))) in Hget, Hnth by lia.
+        eapply IHr2; eauto.
+        now rewrite Hos2.
+    - destruct nfa_oracles_correct' eqn:Hos'.
+      destruct (compile r (S (S (S fresh))) lk_idx_start) eqn:Hcomp, p.
+      destruct min; [destruct delta as [[|[|]]|]|];
+        injection Hcompile as <- <- <-.
+      + get_pc.
+      + destruct greedy; eapply IHr; eauto; simpl in *; now rewrite Hos' || get_pc.
+      + get_pc.
+      + destruct greedy; eapply IHr; eauto; simpl in *; now rewrite Hos' || get_pc.
+      + get_pc.
+    - get_pc. subst.
+      destruct lk_n. 2: lia.
+      rewrite PeanoNat.Nat.add_0_r in Hnth.
+      rewrite Hnth in Hos.
+      eauto.
+    - destruct nfa_oracles_correct' eqn:Hos1.
+      destruct (compile r (S fresh) lk_idx_start) eqn:Hcomp, p.
+      injection Hcompile as <- <- <-.
+      eapply IHr; eauto.
+      + now rewrite Hos1.
+      + get_pc.
+  Qed.
+
+  (* when we have correct oracles and we encounter an oracle query instruction, *)
+  (* the query corresponds to its correctness statement *)
+  Corollary nfa_oracle_get_correct :
+    forall r inp lk r1 pc os oracle lk_idx,
+      pike_regex (Lookaround lk r1) ->
+      get_pc (compilation r) pc = Some (OracleQuery lk_idx lk r1) ->
+      nfa_oracles_correct os r inp ->
+      nth_error os lk_idx = Some oracle ->
+      nfa_oracle_correct oracle inp lk r1.
+  Proof.
+    unfold compilation.
+    intros.
+    destruct compile eqn:Hcompile, p.
+    eapply nfa_oracle_get_correct'; eauto; simpl; get_pc.
   Qed.
 
   (** * Lifting the representation predicate to continuations  *)

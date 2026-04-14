@@ -361,10 +361,74 @@ Proof.
 Qed.
 
 
+Theorem generate_lookaround:
+  forall tree r lk tlk gm inp os code pc b
+    (COMPILE: compilation r = code)
+    (OS: nfa_oracles_correct rer os r inp)
+    (TT: tree_thread code inp (LK lk tlk tree, gm) (pc, gm, b))
+    (NOSTUTTER: stutters pc code = false),
+    epsilon_step rer (pc, gm, b) code forward os inp = EpsActive [(pc+1,gm,b)] /\
+      tree_thread code inp (tree,gm) (pc+1,gm,b) /\ lk_result lk tlk gm inp = Some gm.
+Proof.
+  intros tree r lk tlk gm inp os code pc b COMPILE OS TT NOSTUTTER.
+  inversion TT; subst; try no_stutter.
+  remember (LK lk tlk tree) as TLK.
+  remember forward as dir.
+  induction TREE; intros; subst; try inversion HeqTLK; subst.
+  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
+  - repeat invert_rep. eapply IHTREE; simpl; rep; pike_subset.
+  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
+  - now destruct greedy.
+  - repeat invert_rep.
+    repeat split; simpl.
+    + rewrite ORACLE.
+      destruct nth_error as [oracle|] eqn:Hnth.
+      * (* lk_result succeeds, so the oracle query succeeds too *)
+        eapply nfa_oracle_get_correct in ORACLE as Horacle; eauto; pike_subset.
+        unfold lk_result in RES_LK. unfold nfa_oracle_correct in Horacle.
+        specialize (Horacle inp b tlk ltac:(eauto) ltac:(eauto)).
+        destruct (oracle inp); eauto.
+        destruct positivity, tree_res; simpl in Horacle; try destruct l; congruence.
+      * eapply nfa_oracles_get in Hnth; now eauto.
+    + invert_rep.
+      eapply tt_eq; eauto; pike_subset.
+      replace (pc+1) with (S pc) by lia. auto.
+    + eapply lk_result_indep_some with (gm2:=gm) (inp2:=inp) in RES_LK as [gmlk' RES_LK].
+      eapply lk_result_same_gm in RES_LK as EQ; subst; eauto; pike_subset.
+Qed.
+
+Theorem generate_lookaroundfail:
+  forall r gm inp os code pc b lk tlk
+    (COMPILE: compilation r = code)
+    (OS: nfa_oracles_correct rer os r inp)
+    (TT: tree_thread code inp (LKFail lk tlk, gm) (pc, gm, b))
+    (NOSTUTTER: stutters pc code = false),
+    epsilon_step rer (pc, gm, b) code forward os inp = EpsActive [].
+Proof.
+  intros r gm inp os code pc b lk tlk COMPILE OS TT NOSTUTTER.
+  inversion TT; only 2: try no_stutter.
+  remember (LKFail lk tlk) as TLKFAIL.
+  remember forward as dir.
+  induction TREE; intros; subst; try inversion HeqTLKFAIL; subst.
+  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
+  - repeat invert_rep. eapply IHTREE; simpl; rep; pike_subset.
+  - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
+  - now destruct greedy.
+  - repeat invert_rep.
+    simpl. rewrite ORACLE.
+    destruct nth_error as [oracle|] eqn:Hnth; eauto.
+    eapply nfa_oracle_get_correct in ORACLE as Horacle; eauto; pike_subset.
+    unfold lk_result in FAIL_LK. unfold nfa_oracle_correct in Horacle.
+    specialize (Horacle inp b tlk ltac:(eauto) ltac:(eauto)).
+    destruct (oracle inp); eauto.
+    destruct positivity, tree_res; simpl in Horacle; try destruct l; congruence.
+Qed.
+
 (* next we combine the generate lemmas together, for the general non-stuttering case *)
 Theorem generate_active:
   forall r tree gm inp os code pc b treeactive
     (COMPILE: compilation r = code)
+    (OS: nfa_oracles_correct rer os r inp)
     (TREESTEP: tree_bfs_step tree gm inp = StepActive treeactive)
     (NOSTUTTER: stutters pc code = false)
     (TT: tree_thread code inp (tree, gm) (pc, gm, b)),
@@ -395,12 +459,11 @@ Proof.
     + eapply generate_reset in TT as [STEP EQ]; auto.
       exists [(pc + 1, GroupMap.reset gl gm, b)]. split; eauto.
       constructor; auto. constructor.
-  - inversion TT; subst; try no_stutter.
-    eapply subset_semantics in TREE as SUBSETTREE; auto.
-    inversion SUBSETTREE.
-  - inversion TT; subst; try no_stutter.
-    eapply subset_semantics in TREE as SUBSETTREE; auto.
-    inversion SUBSETTREE.
+  - eapply generate_lookaround in TT as [STEP [EQ RES_LK]]; eauto.
+    rewrite RES_LK in TREESTEP. injection TREESTEP as <-.
+    exists [(pc+1,gm,b)]. split; eauto.
+    constructor; auto. constructor.
+  - eapply generate_lookaroundfail in TT; eauto. exists []. split; eauto. constructor.
 Qed.
 
 (* LATER: simplify/automate this proof *)
@@ -616,6 +679,8 @@ Inductive pike_inv (r:regex) (os:nfa_oracles): pike_tree_state -> pike_vm_state 
     (SEEN: seen_inclusion code inp treeseen threadseen (hd_error treeactive) (head_pc threadactive))
     (* the future tree must correspond to the nextprefix counter *)
     (FUTUREPREFIX: future_nextprefix r inp future nextprefix)
+    (* the oracles compute the correct results *)
+    (OS: nfa_oracles_correct rer os r inp),
     pike_inv r os (PTS inp treeactive best treeblocked future treeseen) (PVS inp threadactive best threadblocked nextprefix threadseen)
 | pikeinv_final:
   forall best,
@@ -1051,6 +1116,18 @@ Proof.
 Qed.
 
 
+(** * Oracles correctness *)
+Lemma nfa_oracles_correct_advance_input_n:
+  forall r os inp n,
+    nfa_oracles_correct rer os r inp ->
+    nfa_oracles_correct rer os r (advance_input_n inp n forward).
+Proof.
+  intros.
+  destruct advance_input_n eqn:ADV.
+  eapply eq_sym in ADV as [|]%FunctionalSemantics.advance_input_n_suffix.
+  - now subst.
+  - eapply nfa_oracles_correct_strict_suffix; eauto.
+Qed.
 
 (** * Invariant Initialization  *)
 
@@ -1058,6 +1135,8 @@ Qed.
 Lemma initial_pike_inv:
   forall r inp os tree
     (TREE: bool_tree rer [Areg r] inp CanExit forward tree)
+    (SUBSET: pike_regex r)
+    (OS: nfa_oracles_correct rer os r inp),
     pike_inv r os (pike_tree_initial_state tree inp) (pike_vm_initial_state inp).
 Proof.
   intros.
@@ -1068,6 +1147,7 @@ Lemma initial_pike_inv_unanchored {strs:StrSearch}:
   forall r inp os tree future_tree
     (TREE: bool_tree rer [Areg r] inp CanExit forward tree)
     (SUBSET: pike_regex r)
+    (OS: nfa_oracles_correct rer os r inp)
     (SHAPE: future_tree_shape rer r inp future_tree),
     exists future, may_erase future_tree future /\
     pike_inv r os (pike_tree_initial_state_unanchored tree future inp) (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward).
@@ -1160,10 +1240,10 @@ Proof.
         destruct next_prefix_counter eqn:COUNTER.
         * eexists. split.
           -- eapply pts_acc; eauto using no_erase.
-          -- eauto using pikeinv, initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, future_nextprefix_some.
+          -- eauto 6 using pikeinv, initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, future_nextprefix_some, nfa_oracles_correct_advance_input_n.
         * eexists. split.
           -- eapply pts_acc; eauto using erases, next_prefix_counter_none_nores.
-          -- eauto using pikeinv, initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, nnp_none.
+          -- eauto using pikeinv, initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, nnp_none, nfa_oracles_correct_advance_input_n.
       (* final step *)
       + replace pvs2 with (PVS_final best) by now inversion VMSTEP.
         left.
@@ -1183,22 +1263,22 @@ Proof.
         destruct next_prefix_counter eqn:COUNTER.
           * eexists. split.
             -- eapply pts_nextchar_generate; eauto using no_erase.
-            -- eapply pikeinv; eauto using initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, future_nextprefix_some.
+            -- eapply pikeinv; eauto using initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, future_nextprefix_some, nfa_oracles_correct_strict_suffix, StrictSuffix.ss_advance.
           * eexists. split.
             -- eapply pts_nextchar_generate; eauto using erases, next_prefix_counter_none_nores.
-            -- eauto using pikeinv, initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, nnp_none.
+            -- eauto 7 using pikeinv, initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, nnp_none, nfa_oracles_correct_strict_suffix, StrictSuffix.ss_advance.
       (* nextchar_filter *)
       + assert (pvs2 = PVS (Input next (c::pref)) ((pc,gmblocked,b)::threadlist) best [] (Some (nextprefix, lit, strs)) initial_seenpcs)
            by eauto using pikevm_deterministic, pvs_nextchar_filter.
         apply advance_next in ADV.
         inversion FUTUREPREFIX; subst. left.
-        eauto using pikeinv, initial_inclusion, ltt_nil, pts_nextchar_filter.
+        eauto 7 using pikeinv, initial_inclusion, ltt_nil, pts_nextchar_filter, nfa_oracles_correct_strict_suffix, StrictSuffix.ss_advance.
       (* nextchar *)
       + assert (pvs2 = PVS (Input next (c::pref)) ((pc,gmblocked,b)::threadlist) best [] None initial_seenpcs)
           by eauto using pikevm_deterministic, pvs_nextchar.
         left. apply advance_next in ADV. subst.
         inversion FUTUREPREFIX; subst;
-          eauto using pikeinv, pts_nextchar, pts_nextchar_filter, initial_inclusion, nnp_none, ltt_nil.
+          eauto 6 using pikeinv, pts_nextchar, pts_nextchar_filter, initial_inclusion, nnp_none, ltt_nil, nfa_oracles_correct_strict_suffix, StrictSuffix.ss_advance.
   }
   (* there is an active tree/thread *)
   destruct threadactive as [|[[pc gm'] b] threadactive]; inversion ACTIVE; subst.

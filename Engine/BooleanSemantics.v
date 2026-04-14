@@ -530,4 +530,23 @@ Qed.
     repeat constructor. pike_subset.
   Qed.
 
+  (* since we do not support captures in lookarounds, we know the returned lk_result is the group map from the input *)
+  Lemma lk_result_same_gm:
+    forall r gm gm' inp b t lk,
+      pike_regex (Lookaround lk r) ->
+      bool_tree [Areg r] inp b (lk_dir lk) t ->
+      lk_result lk t gm inp = Some gm' ->
+      gm' = gm.
+  Proof.
+    unfold lk_result.
+    intros r gm gm' inp b t lk NOGROUPS TREE RES_LK.
+    destruct positivity, tree_res eqn:Hres; try easy.
+    - destruct l. injection RES_LK as <-.
+      eapply bool_to_istree_regex in TREE; eauto; pike_subset.
+      change g with (snd (i, g)).
+      eapply no_groups_empty_gm; eauto.
+      simpl. now rewrite app_nil_r.
+    - now injection RES_LK as <-.
+  Qed.
+
 End BooleanSemantics.
