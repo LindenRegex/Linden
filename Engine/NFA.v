@@ -1,14 +1,16 @@
 From Stdlib Require Import List Lia.
 Import ListNotations.
 
-From Linden Require Import Regex Chars Groups.
+From Linden Require Import Regex Chars Groups StrictSuffix.
 From Linden Require Import Tree.
-From Linden Require Import Semantics PikeSubset.
+From Linden Require Import Semantics PikeSubset BooleanSemantics.
 From Linden Require Import Parameters.
-From Warblre Require Import Numeric.
+From Warblre Require Import Base RegExpRecord Numeric.
 
 Section NFA.
   Context {params: LindenParameters}.
+  Context (rer : RegExpRecord).
+
   Definition nfa_oracle := input -> bool.
   Definition nfa_oracles := list nfa_oracle.
   Definition nfa_oracle_idx := nat.
@@ -407,10 +409,230 @@ Section NFA.
     - inversion H. subst. constructor. get_pc.
     - inversion H. subst. apply nfa_unsupported.
       + unfold not. intros. inversion H0.
-      + rewrite get_first. simpl. auto.
+      + get_pc.
+  Qed.
+
+  (** * Oracle correctness *)
+
+  (* the correctness condition for a single oracle with regards to a `Lookaround lk r1` *)
+  Definition nfa_oracle_correct (o: nfa_oracle) (inp: input) (lk: lookaround) (r1: regex): Prop :=
+    forall inp' b t,
+      (* if the input is related to the input we are matching on *)
+      inp' = inp \/ strict_suffix inp' inp forward ->
+      (* and `t` is the backtracking tree of the lookaround *)
+      bool_tree rer [Areg r1] inp' b (lk_dir lk) t ->
+      (* then the oracle correctly answers whether the lookaround was satisfied *)
+      o inp' = if tree_res t GroupMap.empty inp' (lk_dir lk) then positivity lk else negb (positivity lk).
+
+  Fixpoint nfa_oracles_correct' (os: nfa_oracles) (r: regex) (inp: input) (lk_idx: nfa_oracle_idx): nfa_oracle_idx * Prop :=
+    match r with
+    | Sequence r1 r2 | Disjunction r1 r2 =>
+        let '(lk_idx1, prop1) := nfa_oracles_correct' os r1 inp lk_idx in
+        let '(lk_idx2, prop2) := nfa_oracles_correct' os r2 inp lk_idx1 in
+        (lk_idx2, prop1 /\ prop2)
+    | Quantified _ 0 (NoI.N 1) r1 | Quantified _ 0 (NoI.Inf) r1 | Group _ r1 =>
+        let '(lk_idx1, prop1) := nfa_oracles_correct' os r1 inp lk_idx in
+        (lk_idx1, prop1)
+    | Lookaround lk r1 => (S lk_idx,
+        match nth_error os lk_idx with
+        | None => False
+        | Some o => nfa_oracle_correct o inp lk r1
+        end)
+    | _ => (lk_idx, True)
+    end.
+
+  (* oracles `os` are correct with respect to a regex `r` if at every input position *)
+  (* it correctly reports if a lookaround matches *)
+  Definition nfa_oracles_correct (os: nfa_oracles) (r: regex) (inp: input): Prop :=
+    snd (nfa_oracles_correct' os r inp 0).
+
+  (* the returned lk_idx is independent from the input *)
+  Lemma nfa_oracles_correct_same_lk_idx :
+    forall r os inp1 inp2 lk_idx lk_idx1 lk_idx2 P1 P2
+      (Hos1: nfa_oracles_correct' os r inp1 lk_idx = (lk_idx1, P1))
+      (Hos2: nfa_oracles_correct' os r inp2 lk_idx = (lk_idx2, P2)),
+      lk_idx1 = lk_idx2.
+  Proof.
+    induction r; simpl; intros;
+      try injection Hos1 as <- <-; try injection Hos2 as <- <-;
+      try easy.
+    - destruct (nfa_oracles_correct' os r1 inp1) eqn:Hos11, (nfa_oracles_correct' os r2 inp1) eqn:Hos12.
+      destruct (nfa_oracles_correct' os r1 inp2) eqn:Hos21, (nfa_oracles_correct' os r2 inp2) eqn:Hos22.
+      injection Hos1 as <- <-. injection Hos2 as <- <-.
+      replace n1 with n in * by eauto.
+      eauto.
+    - destruct (nfa_oracles_correct' os r1 inp1) eqn:Hos11, (nfa_oracles_correct' os r2 inp1) eqn:Hos12.
+      destruct (nfa_oracles_correct' os r1 inp2) eqn:Hos21, (nfa_oracles_correct' os r2 inp2) eqn:Hos22.
+      injection Hos1 as <- <-. injection Hos2 as <- <-.
+      replace n1 with n in * by eauto.
+      eauto.
+    - destruct (nfa_oracles_correct' os r inp1 lk_idx) eqn:Hos1'.
+      destruct (nfa_oracles_correct' os r inp2 lk_idx) eqn:Hos2'.
+      destruct min; [destruct delta as [[|[|]]|]|];
+        injection Hos1 as <- <-; injection Hos2 as <- <-; eauto.
+    - destruct (nfa_oracles_correct' os r inp1 lk_idx) eqn:Hos1'.
+      destruct (nfa_oracles_correct' os r inp2 lk_idx) eqn:Hos2'.
+      injection Hos1 as <- <-; injection Hos2 as <- <-; eauto.
+  Qed.
+
+  (* the oracle is correct for all strict suffixes *)
+  Lemma nfa_oracle_correct_strict_suffix :
+    forall o inp lk r1 inp',
+      nfa_oracle_correct o inp lk r1 ->
+      strict_suffix inp' inp forward ->
+      nfa_oracle_correct o inp' lk r1.
+  Proof.
+    unfold nfa_oracle_correct.
+    intros.
+    destruct H1; subst; eauto using strict_suffix_trans.
+  Qed.
+
+  Lemma nfa_oracles_correct_strict_suffix' :
+    forall r o inp inp' lk_idx,
+      snd (nfa_oracles_correct' o r inp lk_idx) ->
+      strict_suffix inp' inp forward ->
+      snd (nfa_oracles_correct' o r inp' lk_idx).
+  Proof.
+    induction r; simpl; intros; try easy.
+    - destruct (nfa_oracles_correct' o r1 inp) eqn:Hos1, (nfa_oracles_correct' o r2 inp) eqn:Hos2.
+      destruct (nfa_oracles_correct' o r1 inp') eqn:Hos1', (nfa_oracles_correct' o r2 inp') eqn:Hos2'.
+      rewrite nfa_oracles_correct_same_lk_idx with (1:=Hos1) (2:=Hos1') in *.
+      apply f_equal with (f:=snd) in Hos1, Hos2, Hos1', Hos2'.
+      simpl in *.
+      rewrite <-Hos1', <-Hos2'.
+      rewrite <-Hos1, <-Hos2 in H. destruct H.
+      eauto.
+    - destruct (nfa_oracles_correct' o r1 inp) eqn:Hos1, (nfa_oracles_correct' o r2 inp) eqn:Hos2.
+      destruct (nfa_oracles_correct' o r1 inp') eqn:Hos1', (nfa_oracles_correct' o r2 inp') eqn:Hos2'.
+      rewrite nfa_oracles_correct_same_lk_idx with (1:=Hos1) (2:=Hos1') in *.
+      apply f_equal with (f:=snd) in Hos1, Hos2, Hos1', Hos2'.
+      simpl in *.
+      rewrite <-Hos1', <-Hos2'.
+      rewrite <-Hos1, <-Hos2 in H. destruct H.
+      eauto.
+    - destruct (nfa_oracles_correct' o r inp) eqn:Hos', (nfa_oracles_correct' o r inp') eqn:Hos''.
+      apply f_equal with (f:=snd) in Hos', Hos''.
+      simpl in *.
+      rewrite <-Hos''.
+      rewrite <-Hos' in H.
+      destruct min; [destruct delta as [[|[|]]|]|]; eauto.
+    - destruct nth_error. 2: easy.
+      eapply nfa_oracle_correct_strict_suffix; eauto.
+    - destruct (nfa_oracles_correct' o r inp) eqn:Hos', (nfa_oracles_correct' o r inp') eqn:Hos''.
+      apply f_equal with (f:=snd) in Hos', Hos''.
+      simpl in *.
+      rewrite <-Hos''.
+      rewrite <-Hos' in H.
+      eauto.
+  Qed.
+
+  (* the oracles are correct for all strict suffixes *)
+  Corollary nfa_oracles_correct_strict_suffix :
+    forall r o inp inp',
+      nfa_oracles_correct o r inp ->
+      strict_suffix inp' inp forward ->
+      nfa_oracles_correct o r inp'.
+  Proof.
+    unfold nfa_oracles_correct.
+    intros.
+    eapply nfa_oracles_correct_strict_suffix'; eauto.
+  Qed.
+
+  (* the returned lk_idx is the same for compilation and correctness of oracles *)
+  Lemma compile_oracles_correct_same_lk_idx :
+    forall r os fresh fresh' inp lk_idx lk_idx1 lk_idx2 c P
+      (Hcomp: compile r fresh lk_idx = (c, fresh', lk_idx1))
+      (Hos: nfa_oracles_correct' os r inp lk_idx = (lk_idx2, P)),
+      lk_idx1 = lk_idx2.
+  Proof.
+    induction r; intros; simpl in *;
+      try injection Hcomp as <- <- <-; try injection Hos as <- <-;
+      try easy.
+    - destruct (compile r1 (S fresh)) eqn:Hcomp1, p, (compile r2 (S l)) eqn:Hcomp2, p.
+      destruct (nfa_oracles_correct' os r1 inp lk_idx) eqn:Hos1, (nfa_oracles_correct' os r2 inp n1) eqn:Hos2.
+      injection Hcomp as <- <- <-. injection Hos as <- <-.
+      replace n1 with n in * by eauto.
+      eauto.
+    - destruct (compile r1 fresh) eqn:Hcomp1, p, (compile r2 l) eqn:Hcomp2, p.
+      destruct (nfa_oracles_correct' os r1 inp lk_idx) eqn:Hos1, (nfa_oracles_correct' os r2 inp n1) eqn:Hos2.
+      injection Hcomp as <- <- <-. injection Hos as <- <-.
+      replace n1 with n in * by eauto.
+      eauto.
+    - destruct (compile r (S (S (S fresh)))) eqn:Hcomp', p.
+      destruct (nfa_oracles_correct' os r inp lk_idx) eqn:Hos'.
+      replace n0 with n in * by eauto.
+      destruct min; [destruct delta as [[|[|]]|]|];
+        injection Hcomp as <- <- <-; injection Hos as <- <-; easy.
+    - destruct (compile r (S fresh)) eqn:Hcomp', p.
+      destruct (nfa_oracles_correct' os r inp lk_idx) eqn:Hos'.
+      replace n0 with n in * by eauto.
+      injection Hcomp as <- <- <-; injection Hos as <- <-; easy.
   Qed.
 
 
+  (* if `os` are correct, then for all `OracleQuery`s we have an oracle *)
+  Lemma nfa_oracles_get' :
+    forall r os pc i c fresh fresh' inp lk_idx lk_idx' lk r1
+      (Hcomp: compile r fresh lk_idx = (c, fresh', lk_idx'))
+      (Hos: snd (nfa_oracles_correct' os r inp lk_idx))
+      (Hget: get_pc c pc = Some (OracleQuery i lk r1)),
+      nth_error os i <> None.
+  Proof.
+    induction r; intros; simpl in *;
+      try injection Hcomp as <- <- <-;
+      try solve[get_pc].
+    - destruct (compile r1 (S fresh)) eqn:Hcomp1, p, (compile r2 (S l)) eqn:Hcomp2, p.
+      destruct (nfa_oracles_correct' os r1 inp lk_idx) eqn:Hos1, (nfa_oracles_correct' os r2 inp n1) eqn:Hos2.
+      simpl in Hos.
+      injection Hcomp as <- <- <-.
+      rewrite compile_oracles_correct_same_lk_idx with (1:=Hcomp1) (2:=Hos1) in *.
+      get_pc.
+      + eapply IHr1; eauto.
+        now rewrite Hos1.
+      + eapply IHr2; eauto.
+        now rewrite Hos2.
+    - destruct (compile r1 fresh) eqn:Hcomp1, p, (compile r2 l) eqn:Hcomp2, p.
+      destruct (nfa_oracles_correct' os r1 inp lk_idx) eqn:Hos1, (nfa_oracles_correct' os r2 inp n1) eqn:Hos2.
+      rewrite compile_oracles_correct_same_lk_idx with (1:=Hcomp1) (2:=Hos1) in *.
+      simpl in Hos.
+      injection Hcomp as <- <- <-.
+      get_pc.
+      + eapply IHr1; eauto.
+        now rewrite Hos1.
+      + eapply IHr2; eauto.
+        now rewrite Hos2.
+    - destruct (compile r (S (S (S fresh)))) eqn:Hcomp', p.
+      destruct (nfa_oracles_correct' os r inp lk_idx) eqn:Hos'.
+      destruct min; [destruct delta as [[|[|]]|]|];
+        injection Hcomp as <- <- <-.
+      + get_pc.
+      + destruct greedy; eapply IHr; eauto; simpl in *; now rewrite Hos' || get_pc.
+      + get_pc.
+      + destruct greedy; eapply IHr; eauto; simpl in *; now rewrite Hos' || get_pc.
+      + get_pc.
+    - get_pc. subst.
+      destruct nth_error; easy.
+    - destruct (compile r (S fresh)) eqn:Hcomp', p.
+      destruct (nfa_oracles_correct' os r inp lk_idx) eqn:Hos'.
+      simpl in Hos.
+      injection Hcomp as <- <- <-.
+      get_pc.
+      eapply IHr; eauto.
+      now rewrite Hos'.
+  Qed.
+
+  (* if `os` are correct, then for all `OracleQuery`s we have an oracle *)
+  Corollary nfa_oracles_get :
+    forall r os inp pc i lk r1
+      (Hos: nfa_oracles_correct os r inp)
+      (Hget: get_pc (compilation r) pc = Some (OracleQuery i lk r1)),
+      nth_error os i <> None.
+  Proof.
+    unfold compilation.
+    intros.
+    destruct compile eqn:Hcom, p.
+    eapply nfa_oracles_get'; eauto; simpl; get_pc.
+  Qed.
 
   (** * Lifting the representation predicate to continuations  *)
   (* This is useful to relate the continuations used in the tree semantics to the code produced by the NFA compiler *)
