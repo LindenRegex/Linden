@@ -11,6 +11,7 @@ From Linden Require Import Complexity.
 From Linden Require Import Parameters.
 From Warblre Require Import Base RegExpRecord.
 From Linden Require Import FunctionalUtils FunctionalSemantics.
+Require Import Derive.
 
 Section FunctionalPikeVM.
   Context {params: LindenParameters}.
@@ -255,5 +256,172 @@ Example final_gm : GroupMap.t :=
 Lemma paper_pikevm_exec:
   pike_vm_match (rer_of paper_regex) paper_regex paper_input = Finished (Some (Input [] [b;a], final_gm)).
 Proof. reflexivity. Qed.
+
+Notation compute x :=
+  ltac:(let c := (eval cbv in x) in exact c).
+
+Derive paper_exec SuchThat
+  (forall inp,
+      let r := paper_regex in
+      let rer := rer_of r in
+      let code := compilation r in
+      forall t g bb tl,
+      let pvs := PVS inp ((t, g, bb) :: tl) None [] initial_seenpcs in
+      (* let fuel := 10 in *)
+      (* let pvsinit := pike_vm_initial_state inp in *)
+      pike_vm_func_step rer code pvs
+        (* pike_vm_loop rer code pvsinit fuel *)
+      = paper_exec t g bb tl inp)
+  As paper_exec_correct.
+Proof.
+  remember paper_exec as body eqn:Heq; rewrite Heq;
+    subst paper_exec.
+  instantiate (1 := ltac:(intros t g bb tl inp)); cbv beta.
+  (* unshelve instantiate (1 := ?[body]); cycle 1. *)
+
+  intros.
+  cbv -[naive_params] in code.
+  cbv -[naive_params] in rer; subst rer.
+  simpl; unfold EpsDead.
+
+  Ltac compute_pc :=
+    change (get_pc ?c ?t') with (compute (get_pc c t')); cbv iota.
+
+  Ltac step t :=
+    match goal with
+    | [  |- context[match get_pc _ _ with _ => _ end] ] =>
+        instantiate (1 := ltac:(destruct t)); destruct t;
+        [ compute_pc | ]
+    | [  |- context[match @check_read ?params ?rer ?c ?inp ?fw with _ => _ end]] =>
+        instantiate (1 := ltac:(destruct (@check_read params rer c inp fw)));
+        destruct (@check_read params rer c inp fw); cbv zeta iota
+    | [  |- context[match ?b with CanExit => _ | CannotExit => _ end]] =>
+        instantiate (1 := ltac:(destruct b));
+        destruct b; cbv zeta iota
+    end.
+
+  Ltac refl :=
+    repeat match goal with
+      | [ h := _ |- _ ] => subst h
+      end; reflexivity.
+
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  step t; [ repeat step 0; refl | cbv beta in Heq ].
+  compute_pc.
+  simpl List.app in Heq.
+  simpl Nat.add in Heq.
+  unfold check_read in Heq.
+Qed.
+
+  Unshelve.
+  12: {
+
+    (* instantiate (1 := ?[f]). *)
+    (* [f]: { *)
+    match goal with
+    end.
+
+    all: reflexivity
+
+  simpl.
+  step t; [ reflexivity | ].
+  step t; [ reflexivity | ].
+  step t; [ reflexivity | ].
+  step t; [ reflexivity | ].
+  step t; [ reflexivity | ].
+  step t; [ reflexivity | ].
+  step t; [ reflexivity | ].
+  step t; [ reflexivity | ].
+  step t; [ reflexivity | ].
+  step t; [ reflexivity | ].
+
+  all: repeat match goal with
+         | [  |- context[match get_pc _ _ with _ => _ end] ] =>
+             instantiate (1 := ltac:(destruct t)); destruct t;
+             [ ;
+                | ]
+         end.
+
+
+
+
+  do 13 try destruct t.
+  all: cbv beta.
+  do 13 try destruct t.
+  all: change (get_pc ?c ?t') with (compute (get_pc c t')); unfold EpsDead; cbv iota.
+
+  do 10 match goal with
+    | [  |- context[get_pc _ _] ] =>
+
+        destruct t;
+        [ change (get_pc ?c ?t') with (compute (get_pc c t')); cbv iota | ]
+    | _ =>
+        idtac
+    end.
+  destruct t [.
+  simpl.
+  intros.
+  subst pvs.
+  unfold pike_vm_func_step.
+  simpl.
+  unfold epsilon_step.
+  simpl get_pc.
+  cbv iota.
+  simpl seen_thread.
+  cbv iota.
+
+
+
+  (* remember (vm_fuel paper_regex (Input s [])) as fuel. *)
+
+  cbv in code.
+  Arguments pike_vm_initial_state !_ /.
+  simpl in pvsinit.
+  cbv in rer.
+  subst rer code pvsinit.
+  unfold pike_vm_loop.
+
+
+  change (pike_vm_initial_state ?i) with (compute (pike_vm_initial_state i)).
+  change (rer_of ?r) with (compute (rer_of r)).
+  change (compilation ?r) with (compute (compilation r)).
+
+  assert nat as n by exact 0.
+  set (vm_fuel _ _).
+
+  remember (vm_fuel _ _) as fuel.
+  remember (compilation _) as c eqn:Hc; cbv in Hc; subst c.
+  remember (rer_of _) as c eqn:Hc.
+
+  cbv in c. ; subst c.
+
+
+
+  simpl pike_vm_initial_state.
+  replace (vm_fuel paper_regex (Input s [])) with 7 by admit; simpl.
+
+  Unshelve.
+  intros.
+  simpl.
+  simpl.
+  all: intros; cbv beta.
+  intros.
+
+  body: []
+  intros.
+
+  destruct s.
+
 
 End Example.
