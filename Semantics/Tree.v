@@ -53,10 +53,10 @@ Lemma seqop_assoc:
     seqop o1 (seqop o2 o3) = seqop (seqop o1 o2) o3.
 Proof. intros. unfold seqop. destruct o1; destruct o2; auto. Qed.
 
-Definition option_flat_map {A B: Type} (f: A -> option B) (o: option A) : option B :=
+Definition option_flat_map {A B: Type} (f: A -> list B) (o: option A) : list B :=
   match o with
   | Some a => f a
-  | None => None
+  | None => []
   end.
 
 (** * Backtracking trees  *)
@@ -272,6 +272,23 @@ Section Tree.
     - simpl. rewrite IHt1. rewrite IHt2. rewrite hd_error_app. unfold seqop.
       destruct (hd_error (tree_leaves t1 gm idx dir)) eqn:HD; auto.
     - destruct (positivity lk) eqn:Hlkpos. + now apply first_tree_leaf_poslk. + now apply first_tree_leaf_neglk.
+  Qed.
+
+  Corollary first_tree_empty:
+    forall t gm idx dir,
+      tree_res t gm idx dir = None <-> tree_leaves t gm idx dir = [].
+  Proof.
+    intros. rewrite first_tree_leaf. destruct tree_leaves; now split.
+  Qed.
+
+  Corollary first_tree_some:
+    forall t gm idx dir leaf rest,
+      tree_leaves t gm idx dir = leaf :: rest ->
+      tree_res t gm idx dir = Some leaf.
+  Proof.
+    intros. rewrite first_tree_leaf. destruct tree_leaves.
+    - easy.
+    - now injection H as <-.
   Qed.
 
   (** * No Result - argument irrelevance  *)

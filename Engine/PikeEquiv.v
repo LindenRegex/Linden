@@ -1169,7 +1169,7 @@ Qed.
 Definition skip_state (pvs:pike_vm_state) : bool :=
   match pvs with
   | PVS_final _ => false
-  | PVS inp active best blocked nextprefix seen =>
+  | PVS _ active _ _ _ seen =>
       match active with
       | [] => false
       | (pc,gm,b)::active => inseenpc seen pc b
@@ -1199,7 +1199,7 @@ Proof.
   inversion INV; subst.
   (* Final states make no step *)
   2: { inversion VMSTEP. }
-  destruct (skip_state (PVS inp threadactive best threadblocked nextprefix threadseen)) eqn:SKIP.
+  destruct (skip_state (PVS inp threadactive occ threadblocked nextprefix threadseen)) eqn:SKIP.
   (* skip states are performed in lockstep *)
   { left. destruct threadactive as [|[[pc gm] b] active]; simpl in SKIP.
     { inversion SKIP. }
@@ -1210,7 +1210,7 @@ Proof.
     - assert (teq = tree).
       { eapply tt_same_tree; eauto. }
       subst.
-      exists (PTS inp treeactive best treeblocked future treeseen).
+      exists (PTS inp treeactive occ treeblocked future treeseen).
       split.
       + apply pts_skip; auto.
       + eapply pikeinv; eauto.
@@ -1245,7 +1245,7 @@ Proof.
           -- eapply pts_acc; eauto using erases, next_prefix_counter_none_nores.
           -- eauto using pikeinv, initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, nnp_none, nfa_oracles_correct_advance_input_n.
       (* final step *)
-      + replace pvs2 with (PVS_final best) by now inversion VMSTEP.
+      + replace pvs2 with (PVS_final occ) by now inversion VMSTEP.
         left.
         inversion FUTUREPREFIX; subst; eauto using pts_final, pikeinv_final.
     (* we have some blocked threads *)
@@ -1256,7 +1256,7 @@ Proof.
       (* do we have the nextprefix if so, with what counter? *)
       destruct nextprefix as [[[nextprefix lit] strs]|]; [destruct nextprefix|].
       (* nextchar_generate *)
-      + assert (pvs2 = PVS (Input next (c::pref)) (((pc,gmblocked,b)::threadlist) ++ [pike_vm_initial_thread]) best [] (next_prefix_counter (Input next (c::pref)) forward lit) initial_seenpcs)
+      + assert (pvs2 = PVS (Input next (c::pref)) (((pc,gmblocked,b)::threadlist) ++ [pike_vm_initial_thread]) occ [] (next_prefix_counter (Input next (c::pref)) forward lit) initial_seenpcs)
           by eauto using pikevm_deterministic, pvs_nextchar_generate.
         apply advance_next in ADV.
         inversion FUTUREPREFIX; subst. left.
@@ -1268,13 +1268,13 @@ Proof.
             -- eapply pts_nextchar_generate; eauto using erases, next_prefix_counter_none_nores.
             -- eauto 7 using pikeinv, initial_tree_thread, initial_inclusion, ltt_app, ltt_cons, ltt_nil, nnp_none, nfa_oracles_correct_strict_suffix, StrictSuffix.ss_advance.
       (* nextchar_filter *)
-      + assert (pvs2 = PVS (Input next (c::pref)) ((pc,gmblocked,b)::threadlist) best [] (Some (nextprefix, lit, strs)) initial_seenpcs)
+      + assert (pvs2 = PVS (Input next (c::pref)) ((pc,gmblocked,b)::threadlist) occ [] (Some (nextprefix, lit, strs)) initial_seenpcs)
            by eauto using pikevm_deterministic, pvs_nextchar_filter.
         apply advance_next in ADV.
         inversion FUTUREPREFIX; subst. left.
         eauto 7 using pikeinv, initial_inclusion, ltt_nil, pts_nextchar_filter, nfa_oracles_correct_strict_suffix, StrictSuffix.ss_advance.
       (* nextchar *)
-      + assert (pvs2 = PVS (Input next (c::pref)) ((pc,gmblocked,b)::threadlist) best [] None initial_seenpcs)
+      + assert (pvs2 = PVS (Input next (c::pref)) ((pc,gmblocked,b)::threadlist) occ [] None initial_seenpcs)
           by eauto using pikevm_deterministic, pvs_nextchar.
         left. apply advance_next in ADV. subst.
         inversion FUTUREPREFIX; subst;
@@ -1288,7 +1288,7 @@ Proof.
     (* stuttering step *)
     right. eapply stutter_step in TT as H; auto.
     destruct H as [nextpc [nextb [EPSSTEP TT2]]]; subst.
-    assert (pvs2 = (PVS inp ([(nextpc, gm, nextb)] ++ threadactive) best threadblocked nextprefix (add_thread threadseen (pc,gm,b)))).
+    assert (pvs2 = (PVS inp ([(nextpc, gm, nextb)] ++ threadactive) occ threadblocked nextprefix (add_thread threadseen (pc,gm,b)))).
     { eapply pikevm_deterministic; eauto. eapply pvs_active; eauto. }
     subst; simpl; auto. eapply pikeinv; simpl; eauto.
     - constructor; eauto.
@@ -1298,24 +1298,27 @@ Proof.
   destruct (tree_bfs_step t gm inp) eqn:TREESTEP.
   (* active *)
   - left. eapply generate_active in TREESTEP as H; eauto. destruct H as [newthreads [EPS LTT2]].
-    assert (pvs2 = PVS inp (newthreads ++ threadactive) best threadblocked nextprefix (add_thread threadseen (pc,gm,b))).
+    assert (pvs2 = PVS inp (newthreads ++ threadactive) occ threadblocked nextprefix (add_thread threadseen (pc,gm,b))).
     { eapply pikevm_deterministic; eauto. constructor; eauto. }
-    subst. exists (PTS inp (l ++ treeactive) best treeblocked future (add_seentrees treeseen t)). split.
+    subst. exists (PTS inp (l ++ treeactive) occ treeblocked future (add_seentrees treeseen t)). split.
     + eapply pts_active; eauto.
     + eapply pikeinv; try (eapply add_inclusion; eauto); try constructor; eauto.
       apply ltt_app; eauto.
   (* match *)
   - left. eapply generate_match in TREESTEP as THREADSTEP; eauto.
-    assert (pvs2 = PVS inp [] (Some (inp,gm_of (pc,gm,b))) threadblocked None (add_thread threadseen (pc,gm,b))).
-    { eapply pikevm_deterministic; eauto. constructor; eauto. }
-    subst. exists (PTS inp [] (Some (inp,gm)) treeblocked None (add_seentrees treeseen t)). split.
-    + constructor; auto.
-    + eapply pikeinv; try (eapply add_inclusion; eauto); try constructor; eauto.
+    set (accthread := accept occ inp (gm_of (pc,gm,b)) threadactive).
+    assert (pvs2 = PVS inp (fst accthread) (snd accthread) threadblocked None (add_thread threadseen (pc,gm,b))).
+    { eapply pikevm_deterministic; eauto. constructor; eauto. now destruct occ. }
+    subst.
+    set (acctree := accept occ inp (gm_of (pc,gm,b)) treeactive).
+    exists (PTS inp (fst acctree) (snd acctree) treeblocked None (add_seentrees treeseen t)). split.
+    * constructor; auto. now destruct occ.
+    * destruct occ; eapply pikeinv; try (eapply add_inclusion; eauto); try constructor; eauto.
   (* blocked *)
   - left. specialize (generate_blocked _ _ _ os _ _ _ _ TREESTEP STUTTERS TT) as [EPS2 [TT2 [nexti ADVANCE]]].
-    assert (pvs2 = PVS inp threadactive best (threadblocked ++ [(pc+1,gm,CanExit)]) nextprefix (add_thread threadseen (pc,gm,b))).
+    assert (pvs2 = PVS inp threadactive occ (threadblocked ++ [(pc+1,gm,CanExit)]) nextprefix (add_thread threadseen (pc,gm,b))).
     { eapply pikevm_deterministic; eauto. constructor; auto. }
-    subst. exists (PTS inp treeactive best (treeblocked ++ [(t0,gm)]) future (add_seentrees treeseen t)). split.
+    subst. exists (PTS inp treeactive occ (treeblocked ++ [(t0,gm)]) future (add_seentrees treeseen t)). split.
     + eapply pts_blocked; eauto.
     + eapply pikeinv; try (eapply add_inclusion; eauto); try constructor; eauto.
       2: { intros H. rewrite ADVANCE in H. inversion H. }

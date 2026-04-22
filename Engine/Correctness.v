@@ -109,53 +109,90 @@ Proof.
   apply IHTRC. eapply pts_preservation; eauto.
 Qed.
 
+(* whether the occurrence in a PikeVM state is the `Best` *)
+Definition pike_vm_state_occ_best (pvs: pike_vm_state) : Prop :=
+  match pvs with
+  | PVS _ _ (Best _) _ _ _ => True
+  | PVS_final (Best _) => True
+  | _ => False
+  end.
+
+(* taking steps from a state whose occurrence is `Best` stays `Best` *)
+Lemma pike_vm_trc_best :
+  forall code dir os pvs1 pvs2,
+    trc_pike_vm code dir os pvs1 pvs2 ->
+    pike_vm_state_occ_best pvs1 ->
+    pike_vm_state_occ_best pvs2.
+Proof.
+  unfold pike_vm_state_occ_best.
+  induction 1; intros; auto.
+  apply IHtrc.
+  inversion STEP; subst; eauto.
+  destruct occ; now injection ACC as <- <-.
+Qed.
+
+Corollary pike_vm_trc_best_final :
+  forall code dir os pvs1 occ,
+    trc_pike_vm code dir os pvs1 (PVS_final occ) ->
+    pike_vm_state_occ_best pvs1 ->
+    exists ol, occ = Best ol.
+Proof.
+  intros.
+  eapply pike_vm_trc_best in H; auto.
+  destruct occ; easy || eauto.
+Qed.
+
 
 (** * Correctness Theorem of the PikeVM result  *)
 
 Theorem pike_vm_correct:
-  forall r inp os tree result,
+  forall r inp os tree occ,
     (* the regex `r` is in the supported subset *)
     pike_regex r ->
     (* the oracles `os` are correct for `r` *)
     nfa_oracles_correct rer os r inp ->
     (* `tree` is the tree of the regex `r` for the input `inp` *)
     is_tree rer [Areg r] inp GroupMap.empty forward tree ->
-    (* the result of the PikeVM is `result` *)
-    trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp) (PVS_final result) ->
-    (* This `result` is the priority result of the `tree` *)
-    result = first_leaf tree inp.
+    (* the result of the PikeVM is `occ` *)
+    trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp) (PVS_final occ) ->
+    (* This `occ` is the priority result of the `tree` *)
+    occ = Best (first_leaf tree inp).
 Proof.
-  intros r inp os tree result SUBSET OS TREE TRC.
+  intros r inp os tree occ SUBSET OS TREE TRC.
+  unfold first_leaf. rewrite first_tree_leaf.
   eapply encode_equal with (b:=CanExit) in TREE as BOOLTREE; pike_subset.
+  pose proof pike_vm_trc_best_final _ _ _ _ _ TRC I as [ol ->].
   eapply pike_vm_to_pike_tree in TRC; eauto.
   assert (SUBTREE: pike_subtree tree).
   { eapply pike_actions_pike_tree with (cont:=[Areg r]); eauto.
     pike_subset. }
-  generalize (init_piketree_inv tree inp SUBTREE). intros INIT.
+  pose proof init_piketree_inv tree inp SUBTREE as INIT.
   eapply pike_tree_trc_correct in TRC as FINALINV; eauto.
-  inversion FINALINV. subst. auto.
+  inversion FINALINV. inversion H0. subst. auto.
 Qed.
 
 Theorem pike_vm_correct_unanchored {strs:StrSearch}:
-  forall r inp os tree result,
+  forall r inp os tree occ,
     (* the regex `r` is in the supported subset *)
     pike_regex r ->
     (* the oracles `os` are correct for `r` *)
     nfa_oracles_correct rer os r inp ->
     (* `tree` is the tree of the regex `[^]*?r` for the input `inp` *)
     is_tree rer [Areg (lazy_prefix r)] inp GroupMap.empty forward tree ->
-    (* the result of the PikeVM is `result` *)
-    trc_pike_vm (compilation r) forward os (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward) (PVS_final result) ->
-    (* This `result` is the priority result of the `tree` *)
-    result = first_leaf tree inp.
+    (* the result of the PikeVM is `occ` *)
+    trc_pike_vm (compilation r) forward os (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward) (PVS_final occ) ->
+    (* This `occ` is the priority result of the `tree` *)
+    occ = Best (first_leaf tree inp).
 Proof.
-  intros r inp os tree result SUBSET OS TREE TRC.
+  intros r inp os tree occ SUBSET OS TREE TRC.
+  unfold first_leaf. rewrite first_tree_leaf.
   eapply encode_equal with (b:=CanExit) in TREE as BOOLTREE; pike_subset.
   inversion BOOLTREE; inversion CONT; destruct plus; [discriminate|]; subst.
+  pose proof pike_vm_trc_best_final _ _ _ _ _ TRC I as [ol ->].
   eapply pike_vm_to_pike_tree_unanchored in TRC as [? [? TRC]]; eauto.
   eapply pike_tree_trc_correct in TRC as FINALINV.
   2: eapply init_piketree_inv_unanchored; subst; unfold initial_future_unanchored; eauto.
-  inversion FINALINV. subst. auto.
+  inversion FINALINV. inversion H1. subst. auto.
 Qed.
 
 
@@ -167,9 +204,9 @@ Theorem pike_vm_same_warblre:
     equiv_regex wr lr ->
     RegExpRecord.capturingGroupsCount rer = StaticSemantics.countLeftCapturingParensWithin wr nil ->
     EarlyErrors.Pass_Regex wr nil ->
-    forall result,
-      trc_pike_vm (compilation lr) forward los (pike_vm_initial_state inp) (PVS_final result) ->
-      EquivDef.equiv_res result ((EquivMain.compilePattern wr rer) (input_str inp) (idx inp)).
+    forall occ,
+      trc_pike_vm (compilation lr) forward los (pike_vm_initial_state inp) (PVS_final occ) ->
+      exists result, occ = Best result /\ EquivDef.equiv_res result ((EquivMain.compilePattern wr rer) (input_str inp) (idx inp)).
 Proof.
   intros lr los wr inp Hpike Hos Hequiv Hcapcount HearlyErrors.
   pose proof equiv_main wr lr rer inp Hequiv Hcapcount HearlyErrors as HequivMain.
@@ -177,9 +214,9 @@ Proof.
   unfold compilePattern. rewrite Hcompsucc, Hexecsucc.
   set (tree := FunctionalUtils.compute_tr rer [Areg lr] inp GroupMap.empty forward).
   specialize (Hsameresult tree eq_refl). destruct Hsameresult as [His_tree Hsameresult].
-  intros result Hpikeresult.
-  pose proof pike_vm_correct lr inp los tree result Hpike Hos His_tree Hpikeresult as Hsameresult'.
-  rewrite Hsameresult'. assumption.
+  intros occ Hpikeresult.
+  pose proof pike_vm_correct lr inp los tree occ Hpike Hos His_tree Hpikeresult as Hsameresult'.
+  subst. eauto.
 Qed.
 
 (* Same, but with an input that is at the beginning of the input string *)
@@ -190,9 +227,9 @@ Theorem pike_vm_same_warblre_str0:
     equiv_regex wr lr ->
     RegExpRecord.capturingGroupsCount rer = StaticSemantics.countLeftCapturingParensWithin wr nil ->
     EarlyErrors.Pass_Regex wr nil ->
-    forall result,
-      trc_pike_vm (compilation lr) forward los (pike_vm_initial_state (init_input str0)) (PVS_final result) ->
-      EquivDef.equiv_res result ((EquivMain.compilePattern wr rer) str0 0).
+    forall occ,
+      trc_pike_vm (compilation lr) forward los (pike_vm_initial_state (init_input str0)) (PVS_final occ) ->
+      exists result, occ = Best result /\ EquivDef.equiv_res result ((EquivMain.compilePattern wr rer) str0 0).
 Proof.
   intros lr los wr str0 Hpike Hos Hequiv Hcapcount HearlyErrors.
   apply pike_vm_same_warblre; auto.
@@ -201,7 +238,7 @@ Qed.
 (* Equivalence of PikeVM to Warblre Semantics *)
 (* A version closer to the paper definition *)
 Theorem pike_vm_warblre:
-  forall rw r os inp result,
+  forall rw r os inp occ,
     (* For a correct RegExpRecord *)
     RegExpRecord.capturingGroupsCount rer = countLeftCapturingParensWithin rw [] ->
     (* For any Warblre regex that passes the early errors check, *)
@@ -213,9 +250,11 @@ Theorem pike_vm_warblre:
     (* and the oracles `os` are correct for `r` *)
     nfa_oracles_correct rer os r inp ->
     (* When PikeVM reaches a final result *)
-    trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp) (PVS_final result) ->
+    trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp) (PVS_final occ) ->
     (* this result is equal to Warblre's execution result *)
-    (compilePattern rw rer) (input_str inp) (idx inp) = to_MatchState result (RegExpRecord.capturingGroupsCount rer).
+    exists result,
+      occ = Best result /\
+      (compilePattern rw rer) (input_str inp) (idx inp) = to_MatchState result (RegExpRecord.capturingGroupsCount rer).
 Proof.
   intros rw r os inp result RER EARLY TOLINDEN SUBSET OS TRC.
   specialize (earlyErrors_pass_translation _ EARLY) as [lr SUCCESS].
@@ -226,6 +265,7 @@ Proof.
   unfold compilePattern. rewrite COMP_SUCC, EXEC_SUCC.
   specialize (LW_EQUIV (compute_tr rer [Areg lr] inp GroupMap.empty forward) eq_refl) as [ISTREE LW_EQUIV].
   specialize (pike_vm_correct _ _ _ _ _ SUBSET OS ISTREE TRC) as FIRST. subst.
+  eexists. split; eauto.
   symmetry. apply to_MatchState_equal; auto.
   eapply compilePattern_preserves_groupcount; eauto.
 Qed.

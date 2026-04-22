@@ -596,7 +596,7 @@ Section PikeVMComplexity.
   | inv_final:
     forall b, vm_inv c dir (PVS_final b) 0
   | inv_pvs:
-    forall inp active best blocked nextprefix seen dist
+    forall inp active occ blocked nextprefix seen dist
       (* the threads in active and blocked have their pc inside the code range *)
       (ACTIVEWF: forall t, In t active -> fst (fst t) < size c)
       (BLOCKEDWF: forall t, In t blocked -> fst (fst t) < size c)
@@ -604,13 +604,13 @@ Section PikeVMComplexity.
       (SEENWF: wf seen (size c) dist)
       (* The next place where the prefix can match is in range of the input *)
       (RANGEPREF: forall n lit strs, nextprefix = Some (n, lit, strs) -> inpsize inp dir > S n),
-      vm_inv c dir (PVS inp active best blocked nextprefix seen) (measure (size c) dist active blocked inp dir).
+      vm_inv c dir (PVS inp active occ blocked nextprefix seen) (measure (size c) dist active blocked inp dir).
 
   Lemma nonfinal_pos:
-    forall c dir inp active best blocked nextprefix seen m,
-      vm_inv c dir (PVS inp active best blocked nextprefix seen) m -> 0 < m.
+    forall c dir inp active occ blocked nextprefix seen m,
+      vm_inv c dir (PVS inp active occ blocked nextprefix seen) m -> 0 < m.
   Proof.
-    intros c dir inp active best blocked nextprefix seen m H. inversion H. subst. unfold measure.
+    intros c dir inp active occ blocked nextprefix seen m H. inversion H. subst. unfold measure.
     specialize (inpsize_strict inp dir) as SIZE. lia.
   Qed.
 
@@ -714,12 +714,19 @@ Section PikeVMComplexity.
     (* match: we lose a thread and a free slot *)
     - assert (RANGE: pc < size code).
       { specialize (ACTIVEWF (pc,gm,b) ltac:(simpl;left;auto)). simpl in ACTIVEWF. auto. }
-      exists (measure (size code) ((pc,b)::dist) [] blocked inp dir). split; [constructor|]; auto.
-      + intros t0 H. inversion H.
-      + unfold add_thread. apply wf_new; auto.
-      + intros n lit strs H; inversion H.
-      + specialize (free_add seen (size code) dist (pc,gm,b) SEENWF UNSEEN RANGE) as FREE.
-        apply wf_size in FREE. unfold measure, free. simpl. lia.
+      destruct occ; simpl in ACC; injection ACC as <- <-.
+      + exists (measure (size code) ((pc,b)::dist) [] blocked inp dir). split; [constructor|]; auto.
+        * intros t0 H. inversion H.
+        * unfold add_thread. apply wf_new; auto.
+        * intros n lit strs H; inversion H.
+        * specialize (free_add seen (size code) dist (pc,gm,b) SEENWF UNSEEN RANGE) as FREE.
+          apply wf_size in FREE. unfold measure, free. simpl. lia.
+      + exists (measure (size code) ((pc,b)::dist) active blocked inp dir). split; [constructor|]; auto.
+        * intros t0 H. apply ACTIVEWF. simpl. eauto.
+        * unfold add_thread. apply wf_new; auto.
+        * intros n lit strs H; inversion H.
+        * specialize (free_add seen (size code) dist (pc,gm,b) SEENWF UNSEEN RANGE) as FREE.
+          apply wf_size in FREE. unfold measure, free. simpl. lia.
     (* blocked: we switch an active thread to blocked, but lose a free slot *)
     -  assert (RANGE: pc < size code).
        { specialize (ACTIVEWF (pc,gm,b) ltac:(simpl;left;auto)). simpl in ACTIVEWF. auto. }
@@ -789,9 +796,9 @@ Section PikeVMComplexity.
   Proof.
     intros pvs code dir os n WF NONEMPTY INV. generalize dependent pvs. induction n using (strong_ind); intros.
     destruct pvs.
-    2: { exists best. constructor. }
-    specialize (pikevm_progress rer code dir os inp active best blocked nextprefix seen) as [next STEP].
-    specialize (pikevm_decreases code dir os (PVS inp active best blocked nextprefix seen) next n WF NONEMPTY STEP INV) as [newm [INV2 DECR]].
+    2: { exists occ. constructor. }
+    specialize (pikevm_progress rer code dir os inp active occ blocked nextprefix seen) as [next STEP].
+    specialize (pikevm_decreases code dir os (PVS inp active occ blocked nextprefix seen) next n WF NONEMPTY STEP INV) as [newm [INV2 DECR]].
     specialize (H newm DECR next INV2) as [result STEPS].
     exists result. apply more_steps with (n:=S newm); try lia.
     econstructor; eauto.

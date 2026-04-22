@@ -22,7 +22,7 @@ Section FunctionalPikeVM.
 Definition pike_vm_func_step (c:code') (dir:Direction) (os:nfa_oracles) (pvs:pike_vm_state) : pike_vm_state :=
   match pvs with
   | PVS_final _ => pvs
-  | PVS inp active best blocked nextprefix seen =>
+  | PVS inp active occ blocked nextprefix seen =>
       match active with
       | [] =>
           match blocked with
@@ -30,32 +30,33 @@ Definition pike_vm_func_step (c:code') (dir:Direction) (os:nfa_oracles) (pvs:pik
               match nextprefix with
               | Some (n, lit, strs) =>
                 let nextinp := advance_input_n inp (S n) dir in
-                PVS nextinp [pike_vm_initial_thread] best [] (next_prefix_counter nextinp dir lit) initial_seenpcs (* pvs_acc *)
-              | None => PVS_final best (* pvs_final *)
+                PVS nextinp [pike_vm_initial_thread] occ [] (next_prefix_counter nextinp dir lit) initial_seenpcs (* pvs_acc *)
+              | None => PVS_final occ (* pvs_final *)
               end
           | thr::blocked =>
               match (advance_input inp dir) with
-              | None => PVS_final best (* pvs_end *)
+              | None => PVS_final occ (* pvs_end *)
               | Some nextinp =>
                   match nextprefix with
-                  | None => PVS nextinp (thr::blocked) best [] None initial_seenpcs (* pvs_nextchar *)
-                  | Some (0, lit, strs) => PVS nextinp (thr::blocked ++ [pike_vm_initial_thread]) best [] (next_prefix_counter nextinp dir lit) initial_seenpcs (* pvs_nextchar_generate *)
-                  | Some (S n, lit, strs) => PVS nextinp (thr::blocked) best [] (Some (n, lit, strs)) initial_seenpcs (* pvs_nextchar_filter *)
+                  | None => PVS nextinp (thr::blocked) occ [] None initial_seenpcs (* pvs_nextchar *)
+                  | Some (0, lit, strs) => PVS nextinp (thr::blocked ++ [pike_vm_initial_thread]) occ [] (next_prefix_counter nextinp dir lit) initial_seenpcs (* pvs_nextchar_generate *)
+                  | Some (S n, lit, strs) => PVS nextinp (thr::blocked) occ [] (Some (n, lit, strs)) initial_seenpcs (* pvs_nextchar_filter *)
                   end
               end
           end
       | t::active =>
           match (seen_thread seen t) with
-          | true => PVS inp active best blocked nextprefix seen (* pvs_skip *)
+          | true => PVS inp active occ blocked nextprefix seen (* pvs_skip *)
           | false =>
               let nextseen := add_thread seen t in
               match (epsilon_step' rer t c dir os inp) with
               | EpsActive nextactive =>
-                  PVS inp (nextactive++active) best blocked nextprefix nextseen (* pvs_active *)
+                  PVS inp (nextactive++active) occ blocked nextprefix nextseen (* pvs_active *)
               | EpsMatch =>
-                  PVS inp [] (Some (inp,gm_of t)) blocked None nextseen (* pvs_match *)
+                  let '(active', occ') := accept occ inp (gm_of t) active in
+                  PVS inp active' occ' blocked None nextseen (* pvs_match *)
               | EpsBlocked newt =>
-                  PVS inp active best (blocked ++ [newt]) nextprefix nextseen (* pvs_blocked *)
+                  PVS inp active occ (blocked ++ [newt]) nextprefix nextseen (* pvs_blocked *)
               end
           end
       end
@@ -79,11 +80,11 @@ Definition vm_fuel (r:regex) (inp:input) (dir:Direction): nat :=
 
 Inductive matchres : Type :=
 | OutOfFuel
-| Finished: option leaf -> matchres.
+| Finished: occurrence -> matchres.
 
 Definition getres (pvs:pike_vm_state) : matchres :=
   match pvs with
-  | PVS_final best => Finished best
+  | PVS_final occ => Finished occ
   | _ => OutOfFuel
   end.
 
@@ -116,7 +117,7 @@ Definition pike_vm_match_unanchored {strs:StrSearch} (r:regex) (inp:input) (dir:
 (** * Smallstep correspondence  *)
 
 Inductive final_state: pike_vm_state -> Prop :=
-| pfinal: forall best, final_state (PVS_final best).
+| pfinal: forall occ, final_state (PVS_final occ).
 
 Ltac match_destr:=
   match goal with
@@ -134,10 +135,10 @@ Proof.
 Qed.
 
 Corollary func_step_not_final:
-  forall c dir os inp active best blocked nextprefix seen,
-    pike_vm_step rer c dir os (PVS inp active best blocked nextprefix seen) (pike_vm_func_step (translate_code c) dir os (PVS inp active best blocked nextprefix seen)).
+  forall c dir os inp active occ blocked nextprefix seen,
+    pike_vm_step rer c dir os (PVS inp active occ blocked nextprefix seen) (pike_vm_func_step (translate_code c) dir os (PVS inp active occ blocked nextprefix seen)).
 Proof.
-  intros c dir os inp active best blocked nextprefix seen. specialize (func_step_correct c dir os (PVS inp active best blocked nextprefix seen) _ (@eq_refl _ _)).
+  intros c dir os inp active occ blocked nextprefix seen. specialize (func_step_correct c dir os (PVS inp active occ blocked nextprefix seen) _ (@eq_refl _ _)).
   intros [H|H]; auto. inversion H.
 Qed.
 
@@ -160,7 +161,7 @@ Lemma step_loop:
     pike_vm_loop (translate_code c) dir os pvs1 (S fuel) = pike_vm_loop (translate_code c) dir os pvs2 fuel.
 Proof.
   intros c dir os pvs1 pvs2 fuel H. destruct H; simpl;
-    try rewrite <-epsilon_step_translate in *; now rewrite ?ADVANCE, ?SEEN, ?UNSEEN, ?STEP.
+    try rewrite <-epsilon_step_translate in *; now rewrite ?ADVANCE, ?SEEN, ?UNSEEN, ?STEP, ?ACC.
 Qed.
 
 Theorem steps_loop:
@@ -178,24 +179,32 @@ Qed.
 
 (* when the function finishes, it returns the correct result *)
 Theorem pike_vm_match_correct:
-  forall r dir inp result,
-    pike_vm_match r inp dir = Finished result ->
-    trc_pike_vm rer (compilation r) dir (nfa_oracles_dir (nfa_oracles_create r) dir) (pike_vm_initial_state inp) (PVS_final result).
+  forall r dir inp occ,
+    pike_vm_match r inp dir = Finished occ ->
+    exists result, occ = Best result /\
+      trc_pike_vm rer (compilation r) dir (nfa_oracles_dir (nfa_oracles_create r) dir) (pike_vm_initial_state inp) (PVS_final occ).
 Proof.
-  unfold pike_vm_match, getres. intros r dir inp result H.
+  unfold pike_vm_match, getres. intros r dir inp occ H.
   match_destr; inversion H; subst.
-  eapply loop_trc; eauto.
+  unfold pike_vm_initial_state in *.
+  eapply loop_trc in H0. eapply pike_vm_trc_best_final in H0 as Hbest; simpl; eauto.
+  destruct Hbest as [ol ->].
+  eauto.
 Qed.
 
 (* when the function finishes, it returns the correct result *)
 Theorem pike_vm_match_correct_unanchored {strs:StrSearch}:
-  forall r dir inp result,
-    pike_vm_match_unanchored r inp dir = Finished result ->
-    trc_pike_vm rer (compilation r) dir (nfa_oracles_dir (nfa_oracles_create r) dir) (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (PVS_final result).
+  forall r dir inp occ,
+    pike_vm_match_unanchored r inp dir = Finished occ ->
+    exists result, occ = Best result /\
+      trc_pike_vm rer (compilation r) dir (nfa_oracles_dir (nfa_oracles_create r) dir) (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (PVS_final occ).
 Proof.
-  unfold pike_vm_match_unanchored, getres. intros r dir inp result H.
+  unfold pike_vm_match_unanchored, getres. intros r dir inp occ H.
   match_destr; inversion H; subst.
-  eapply loop_trc; eauto.
+  unfold pike_vm_initial_state_unanchored in *.
+  eapply loop_trc in H0. eapply pike_vm_trc_best_final in H0 as Hbest; simpl; eauto.
+  destruct Hbest as [ol ->].
+  eauto.
 Qed.
 
 (* the function always terminates *)
@@ -222,16 +231,16 @@ Qed.
 
 (* relating the final state of the reverse direction for the TRC *)
 Lemma trc_pike_vm_reverse:
-  forall c dir os pvs result1 result2,
-    trc_pike_vm rer c dir os pvs (PVS_final result1) ->
-    trc_pike_vm rer c (direction_reverse dir) (nfa_oracles_reverse os) (pvs_reverse pvs) (PVS_final result2) ->
-    result1 = leaf_reverse result2.
+  forall c dir os pvs occ1 occ2,
+    trc_pike_vm rer c dir os pvs (PVS_final occ1) ->
+    trc_pike_vm rer c (direction_reverse dir) (nfa_oracles_reverse os) (pvs_reverse pvs) (PVS_final occ2) ->
+    occ1 = occurrence_reverse occ2.
 Proof.
-  intros c dir os pvs result1 result2 H1.
-  remember (PVS_final result1) as pvs_end.
+  intros c dir os pvs occ1 occ2 H1.
+  remember (PVS_final occ1) as pvs_end.
   induction H1; intros H2; subst.
   - inversion H2; subst.
-    + now rewrite leaf_reverse_involutive.
+    + now rewrite occurrence_reverse_involutive.
     + easy.
   - inversion H2; subst.
     + now destruct x.
@@ -244,24 +253,24 @@ Qed.
 
 (* expresses anchored matching in the reverse direction in terms of the the other direction *)
 Lemma pike_vm_match_reverse :
-  forall r inp dir result1 result2,
-    pike_vm_match r inp dir = Finished result1 ->
-    pike_vm_match r (input_reverse inp) (direction_reverse dir) = Finished result2 ->
-    result1 = leaf_reverse result2.
+  forall r inp dir occ1 occ2,
+    pike_vm_match r inp dir = Finished occ1 ->
+    pike_vm_match r (input_reverse inp) (direction_reverse dir) = Finished occ2 ->
+    occ1 = occurrence_reverse occ2.
 Proof.
-  intros r inp dir result1 result2 H1%pike_vm_match_correct H2%pike_vm_match_correct.
+  intros r inp dir occ1 occ2 [result1 [-> H1]]%pike_vm_match_correct [result2 [-> H2]]%pike_vm_match_correct.
   eapply trc_pike_vm_reverse; destruct dir; eauto; simpl.
   now rewrite nfa_oracles_reverse_involutive.
 Qed.
 
 (* expresses unanchored matching in the reverse direction in terms of the the other direction *)
 Lemma pike_vm_match_reverse_unanchored {strs:StrSearch}:
-  forall r inp dir result1 result2,
-    pike_vm_match_unanchored r inp dir = Finished result1 ->
-    pike_vm_match_unanchored r (input_reverse inp) (direction_reverse dir) = Finished result2 ->
-    result1 = leaf_reverse result2.
+  forall r inp dir occ1 occ2,
+    pike_vm_match_unanchored r inp dir = Finished occ1 ->
+    pike_vm_match_unanchored r (input_reverse inp) (direction_reverse dir) = Finished occ2 ->
+    occ1 = occurrence_reverse occ2.
 Proof.
-  intros r inp dir result1 result2 H1%pike_vm_match_correct_unanchored H2%pike_vm_match_correct_unanchored.
+  intros r inp dir occ1 occ2 [result1 [-> H1]]%pike_vm_match_correct_unanchored [result2 [-> H2]]%pike_vm_match_correct_unanchored.
   unfold pike_vm_initial_state_unanchored in *.
   eapply trc_pike_vm_reverse; destruct dir; eauto; simpl; now rewrite next_prefix_counter_reverse, ?nfa_oracles_reverse_involutive.
 Qed.
@@ -298,7 +307,7 @@ Section Example.
   Example nq_inp: input := Input [a;b] [].
 
   Lemma nullable_quant:
-    pike_vm_match (rer_of nq_regex) nq_regex nq_inp forward = Finished (Some (Input [] [b;a], GroupMap.empty)).
+    pike_vm_match (rer_of nq_regex) nq_regex nq_inp forward = Finished (Best (Some (Input [] [b;a], GroupMap.empty))).
   Proof. reflexivity. Qed.
 
 (** * Example from the paper - Figure 15  *)
@@ -335,7 +344,7 @@ Example final_gm : GroupMap.t :=
   GroupMap.close 1 1 (GroupMap.open 0 1 GroupMap.empty).
 
 Lemma paper_pikevm_exec:
-  pike_vm_match (rer_of paper_regex) paper_regex paper_input forward = Finished (Some (Input [] [b;a], final_gm)).
+  pike_vm_match (rer_of paper_regex) paper_regex paper_input forward = Finished (Best (Some (Input [] [b;a], final_gm))).
 Proof. reflexivity. Qed.
 
 End Example.
