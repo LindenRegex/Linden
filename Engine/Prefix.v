@@ -12,15 +12,8 @@ Import ListNotations.
 From Linden Require Import Regex Chars Semantics Tree FunctionalSemantics.
 From Linden Require Import Parameters LWParameters.
 From Linden Require Import StrictSuffix.
+From Linden Require Import Tactics.
 From Warblre Require Import Base RegExpRecord.
-
-(* Tactic for rewriting decidable equalities into propositional ones *)
-Ltac wt_eq := repeat match goal with
-  | [ H: (?x ==? ?y)%wt = true |- _ ] => rewrite EqDec.inversion_true in H; subst
-  | [ H: (?x ==? ?y)%wt = false |- _ ] => rewrite EqDec.inversion_false in H
-  | [ |- context[(?x ==? ?y)%wt] ] => destruct (x ==? y)%wt eqn:?Heq
-  | [ H: context[(?x ==? ?y)%wt] |- _ ] => destruct (x ==? y)%wt eqn:?Heq
-end.
 
 Section Prefix.
   Context {params: LindenParameters}.
@@ -36,7 +29,7 @@ Proof.
   - eauto using sw_nil.
   - destruct s2 as [|h2 t2].
     + right. intros H. inversion H.
-    + destruct (h1 ==? h2)%wt eqn:Heq; wt_eq.
+    + destruct (h1 ==? h2)%wt eqn:Heq; eqdec.
       * destruct (IH t2) as [Hsw|Hnsw].
         -- left. now constructor.
         -- right. intros H. now inversion H.
@@ -91,11 +84,17 @@ Class StrSearch := {
   str_search : string -> string -> option nat;
 
   (* the found position starts with the searched substring *)
-  starts_with_ss: forall s ss i, str_search ss s = Some i -> starts_with ss (List.skipn i s);
+  starts_with_ss: forall s ss i,
+    str_search ss s = Some i ->
+    starts_with ss (List.skipn i s);
   (* there is no earlier position that starts with the searched substring *)
-  no_earlier: forall s ss i, str_search ss s = Some i -> forall i', i' < i -> ~ (starts_with ss (List.skipn i' s));
+  no_earlier: forall s ss i,
+    str_search ss s = Some i ->
+    forall i', i' < i -> ~ (starts_with ss (List.skipn i' s));
   (* if the substring is not found, it cannot appear at any position of the haystack *)
-  not_found: forall s ss, str_search ss s = None -> forall i, i <= length s -> ~ (starts_with ss (List.skipn i s))
+  not_found: forall s ss,
+    str_search ss s = None ->
+    forall i, i <= length s -> ~ (starts_with ss (List.skipn i s))
 }.
 
 Lemma str_search_bound {strs: StrSearch}:
@@ -197,7 +196,7 @@ Proof.
   intros ss s i j H k [Hik Hkj].
   functional induction brute_force_str_search ss s i.
   - injection H as <-. lia.
-  - destruct (k ==? i)%wt eqn:Heq; wt_eq.
+  - destruct (k ==? i)%wt eqn:Heq; eqdec.
     + assumption.
     + apply IHo; [assumption|lia].
   - discriminate.
@@ -212,7 +211,7 @@ Proof.
   intros ss s i H k [Hik Hks] Hsw.
   functional induction brute_force_str_search ss s i.
   - discriminate.
-  - destruct (k ==? i)%wt eqn:Heq; wt_eq.
+  - destruct (k ==? i)%wt eqn:Heq; eqdec.
     + contradiction.
     + eapply IHo; [assumption|lia].
   - apply Nat.leb_gt in e. lia.
@@ -328,6 +327,14 @@ Proof.
     now apply Hnf.
 Qed.
 
+(* input_search finds no result iff str_search finds no result *)
+Lemma input_search_none_str_search {strs: StrSearch}:
+  forall s inp,
+    input_search s inp = None <-> str_search s (next_str inp) = None.
+Proof.
+  unfold input_search. split; now destruct str_search.
+Qed.
+
 Section Literal.
   Context (rer: RegExpRecord).
 
@@ -352,6 +359,7 @@ Notation Unknown := (Prefix []).
 
 Definition literal_eq_dec: forall (l1 l2: literal), { l1 = l2 } + { l1 <> l2 }.
 Proof. decide equality; apply string_eq_dec. Defined.
+#[export]
 Instance literal_EqDec: EqDec literal := EqDec.make literal literal_eq_dec.
 
 (* the string with which every match of that regex from which the literal was extracted starts *)
@@ -423,7 +431,7 @@ Lemma starts_with_common_prefix: forall s1 s2,
 Proof.
   induction s1; simpl.
   - reflexivity.
-  - destruct s2; wt_eq; constructor; auto.
+  - destruct s2; eqdec; constructor; auto.
 Qed.
 
 (*
@@ -438,7 +446,7 @@ Lemma starts_with_chain_merge_literals: forall l1 l2 l3,
   starts_with (prefix (chain_literals (merge_literals l1 l2) l3)) (prefix (chain_literals l1 l3)).
 Proof.
   unfold merge_literals; intros l1 l2 l3 H.
-  destruct l1, l2, l3; wt_eq; simpl;
+  destruct l1, l2, l3; eqdec; simpl;
     try easy;
     try apply starts_with_common_prefix;
     solve[transitivity s; [apply starts_with_common_prefix|now apply starts_with_app_right]].
@@ -448,7 +456,7 @@ Lemma common_prefix_comm:
   forall s1 s2,
     common_prefix s1 s2 = common_prefix s2 s1.
 Proof.
-  induction s1; destruct s2; simpl; wt_eq; congruence.
+  induction s1; destruct s2; simpl; eqdec; congruence.
 Qed.
 
 Lemma merge_literals_comm:
@@ -456,7 +464,7 @@ Lemma merge_literals_comm:
     merge_literals l1 l2 = merge_literals l2 l1.
 Proof.
   unfold merge_literals; intros.
-  destruct l1, l2; wt_eq; try congruence; now rewrite common_prefix_comm.
+  destruct l1, l2; eqdec; try congruence; now rewrite common_prefix_comm.
 Qed.
 
 Lemma merge_literals_impossible:
@@ -464,8 +472,8 @@ Lemma merge_literals_impossible:
     merge_literals l1 l2 = Impossible <-> (l1 = Impossible /\ l2 = Impossible).
 Proof.
   unfold merge_literals; intros. split; intros.
-  - destruct l1, l2; now wt_eq.
-  - destruct H; wt_eq; subst; easy.
+  - destruct l1, l2; now eqdec.
+  - destruct H; eqdec; subst; easy.
 Qed.
 
 (* extracting literals from a character description *)
@@ -575,7 +583,7 @@ Proof.
     (* the cd does not produce Impossible *)
     try solve[discriminate].
   (* CdRange *)
-  - simpl in Hextract. wt_eq; discriminate.
+  - simpl in Hextract. eqdec; discriminate.
   (* CdUnion *)
   - simpl in Hextract.
     apply merge_literals_impossible in Hextract as [Hcd1 Hcd2].
@@ -716,18 +724,18 @@ Proof.
   - unfold_match Hmatch no_i_flag.
     assert (c = c0). {
       simpl in Hmatch. rewrite (canonicalize_casesenst _ _ no_i_flag) in Hmatch.
-      wt_eq. reflexivity.
+      eqdec. reflexivity.
     } subst.
     simpl.
     destruct rest; simpl; eauto with prefix.
   (* CdRange *)
-  - simpl. wt_eq.
+  - simpl. eqdec.
     2: destruct rest; constructor.
     apply char_match_range_same in Hmatch; auto. subst.
     destruct rest; simpl; eauto with prefix.
   (* CdUnion *)
   - unfold_match Hmatch no_i_flag. simpl in Hmatch.
-    apply Bool.orb_prop in Hmatch. destruct Hmatch; simpl.
+    boolprop.
     + etransitivity.
       * eapply starts_with_chain_merge_literals.
         intro. eapply extract_literal_char_impossible_no_match; eauto.
@@ -751,7 +759,7 @@ Proof.
   generalize dependent result.
   generalize dependent gm.
   induction Htree; intros; subst;
-  	(* eliminated cases when ignoreCase flag is true *)
+    (* eliminated cases when ignoreCase flag is true *)
     try (simpl; destruct_i; [destruct extract_actions_literal|]);
     (* the prefix is empty *)
     try solve[(constructor || simpl; destruct (extract_actions_literal cont); constructor)];
@@ -762,7 +770,7 @@ Proof.
     try discriminate Hleaf.
   (* tree_char *)
   - (* there is a character to read *)
-    unfold read_char in READ; destruct inp; destruct next; try discriminate READ; subst;
+    unfold read_char in READ; destruct inp; destruct next; try discriminate READ; subst.
     (* the character matches *)
     destruct char_match eqn:Heqmatch; try discriminate READ; injection READ; intros; subst.
     apply chain_literals_extract_char; eauto.
@@ -775,7 +783,7 @@ Proof.
       pose proof (tree_res_cannot_be_impossible_literal _ _ _ _ _ _ _ Htree2 Hleaf).
       etransitivity; eauto using starts_with_chain_merge_literals.
   (* tree_sequence *)
-  - simpl. rewrite <-chain_literals_assoc.
+  - rewrite <-chain_literals_assoc.
     eauto.
   (* tree_quant_forced *)
   - simpl in IHHtree |- *. rewrite no_i_flag in IHHtree.
@@ -793,8 +801,7 @@ Proof.
     + destruct plus. destruct n.
       all: rewrite <- chain_literals_assoc; eapply IHHtree; eauto.
   (* tree_quant_free *)
-  - simpl.
-    destruct plus; destruct extract_actions_literal; constructor.
+  - destruct plus; destruct extract_actions_literal; constructor.
 Qed.
 
 (* main theorem: every match starts with the extracted literal *)
@@ -841,6 +848,56 @@ Proof.
   eauto using extract_literal_prefix_general_contra.
 Qed.
 
+(* if str_search finds nothing for the literal of r, *)
+(* then the tree over that r has no results *)
+Lemma str_search_none_nores {strs:StrSearch}:
+  forall r inp tree,
+    is_tree rer [Areg r] inp Groups.GroupMap.empty forward tree ->
+    str_search (prefix (extract_literal r)) (next_str inp) = None ->
+    first_leaf tree inp = None.
+Proof.
+  intros r [next pref] tree Htree Hsearch.
+  eapply extract_literal_prefix_contra with (tree:=tree) in Htree; eauto.
+  replace (next_str _) with (skipn 0 next) by eauto using skipn_O.
+  eapply not_found; eauto; lia.
+Qed.
+
+(* one unfolded iteration of the lazy_prefix *)
+Lemma str_search_none_nores_unanchored_iter {strs:StrSearch}:
+  forall r inp tree,
+    is_tree rer [Areg (Regex.Character CdAll); Acheck inp; Areg dot_star; Areg r] inp Groups.GroupMap.empty forward tree ->
+    str_search (prefix (extract_literal r)) (next_str inp) = None ->
+    first_leaf tree inp = None.
+Proof.
+  intros r [next pref].
+  generalize dependent pref.
+  induction next; intros pref tree Htree Hsearch.
+  - now inversion Htree.
+  - inversion Htree; [|discriminate]. inversion READ. subst.
+    inversion TREECONT; [|easy]. inversion TREECONT0. destruct plus; [discriminate|]. subst.
+    eapply str_search_none_next in Hsearch.
+    eapply str_search_none_nores in SKIP; eauto.
+    specialize (IHnext (c::pref) titer). repeat specialize_prove IHnext by eauto.
+    unfold first_leaf in *. simpl. unfold advance_input'. simpl.
+    now rewrite SKIP, IHnext.
+Qed.
+
+(* if str_search finds nothing for the literal of r, *)
+(* then the tree over (lazy_prefix r) has no results *)
+Theorem str_search_none_nores_unanchored {strs:StrSearch}:
+  forall r inp tree,
+    is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
+    str_search (prefix (extract_literal r)) (next_str inp) = None ->
+    first_leaf tree inp = None.
+Proof.
+  intros r [next pref] tree Htree Hsearch.
+  inversion Htree. inversion CONT. destruct plus; [discriminate|]. subst.
+  eapply str_search_none_nores with (tree:=tskip) in Hsearch as Hnotfound; eauto.
+  eapply str_search_none_nores_unanchored_iter with (tree:=titer) in ISTREE1; eauto.
+  unfold first_leaf in *. simpl.
+  now rewrite Hnotfound, ISTREE1.
+Qed.
+
 
 (** * Extracted literals size *)
 
@@ -868,7 +925,7 @@ Lemma common_prefix_length:
     length (common_prefix s1 s2) <= Nat.min (length s1) (length s2).
 Proof.
   induction s1; destruct s2; simpl; try lia.
-  wt_eq; simpl.
+  eqdec; simpl.
   - specialize (IHs1 s2). lia.
   - lia.
 Qed.
@@ -878,12 +935,13 @@ Lemma merge_literals_length:
     length (prefix (merge_literals l1 l2)) <= Nat.max (length (prefix l1)) (length (prefix l2)).
 Proof.
   intros l1 l2; unfold merge_literals.
-  destruct l1, l2; wt_eq; try pose proof (common_prefix_length s s0); simpl; try lia.
+  destruct l1, l2; eqdec; try pose proof (common_prefix_length s s0); simpl; try lia.
 Qed.
 
 (* note: this will not hold true if support for backreferences is added.
     Consider /(abc)\1\1/. The extracted literal would be 'abcabcabc' which is not upperbounded by the regex size.
 *)
+(* The size of extracted literals is bounded by the size of the regex *)
 Theorem extract_literal_size_bound:
   forall r,
     length (prefix (extract_literal r)) <= regex_size r.
@@ -891,7 +949,7 @@ Proof.
   induction r; simpl; destruct_i; simpl; try lia.
   (* Character *)
   - induction cd; simpl; try lia.
-    + wt_eq; simpl; lia.
+    + eqdec; simpl; lia.
     + pose proof (merge_literals_length (extract_literal_char cd1) (extract_literal_char cd2)); lia.
   (* Disjunction *)
   - pose proof (merge_literals_length (extract_literal r1) (extract_literal r2)); lia.

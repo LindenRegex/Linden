@@ -31,6 +31,11 @@ Section Chars.
     | Input s _ => s
     end.
 
+  Definition pref_str (i:input) : string :=
+  match i with
+  | Input _ s => s
+  end.
+
   Definition current_str (i:input) (dir: Direction) : string :=
     match i with
     | Input next pref =>
@@ -49,6 +54,10 @@ Section Chars.
     match i with
     | Input next pref => List.rev pref ++ next
     end.
+
+  Definition total_length (inp: input) : nat :=
+    let '(Input next pref) := inp in
+    length next + length pref.
 
   (* Getting a substring from an input *)
   Definition substr (inp: input) (startIdx endIdx: nat): string :=
