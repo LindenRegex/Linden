@@ -963,6 +963,13 @@ Qed.
 
 (** * Exact literals matching *)
 
+(* If a regex contains assertions, we cannot use Exact literals to its full potential. *)
+(* For instance, the regex /(?<=abc)z/ has an exact literal of "z". But not every occurrence *)
+(* of "z" in an input is a valid match. This is because an assertion (something that does not *)
+(* contribute characters to the overall match) is present, namely /(?<=abc)/. It requires the "z" *)
+(* to be preceded by "abc", but this information is not captured in the literal Exact "z". *)
+(* Thus Exact literal theorems all work under the premise that the regex contained no assertions. *)
+
 
 (* whether a regex has assertions that do not contribute to the match range *)
 Fixpoint has_asserts (r:regex) : bool :=
