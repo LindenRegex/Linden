@@ -566,7 +566,7 @@ Fixpoint extract_literal (r: regex) : literal :=
   | Sequence r1 r2 => chain_literals (extract_literal r1) (extract_literal r2)
   | Quantified _ min (NoI.N 0) r1 => repeat_literal (extract_literal r1) Nothing min
   | Quantified _ min _ r1 => repeat_literal (extract_literal r1) Unknown min
-  | Lookaround _ r1 => Unknown
+  | Lookaround _ r1 => Nothing
   | Group _ r1 => extract_literal r1
   | Anchor _ => Nothing
   | Backreference _ => Unknown
@@ -725,8 +725,7 @@ Proof.
     eapply IHHtree; eauto.
   (* tree_lk *)
   - simpl in Hextract |- *.
-    replace (if RegExpRecord.ignoreCase rer then Unknown else Unknown) with Unknown in Hextract by now destruct_i.
-    destruct extract_actions_literal eqn:Heqex in Hextract; try easy.
+    replace (extract_actions_literal cont) with Impossible in * by (destruct_i; now destruct extract_actions_literal).
     rewrite IHHtree2 by auto.
     destruct positivity.
     + destruct tree_res; eauto.
@@ -864,6 +863,11 @@ Proof.
       all: rewrite <- chain_literals_assoc; eapply IHHtree; eauto.
   (* tree_quant_free *)
   - destruct plus; destruct extract_actions_literal; constructor.
+  (* tree_lk *)
+  - simpl in Hleaf |- *.
+    destruct positivity, (tree_res treelk); try easy.
+    + destruct l, (extract_actions_literal cont); eauto.
+    + destruct (extract_actions_literal cont); eauto.
 Qed.
 
 (* main theorem: every match starts with the extracted literal *)
