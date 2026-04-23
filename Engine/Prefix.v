@@ -623,21 +623,6 @@ Proof.
   symmetry. apply EqDec.inversion_true. assumption.
 Qed.
 
-(* a character is in range of itself *)
-Lemma char_match_range_refl: forall c,
-  char_match rer c (CdRange c c) = true.
-Proof.
-  unfold char_match, char_match'. intros c.
-  rewrite
-    Character.numeric_pseudo_bij,
-    CharSet.exist_canonicalized_equiv,
-    CharSet.exist_spec.
-  unfold CharSet.Exists.
-  exists c. split.
-  - rewrite CharSet.range_spec. now constructor.
-  - now eqdec.
-Qed.
-
 Lemma extract_actions_literal_regex:
   forall r, extract_actions_literal [Areg r] = extract_literal r.
 Proof.

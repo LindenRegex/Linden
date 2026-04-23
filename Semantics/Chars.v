@@ -173,6 +173,21 @@ Section Chars.
     intros c1 c2. simpl. apply EqDec.inversion_true.
   Qed.
 
+  (* a character is in range of itself *)
+  Lemma char_match_range_refl: forall c,
+    char_match c (CdRange c c) = true.
+  Proof.
+    unfold char_match, char_match'. intros c.
+    rewrite
+      Character.numeric_pseudo_bij,
+      CharSet.exist_canonicalized_equiv,
+      CharSet.exist_spec.
+    unfold CharSet.Exists.
+    exists c. split.
+    - rewrite CharSet.range_spec. now constructor.
+    - apply EqDec.reflb.
+  Qed.
+
   Definition char_descr_eq_dec : forall (cd1 cd2: char_descr), { cd1 = cd2 } + { cd1 <> cd2 }.
   Proof. decide equality; try apply Character.eq_dec; try apply Property.unicode_property_eqdec. Defined.
 
