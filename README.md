@@ -34,7 +34,7 @@ This includes:
 
    ```
    opam pin add --no-action warblre.0.1.0 https://github.com/epfl-systemf/Warblre.git#a5a312072b892f4fb0343b8c2ac9d35d451c84f1
-   opam pin add --no-action strict-order-solver.0.1.0 https://github.com/epfl-systemf/StrictOrderSolver.git#6f8de4a8c3c694928c4a6e31f798d0e387f8d90f
+   opam pin add --no-action strict-order-solver.0.1.0 https://github.com/epfl-systemf/StrictOrderSolver.git#c2c6b1ff316770e9f0ec37141b465971733633e3
    ```
 
 3. Install dependencies:
