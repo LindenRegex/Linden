@@ -100,17 +100,17 @@ Axiom nfa_oracles_create_correct:
     nfa_oracles_correct rer (nfa_oracles_create r) r inp.
 
 (* Functional version of the PikeVM *)
-Definition pike_vm_match (r:regex) (inp:input) (dir:Direction) : matchres :=
+Definition pike_vm_match (r:regex) (inp:input) (dir:Direction) (occ:occurrence): matchres :=
   let code := translate_code (compilation r) in
   let fuel := vm_fuel r inp dir in
-  let pvsinit := pike_vm_initial_state inp in
+  let pvsinit := pike_vm_initial_state inp occ in
   getres (pike_vm_loop code dir (nfa_oracles_dir (nfa_oracles_create r) dir) pvsinit fuel).
 
 (* Functional version of the unanchored PikeVM *)
-Definition pike_vm_match_unanchored {strs:StrSearch} (r:regex) (inp:input) (dir:Direction): matchres :=
+Definition pike_vm_match_unanchored {strs:StrSearch} (r:regex) (inp:input) (dir:Direction) (occ:occurrence): matchres :=
   let code := translate_code (compilation r) in
   let fuel := vm_fuel r inp dir in
-  let pvsinit := pike_vm_initial_state_unanchored (extract_literal rer r) inp dir in
+  let pvsinit := pike_vm_initial_state_unanchored (extract_literal rer r) inp dir occ in
   getres (pike_vm_loop code dir (nfa_oracles_dir (nfa_oracles_create r) dir) pvsinit fuel).
 
 
@@ -179,53 +179,47 @@ Qed.
 
 (* when the function finishes, it returns the correct result *)
 Theorem pike_vm_match_correct:
-  forall r dir inp occ,
-    pike_vm_match r inp dir = Finished occ ->
-    exists result, occ = Best result /\
-      trc_pike_vm rer (compilation r) dir (nfa_oracles_dir (nfa_oracles_create r) dir) (pike_vm_initial_state inp) (PVS_final occ).
+  forall r dir inp occ occ',
+    pike_vm_match r inp dir occ = Finished occ' ->
+    trc_pike_vm rer (compilation r) dir (nfa_oracles_dir (nfa_oracles_create r) dir) (pike_vm_initial_state inp occ) (PVS_final occ').
 Proof.
-  unfold pike_vm_match, getres. intros r dir inp occ H.
+  unfold pike_vm_match, getres. intros r dir inp occ occ' H.
   match_destr; inversion H; subst.
   unfold pike_vm_initial_state in *.
-  eapply loop_trc in H0. eapply pike_vm_trc_best_final in H0 as Hbest; simpl; eauto.
-  destruct Hbest as [ol ->].
-  eauto.
+  now eapply loop_trc in H0.
 Qed.
 
 (* when the function finishes, it returns the correct result *)
 Theorem pike_vm_match_correct_unanchored {strs:StrSearch}:
-  forall r dir inp occ,
-    pike_vm_match_unanchored r inp dir = Finished occ ->
-    exists result, occ = Best result /\
-      trc_pike_vm rer (compilation r) dir (nfa_oracles_dir (nfa_oracles_create r) dir) (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (PVS_final occ).
+  forall r dir inp occ occ',
+    pike_vm_match_unanchored r inp dir occ = Finished occ' ->
+    trc_pike_vm rer (compilation r) dir (nfa_oracles_dir (nfa_oracles_create r) dir) (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir occ) (PVS_final occ').
 Proof.
-  unfold pike_vm_match_unanchored, getres. intros r dir inp occ H.
+  unfold pike_vm_match_unanchored, getres. intros r dir inp occ occ' H.
   match_destr; inversion H; subst.
   unfold pike_vm_initial_state_unanchored in *.
-  eapply loop_trc in H0. eapply pike_vm_trc_best_final in H0 as Hbest; simpl; eauto.
-  destruct Hbest as [ol ->].
-  eauto.
+  now eapply loop_trc in H0.
 Qed.
 
 (* the function always terminates *)
 Theorem pike_vm_match_terminates:
-  forall r inp dir,
+  forall r inp dir occ,
     pike_regex r ->
-    exists result, pike_vm_match r inp dir = Finished result.
+    exists result, pike_vm_match r inp dir occ = Finished result.
 Proof.
-  intros r inp dir SUBSET. unfold pike_vm_match, vm_fuel.
-  apply pikevm_complexity with (VMS:=VMS) (rer:=rer) (inp:=inp) (dir:=dir) (os:=nfa_oracles_dir (nfa_oracles_create r) dir) in SUBSET as [result TERM].
+  intros r inp dir occ SUBSET. unfold pike_vm_match, vm_fuel.
+  apply pikevm_complexity with (VMS:=VMS) (rer:=rer) (inp:=inp) (dir:=dir) (occ:=occ) (os:=nfa_oracles_dir (nfa_oracles_create r) dir) in SUBSET as [result TERM].
   exists result. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
 (* the function always terminates *)
 Theorem pike_vm_match_terminates_unanchored {strs:StrSearch}:
-  forall r inp dir,
+  forall r inp dir occ,
     pike_regex r ->
-    exists result, pike_vm_match_unanchored r inp dir = Finished result.
+    exists result, pike_vm_match_unanchored r inp dir occ = Finished result.
 Proof.
-  intros r inp dir SUBSET. unfold pike_vm_match_unanchored, vm_fuel.
-  apply pikevm_complexity_unanchored with (strs:=strs) (VMS:=VMS) (rer:=rer) (inp:=inp) (dir:=dir) (os:=nfa_oracles_dir (nfa_oracles_create r) dir) in SUBSET as [result TERM]; auto.
+  intros r inp dir occ SUBSET. unfold pike_vm_match_unanchored, vm_fuel.
+  apply pikevm_complexity_unanchored with (strs:=strs) (VMS:=VMS) (rer:=rer) (inp:=inp) (dir:=dir) (occ:=occ) (os:=nfa_oracles_dir (nfa_oracles_create r) dir) in SUBSET as [result TERM]; auto.
   exists result. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
@@ -253,26 +247,27 @@ Qed.
 
 (* expresses anchored matching in the reverse direction in terms of the the other direction *)
 Lemma pike_vm_match_reverse :
-  forall r inp dir occ1 occ2,
-    pike_vm_match r inp dir = Finished occ1 ->
-    pike_vm_match r (input_reverse inp) (direction_reverse dir) = Finished occ2 ->
+  forall r inp dir occ occ1 occ2,
+    pike_vm_match r inp dir occ = Finished occ1 ->
+    pike_vm_match r (input_reverse inp) (direction_reverse dir) (occurrence_reverse occ) = Finished occ2 ->
     occ1 = occurrence_reverse occ2.
 Proof.
-  intros r inp dir occ1 occ2 [result1 [-> H1]]%pike_vm_match_correct [result2 [-> H2]]%pike_vm_match_correct.
-  eapply trc_pike_vm_reverse; destruct dir; eauto; simpl.
-  now rewrite nfa_oracles_reverse_involutive.
+  intros r inp dir occ occ1 occ2 H1%pike_vm_match_correct H2%pike_vm_match_correct.
+  eapply trc_pike_vm_reverse; eauto.
+  destruct dir; eauto; simpl; now rewrite nfa_oracles_reverse_involutive.
 Qed.
 
 (* expresses unanchored matching in the reverse direction in terms of the the other direction *)
 Lemma pike_vm_match_reverse_unanchored {strs:StrSearch}:
-  forall r inp dir occ1 occ2,
-    pike_vm_match_unanchored r inp dir = Finished occ1 ->
-    pike_vm_match_unanchored r (input_reverse inp) (direction_reverse dir) = Finished occ2 ->
+  forall r inp dir occ occ1 occ2,
+    pike_vm_match_unanchored r inp dir occ = Finished occ1 ->
+    pike_vm_match_unanchored r (input_reverse inp) (direction_reverse dir) (occurrence_reverse occ) = Finished occ2 ->
     occ1 = occurrence_reverse occ2.
 Proof.
-  intros r inp dir occ1 occ2 [result1 [-> H1]]%pike_vm_match_correct_unanchored [result2 [-> H2]]%pike_vm_match_correct_unanchored.
+  intros r inp dir occ occ1 occ2 H1%pike_vm_match_correct_unanchored H2%pike_vm_match_correct_unanchored.
   unfold pike_vm_initial_state_unanchored in *.
-  eapply trc_pike_vm_reverse; destruct dir; eauto; simpl; now rewrite next_prefix_counter_reverse, ?nfa_oracles_reverse_involutive.
+  eapply trc_pike_vm_reverse; eauto.
+  destruct dir; eauto; simpl; now rewrite next_prefix_counter_reverse, ?nfa_oracles_reverse_involutive.
 Qed.
 
 End FunctionalPikeVM.
@@ -307,7 +302,7 @@ Section Example.
   Example nq_inp: input := Input [a;b] [].
 
   Lemma nullable_quant:
-    pike_vm_match (rer_of nq_regex) nq_regex nq_inp forward = Finished (Best (Some (Input [] [b;a], GroupMap.empty))).
+    pike_vm_match (rer_of nq_regex) nq_regex nq_inp forward (Best None) = Finished (Best (Some (Input [] [b;a], GroupMap.empty))).
   Proof. reflexivity. Qed.
 
 (** * Example from the paper - Figure 15  *)
@@ -344,7 +339,7 @@ Example final_gm : GroupMap.t :=
   GroupMap.close 1 1 (GroupMap.open 0 1 GroupMap.empty).
 
 Lemma paper_pikevm_exec:
-  pike_vm_match (rer_of paper_regex) paper_regex paper_input forward = Finished (Best (Some (Input [] [b;a], final_gm))).
+  pike_vm_match (rer_of paper_regex) paper_regex paper_input forward (Best None) = Finished (Best (Some (Input [] [b;a], final_gm))).
 Proof. reflexivity. Qed.
 
 End Example.

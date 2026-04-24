@@ -748,11 +748,11 @@ Section PikeVMComplexity.
     1 + (4 * codesize r) + (inpsize inp dir * (2 + 4 * codesize r)).
 
   Theorem initial_measure:
-    forall inp r dir,
+    forall inp r dir occ,
       pike_regex r ->
-      vm_inv (compilation r) dir (pike_vm_initial_state inp) (complexity r inp dir).
+      vm_inv (compilation r) dir (pike_vm_initial_state inp occ) (complexity r inp dir).
   Proof.
-    intros inp r dir SUBSET.
+    intros inp r dir occ SUBSET.
     replace (complexity r inp dir) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp dir).
     - unfold pike_vm_initial_state. rewrite <- compilation_size; auto.
       constructor; auto.
@@ -767,11 +767,11 @@ Section PikeVMComplexity.
   Qed.
 
   Theorem initial_measure_unanchored {strs:StrSearch}:
-    forall inp r dir,
+    forall inp r dir occ,
       pike_regex r ->
-      vm_inv (compilation r) dir (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (complexity r inp dir).
+      vm_inv (compilation r) dir (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir occ) (complexity r inp dir).
   Proof.
-    intros inp r dir SUBSET.
+    intros inp r dir occ SUBSET.
     replace (complexity r inp dir) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp dir).
     - unfold pike_vm_initial_state_unanchored. rewrite <- compilation_size; auto.
       constructor; auto.
@@ -807,14 +807,14 @@ Section PikeVMComplexity.
   (** * Complexity Theorem  *)
 
   Theorem pikevm_complexity:
-    forall (r:regex) (inp:input) (dir:Direction) (os:nfa_oracles),
+    forall (r:regex) (inp:input) (dir:Direction) (os:nfa_oracles) (occ:occurrence),
       (* for any supported regex r and input inp *)
       pike_regex r ->
       (* The initial state reaches a final state in at most (complexity r inp dir) steps. *)
       exists result, steps (pike_vm_step rer (compilation r) dir os)
-                  (pike_vm_initial_state inp) (complexity r inp dir) (PVS_final result).
+                  (pike_vm_initial_state inp occ) (complexity r inp dir) (PVS_final result).
   Proof.
-    intros r inp dir os SUBSET.
+    intros r inp dir os occ SUBSET.
     apply pike_vm_bound.
     - apply compiled_wf.
     - apply compilation_nonempty.
@@ -822,14 +822,14 @@ Section PikeVMComplexity.
   Qed.
 
   Theorem pikevm_complexity_unanchored {strs:StrSearch}:
-    forall (r:regex) (inp:input) (dir:Direction) (os:nfa_oracles),
+    forall (r:regex) (inp:input) (dir:Direction) (os:nfa_oracles) (occ:occurrence),
       (* for any supported regex r and input inp *)
       pike_regex r ->
       (* The initial state reaches a final state in at most (complexity r inp dir) steps. *)
       exists result, steps (pike_vm_step rer (compilation r) dir os)
-                  (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (complexity r inp dir) (PVS_final result).
+                  (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir occ) (complexity r inp dir) (PVS_final result).
   Proof.
-    intros r inp dir os SUBSET.
+    intros r inp dir os occ SUBSET.
     apply pike_vm_bound.
     - apply compiled_wf.
     - apply compilation_nonempty.
@@ -841,20 +841,20 @@ Section PikeVMComplexity.
 
   (* As a corollary, we can deduce that the PikeVM always terminates *)
   Theorem pike_vm_terminates:
-    forall r inp dir os,
+    forall r inp dir os occ,
       pike_regex r ->
-      exists result, trc_pike_vm rer (compilation r) dir os (pike_vm_initial_state inp) (PVS_final result).
+      exists result, trc_pike_vm rer (compilation r) dir os (pike_vm_initial_state inp occ) (PVS_final result).
   Proof.
-    intros r inp dir os H. eapply pikevm_complexity in H as [result STEPS]; eauto.
+    intros r inp dir os occ H. eapply pikevm_complexity in H as [result STEPS]; eauto.
     exists result. eapply steps_trc; eauto.
   Qed.
 
   Theorem pike_vm_terminates_unanchored {strs:StrSearch}:
-    forall r inp dir os,
+    forall r inp dir os occ,
       pike_regex r ->
-      exists result, trc_pike_vm rer (compilation r) dir os (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir) (PVS_final result).
+      exists result, trc_pike_vm rer (compilation r) dir os (pike_vm_initial_state_unanchored (extract_literal rer r) inp dir occ) (PVS_final result).
   Proof.
-    intros r inp dir os H. eapply pikevm_complexity_unanchored in H as [result STEPS]; eauto.
+    intros r inp dir os occ H. eapply pikevm_complexity_unanchored in H as [result STEPS]; eauto.
     exists result. eapply steps_trc; eauto.
   Qed.
 

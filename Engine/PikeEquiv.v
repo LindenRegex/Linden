@@ -666,7 +666,7 @@ Inductive future_nextprefix (r:regex): input -> option tree -> option (nat * lit
 
 Inductive pike_inv (r:regex) (os:nfa_oracles): pike_tree_state -> pike_vm_state -> Prop :=
 | pikeinv:
-  forall code inp treeactive treeblocked threadactive threadblocked best future nextprefix treeseen threadseen
+  forall code inp treeactive treeblocked threadactive threadblocked occ future nextprefix treeseen threadseen
     (COMPILE: compilation r = code)
     (ACTIVE: list_tree_thread code inp treeactive threadactive)
     (* blocked threads should be equivalent for the next input *)
@@ -681,10 +681,10 @@ Inductive pike_inv (r:regex) (os:nfa_oracles): pike_tree_state -> pike_vm_state 
     (FUTUREPREFIX: future_nextprefix r inp future nextprefix)
     (* the oracles compute the correct results *)
     (OS: nfa_oracles_correct rer os r inp),
-    pike_inv r os (PTS inp treeactive best treeblocked future treeseen) (PVS inp threadactive best threadblocked nextprefix threadseen)
+    pike_inv r os (PTS inp treeactive occ treeblocked future treeseen) (PVS inp threadactive occ threadblocked nextprefix threadseen)
 | pikeinv_final:
-  forall best,
-    pike_inv r os (PTS_final best) (PVS_final best).
+  forall occ,
+    pike_inv r os (PTS_final occ) (PVS_final occ).
 
 
 
@@ -1133,24 +1133,24 @@ Qed.
 
 (* the initial states of both smallstep semantics are related with the invariant *)
 Lemma initial_pike_inv:
-  forall r inp os tree
+  forall r inp os tree occ
     (TREE: bool_tree rer [Areg r] inp CanExit forward tree)
     (SUBSET: pike_regex r)
     (OS: nfa_oracles_correct rer os r inp),
-    pike_inv r os (pike_tree_initial_state tree inp) (pike_vm_initial_state inp).
+    pike_inv r os (pike_tree_initial_state tree inp occ) (pike_vm_initial_state inp occ).
 Proof.
   intros.
   eapply pikeinv; eauto using ltt_cons, ltt_nil, nnp_none, initial_inclusion, initial_tree_thread.
 Qed.
 
 Lemma initial_pike_inv_unanchored {strs:StrSearch}:
-  forall r inp os tree future_tree
+  forall r inp os tree future_tree occ
     (TREE: bool_tree rer [Areg r] inp CanExit forward tree)
     (SUBSET: pike_regex r)
     (OS: nfa_oracles_correct rer os r inp)
     (SHAPE: future_tree_shape rer r inp future_tree),
     exists future, may_erase future_tree future /\
-    pike_inv r os (pike_tree_initial_state_unanchored tree future inp) (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward).
+    pike_inv r os (pike_tree_initial_state_unanchored tree future inp occ) (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward occ).
 Proof.
   intros.
   unfold pike_vm_initial_state_unanchored.

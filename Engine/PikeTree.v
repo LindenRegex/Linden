@@ -107,10 +107,10 @@ Section PikeTree.
   (* LATER: consider redefining as an inductive. This will simplify stating
     "there exists an initial state" which is useful, since we care about particular
     initializations of the PikeTree which follow the PikeVM execution *)
-  Definition pike_tree_initial_state_unanchored (t:tree) (future:option tree) (i:input) : pike_tree_state :=
-    PTS i [pike_tree_initial_tree t] (Best None) [] future initial_seentrees.
-  Definition pike_tree_initial_state (t:tree) (i:input) : pike_tree_state :=
-    PTS i [pike_tree_initial_tree t] (Best None) [] None initial_seentrees.
+  Definition pike_tree_initial_state_unanchored (t:tree) (future:option tree) (i:input) (occ:occurrence): pike_tree_state :=
+    PTS i [pike_tree_initial_tree t] occ [] future initial_seentrees.
+  Definition pike_tree_initial_state (t:tree) (i:input) (occ:occurrence): pike_tree_state :=
+    PTS i [pike_tree_initial_tree t] occ [] None initial_seentrees.
 
   (* non-deterministic acceleration by skipping head branches with no results *)
   (* `tree_acceleration inp future inp' future' t` means that for future tree at *)
@@ -616,7 +616,11 @@ Section PikeTree.
       | _ => idtac
       end
     | SAMEKIND: same_occurrence_kind (All _) ?occ |- _ =>
-      destruct occ; [inversion SAMEKIND|clear SAMEKIND]
+      destruct occ; [inversion SAMEKIND|clear SAMEKIND];
+      match goal with
+      | SEQ: occurrence_compat (All _) _ |- _ => simpl in SEQ
+      | _ => idtac
+      end
     | _ => idtac
     end.
 
@@ -629,27 +633,30 @@ Section PikeTree.
     end.
 
   Lemma init_piketree_inv:
-    forall t inp,
+    forall t inp occ,
       pike_subtree t ->
-      piketreeinv (pike_tree_initial_state t inp) (tree_leaves t GroupMap.empty inp forward).
+      occ = Best None \/ occ = All [] ->
+      piketreeinv (pike_tree_initial_state t inp occ) (tree_leaves t GroupMap.empty inp forward).
   Proof.
-    intros t. unfold pike_tree_initial_state. constructor; simpl; pike_subset.
+    unfold pike_tree_initial_state.
+    intros t inp occ Hsubset Hocc. constructor; simpl; pike_subset.
     intros res STATEND. inv_state_nd.
-    rewrite app_nil_r. inversion ACTIVE; subst.
-    inversion TLR; subst. rewrite app_nil_r.
+    inversion ACTIVE; subst. inversion TLR; subst.
     apply tree_nd_initial in TR as <-; auto.
+    destruct Hocc; subst; occ_simpl; now rewrite !app_nil_r in *.
   Qed.
 
   Lemma init_piketree_inv_unanchored:
-    forall t r inp tree future,
+    forall t r inp tree future occ,
       pike_regex r ->
       initial_future_unanchored r inp future ->
       bool_tree rer [Areg r] inp CanExit forward t ->
       bool_tree rer [Areg (lazy_prefix r)] inp CanExit forward tree ->
-      piketreeinv (pike_tree_initial_state_unanchored t future inp) (tree_leaves tree GroupMap.empty inp forward).
+      occ = Best None \/ occ = All [] ->
+      piketreeinv (pike_tree_initial_state_unanchored t future inp occ) (tree_leaves tree GroupMap.empty inp forward).
   Proof.
     unfold initial_future_unanchored, future_tree_shape.
-    intros t r inp tree future PIKEREG [tree' [FUTURESHAPE FUTUREINIT]] T TREE.
+    intros t r inp tree future occ PIKEREG [tree' [FUTURESHAPE FUTUREINIT]] T TREE Hocc.
     assert (pike_subtree t). {
       eapply pike_actions_pike_tree; try eapply bool_to_istree_regex with (gm:=GroupMap.empty); eauto; pike_subset.
     }
@@ -666,9 +673,9 @@ Section PikeTree.
       }
       unfold pike_tree_initial_state_unanchored. constructor; simpl; pike_subset; auto.
       intros res STATEND. inv_state_nd.
-      rewrite app_nil_r. inversion ACTIVE; subst.
-      inversion TLR; subst. rewrite app_nil_r.
-      apply tree_nd_initial in TR as ->; auto.
+      inversion ACTIVE; subst. inversion TLR; subst.
+      apply tree_nd_initial in TR as <-; auto.
+      destruct Hocc; subst; occ_simpl; now rewrite !app_nil_r in *.
     }
     {
       unfold first_leaf in NORES.

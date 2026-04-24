@@ -304,12 +304,12 @@ Definition next_prefix_counter {strs:StrSearch} (inp: input) (dir: Direction) (l
 
 Definition pike_vm_initial_thread : thread := (0, GroupMap.empty, CanExit).
 (* initial state for the PikeVM which operates in unanchored fashion *)
-Definition pike_vm_initial_state_unanchored {strs:StrSearch} (lit:literal) (inp:input) (dir:Direction) : pike_vm_state :=
+Definition pike_vm_initial_state_unanchored {strs:StrSearch} (lit:literal) (inp:input) (dir:Direction) (occ:occurrence): pike_vm_state :=
   let nextprefix := next_prefix_counter inp dir lit in
-  PVS inp [pike_vm_initial_thread] (Best None) [] nextprefix initial_seenpcs.
+  PVS inp [pike_vm_initial_thread] occ [] nextprefix initial_seenpcs.
 (* initial state for the PikeVM which operates in anchored fashion *)
-Definition pike_vm_initial_state (inp:input) : pike_vm_state :=
-  PVS inp [pike_vm_initial_thread] (Best None) [] None initial_seenpcs.
+Definition pike_vm_initial_state (inp:input) (occ:occurrence): pike_vm_state :=
+  PVS inp [pike_vm_initial_thread] occ [] None initial_seenpcs.
 
 
 (* small-step semantics for the PikeVM algorithm *)

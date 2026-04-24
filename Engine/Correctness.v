@@ -66,32 +66,32 @@ Qed.
 
 (* Any execution of the PikeVM to a final state corresponds to an execution of the PikeTree *)
 Theorem pike_vm_to_pike_tree:
-  forall r inp os tree result,
+  forall r inp os tree result occ,
     pike_regex r ->
     nfa_oracles_correct rer os r inp ->
     bool_tree rer [Areg r] inp CanExit forward tree ->
-    trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp) (PVS_final result) ->
-    trc_pike_tree (pike_tree_initial_state tree inp) (PTS_final result).
+    trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp occ) (PVS_final result) ->
+    trc_pike_tree (pike_tree_initial_state tree inp occ) (PTS_final result).
 Proof.
-  intros r inp os tree result SUBSET OS TREE TRCVM.
-  pose proof (initial_pike_inv rer r inp os tree TREE SUBSET OS) as INIT.
+  intros r inp os tree result occ SUBSET OS TREE TRCVM.
+  pose proof (initial_pike_inv rer r inp os tree occ TREE SUBSET OS) as INIT.
   eapply vm_to_tree in TRCVM as [vmfinal [TRCTREE INV]]; eauto.
   - inversion INV; subst. auto.
   - eapply compilation_stutter_wf; eauto.
 Qed.
 
 Theorem pike_vm_to_pike_tree_unanchored {strs:StrSearch}:
-  forall r inp os tree result future_tree,
+  forall r inp os tree result future_tree occ,
     pike_regex r ->
     nfa_oracles_correct rer os r inp ->
     bool_tree rer [Areg r] inp CanExit forward tree ->
-    trc_pike_vm (compilation r) forward os (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward) (PVS_final result) ->
+    trc_pike_vm (compilation r) forward os (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward occ) (PVS_final result) ->
     future_tree_shape rer r inp future_tree ->
     exists future, may_erase future_tree future /\
-    trc_pike_tree (pike_tree_initial_state_unanchored tree future inp) (PTS_final result).
+    trc_pike_tree (pike_tree_initial_state_unanchored tree future inp occ) (PTS_final result).
 Proof.
-  intros r inp os tree result future_tree SUBSET OS TREE TRCVM NEXTFUTURE.
-  pose proof (initial_pike_inv_unanchored rer _ _ _ _ _ TREE SUBSET OS NEXTFUTURE) as [future [M INIT]].
+  intros r inp os tree result future_tree occ SUBSET OS TREE TRCVM NEXTFUTURE.
+  pose proof (initial_pike_inv_unanchored rer _ _ _ _ _ occ TREE SUBSET OS NEXTFUTURE) as [future [M INIT]].
   eapply vm_to_tree in TRCVM as [vmfinal [TRCTREE INV]]; eauto.
   - inversion INV; subst. eauto.
   - eapply compilation_stutter_wf; eauto.
@@ -109,39 +109,32 @@ Proof.
   apply IHTRC. eapply pts_preservation; eauto.
 Qed.
 
-(* whether the occurrence in a PikeVM state is the `Best` *)
-Definition pike_vm_state_occ_best (pvs: pike_vm_state) : Prop :=
-  match pvs with
-  | PVS _ _ (Best _) _ _ _ => True
-  | PVS_final (Best _) => True
-  | _ => False
-  end.
+(* whether the occurrences in PikeVM states are of the same kind *)
+Definition pvs_occurrence_same_kind (pvs1 pvs2: pike_vm_state) : Prop :=
+  let occ1 := match pvs1 with
+              | PVS _ _ occ _ _ _ => occ
+              | PVS_final occ => occ
+              end in
+  let occ2 := match pvs2 with
+              | PVS _ _ occ _ _ _ => occ
+              | PVS_final occ => occ
+              end in
+  same_occurrence_kind occ1 occ2.
 
-(* taking steps from a state whose occurrence is `Best` stays `Best` *)
-Lemma pike_vm_trc_best :
+(* taking steps does not change the occurrence kind of a state *)
+Lemma pike_vm_trc_same_occurrence_kind :
   forall code dir os pvs1 pvs2,
     trc_pike_vm code dir os pvs1 pvs2 ->
-    pike_vm_state_occ_best pvs1 ->
-    pike_vm_state_occ_best pvs2.
+    pvs_occurrence_same_kind pvs1 pvs2.
 Proof.
-  unfold pike_vm_state_occ_best.
-  induction 1; intros; auto.
-  apply IHtrc.
-  inversion STEP; subst; eauto.
-  destruct occ; now injection ACC as <- <-.
+  induction 1; intros.
+  - now destruct a, occ.
+  - assert (pvs_occurrence_same_kind x y). {
+      inversion STEP; subst; destruct occ;
+        easy || now injection ACC as <- <-.
+    }
+    now destruct x, y, z, occ, occ0, occ1.
 Qed.
-
-Corollary pike_vm_trc_best_final :
-  forall code dir os pvs1 occ,
-    trc_pike_vm code dir os pvs1 (PVS_final occ) ->
-    pike_vm_state_occ_best pvs1 ->
-    exists ol, occ = Best ol.
-Proof.
-  intros.
-  eapply pike_vm_trc_best in H; auto.
-  destruct occ; easy || eauto.
-Qed.
-
 
 (** * Correctness Theorem of the PikeVM result  *)
 
@@ -154,19 +147,19 @@ Theorem pike_vm_correct:
     (* `tree` is the tree of the regex `r` for the input `inp` *)
     is_tree rer [Areg r] inp GroupMap.empty forward tree ->
     (* the result of the PikeVM is `occ` *)
-    trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp) (PVS_final occ) ->
+    trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp (Best None)) (PVS_final occ) ->
     (* This `occ` is the priority result of the `tree` *)
     occ = Best (first_leaf tree inp).
 Proof.
   intros r inp os tree occ SUBSET OS TREE TRC.
   unfold first_leaf. rewrite first_tree_leaf.
   eapply encode_equal with (b:=CanExit) in TREE as BOOLTREE; pike_subset.
-  pose proof pike_vm_trc_best_final _ _ _ _ _ TRC I as [ol ->].
+  destruct occ; eapply pike_vm_trc_same_occurrence_kind in TRC as SAMEKIND; try easy.
   eapply pike_vm_to_pike_tree in TRC; eauto.
   assert (SUBTREE: pike_subtree tree).
   { eapply pike_actions_pike_tree with (cont:=[Areg r]); eauto.
     pike_subset. }
-  pose proof init_piketree_inv tree inp SUBTREE as INIT.
+  pose proof init_piketree_inv tree inp (Best None) SUBTREE as INIT.
   eapply pike_tree_trc_correct in TRC as FINALINV; eauto.
   inversion FINALINV. inversion H0. subst. auto.
 Qed.
@@ -180,7 +173,7 @@ Theorem pike_vm_correct_unanchored {strs:StrSearch}:
     (* `tree` is the tree of the regex `[^]*?r` for the input `inp` *)
     is_tree rer [Areg (lazy_prefix r)] inp GroupMap.empty forward tree ->
     (* the result of the PikeVM is `occ` *)
-    trc_pike_vm (compilation r) forward os (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward) (PVS_final occ) ->
+    trc_pike_vm (compilation r) forward os (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward (Best None)) (PVS_final occ) ->
     (* This `occ` is the priority result of the `tree` *)
     occ = Best (first_leaf tree inp).
 Proof.
@@ -188,7 +181,7 @@ Proof.
   unfold first_leaf. rewrite first_tree_leaf.
   eapply encode_equal with (b:=CanExit) in TREE as BOOLTREE; pike_subset.
   inversion BOOLTREE; inversion CONT; destruct plus; [discriminate|]; subst.
-  pose proof pike_vm_trc_best_final _ _ _ _ _ TRC I as [ol ->].
+  destruct occ; eapply pike_vm_trc_same_occurrence_kind in TRC as SAMEKIND; try easy.
   eapply pike_vm_to_pike_tree_unanchored in TRC as [? [? TRC]]; eauto.
   eapply pike_tree_trc_correct in TRC as FINALINV.
   2: eapply init_piketree_inv_unanchored; subst; unfold initial_future_unanchored; eauto.
@@ -205,7 +198,7 @@ Theorem pike_vm_same_warblre:
     RegExpRecord.capturingGroupsCount rer = StaticSemantics.countLeftCapturingParensWithin wr nil ->
     EarlyErrors.Pass_Regex wr nil ->
     forall occ,
-      trc_pike_vm (compilation lr) forward los (pike_vm_initial_state inp) (PVS_final occ) ->
+      trc_pike_vm (compilation lr) forward los (pike_vm_initial_state inp (Best None)) (PVS_final occ) ->
       exists result, occ = Best result /\ EquivDef.equiv_res result ((EquivMain.compilePattern wr rer) (input_str inp) (idx inp)).
 Proof.
   intros lr los wr inp Hpike Hos Hequiv Hcapcount HearlyErrors.
@@ -228,7 +221,7 @@ Theorem pike_vm_same_warblre_str0:
     RegExpRecord.capturingGroupsCount rer = StaticSemantics.countLeftCapturingParensWithin wr nil ->
     EarlyErrors.Pass_Regex wr nil ->
     forall occ,
-      trc_pike_vm (compilation lr) forward los (pike_vm_initial_state (init_input str0)) (PVS_final occ) ->
+      trc_pike_vm (compilation lr) forward los (pike_vm_initial_state (init_input str0) (Best None)) (PVS_final occ) ->
       exists result, occ = Best result /\ EquivDef.equiv_res result ((EquivMain.compilePattern wr rer) str0 0).
 Proof.
   intros lr los wr str0 Hpike Hos Hequiv Hcapcount HearlyErrors.
@@ -250,7 +243,7 @@ Theorem pike_vm_warblre:
     (* and the oracles `os` are correct for `r` *)
     nfa_oracles_correct rer os r inp ->
     (* When PikeVM reaches a final result *)
-    trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp) (PVS_final occ) ->
+    trc_pike_vm (compilation r) forward os (pike_vm_initial_state inp (Best None)) (PVS_final occ) ->
     (* this result is equal to Warblre's execution result *)
     exists result,
       occ = Best result /\
