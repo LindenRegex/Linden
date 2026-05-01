@@ -27,26 +27,12 @@ Fixpoint has_groups (r:regex) : bool :=
   | Regex.Character _ | Epsilon | Backreference _ | Anchor _ => false
   end.
 
-Definition has_groups_action (a:action) : bool :=
-  match a with
-  | Areg r => has_groups r
-  | Acheck _ => false
-  | Aclose _ => true
-  end.
-
 Fixpoint has_groups_actions (acts:list action) : bool :=
   match acts with
   | [] => false
-  | a::t => has_groups_action a || has_groups_actions t
-  end.
-
-(* whether a regex has assertions that do not contribute to the match range *)
-Fixpoint has_asserts (r:regex) : bool :=
-  match r with
-  | Lookaround _ _ | Anchor _ => true
-  | Sequence r1 r2 | Disjunction r1 r2 => has_asserts r1 || has_asserts r2
-  | Group _ r' | Quantified _ _ _ r' => has_asserts r'
-  | Regex.Character _ | Epsilon | Backreference _ => false
+  | Areg r :: t => has_groups r || has_groups_actions t
+  | Acheck _ :: t => has_groups_actions t
+  | Aclose _ :: t => true
   end.
 
 (* tries to perform a search using only the literal from the regex *)
