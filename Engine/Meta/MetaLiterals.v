@@ -6,7 +6,7 @@ From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Semantics Tree.
-From Linden Require Import FunctionalUtils.
+From Linden Require Import FunctionalUtils GroupMapLemmas.
 From Linden Require Import Parameters LWParameters.
 From Linden Require Import StrictSuffix Prefix.
 From Linden Require Import EngineSpec.
@@ -18,22 +18,6 @@ Section MetaLiterals.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
 
-(* whether a regex has capturing groups *)
-Fixpoint has_groups (r:regex) : bool :=
-  match r with
-  | Group _ _ => true
-  | Sequence r1 r2 | Disjunction r1 r2 => has_groups r1 || has_groups r2
-  | Quantified _ _ _ r' | Lookaround _ r' => has_groups r'
-  | Regex.Character _ | Epsilon | Backreference _ | Anchor _ => false
-  end.
-
-Fixpoint has_groups_actions (acts:list action) : bool :=
-  match acts with
-  | [] => false
-  | Areg r :: t => has_groups r || has_groups_actions t
-  | Acheck _ :: t => has_groups_actions t
-  | Aclose _ :: t => true
-  end.
 
 (* tries to perform a search using only the literal from the regex *)
 Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : search_result :=
@@ -48,54 +32,12 @@ Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : search_result
         | Some inp' =>
             (* if it has groups we must reconstruct them *)
             (* LATER: do group reconstruction with an anchored engine *)
-            if has_groups r then Unsupported
-            else Ok (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty))
+            if def_groups r == [] then
+              Ok (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty))
+            else Unsupported
         | None => Ok None
         end
   end.
-
-(* if a regex has no groups, then it defines no groups *)
-Lemma has_no_groups_def_groups:
-  forall r,
-    has_groups r = false -> def_groups r = [].
-Proof.
-  induction r; try easy; simpl; intros; boolprop; now rewrite IHr1, IHr2.
-Qed.
-
-(* if a list of actions contains no groups, any matching leaf produces an empty group map *)
-Lemma no_groups_empty_gm:
-  forall acts inp gm dir tree leaf,
-    has_groups_actions acts = false ->
-    is_tree rer acts inp gm dir tree ->
-    tree_res tree gm inp dir = Some leaf ->
-    snd leaf = gm.
-Proof.
-  intros acts inp gm dir tree leaf Hnogroups Htree Hleaf.
-  generalize dependent leaf.
-  induction Htree; intros leaf Hleaf;
-    (* simplify *)
-    subst; simpl in *; boolprop;
-    (* remove cases with groups *)
-    try discriminate;
-    (* remove trivial cases *)
-    inversion Hleaf; eauto.
-  - eapply read_char_success_advance, advance_input_success in READ as <-.
-    eauto.
-  - destruct (tree_res t1), (tree_res t2); eauto.
-  - destruct dir; simpl in IHHtree; boolprop; eapply IHHtree; eauto.
-  - rewrite has_no_groups_def_groups in *; eauto.
-  - destruct greedy; simpl in Hleaf; rewrite has_no_groups_def_groups in *; eauto.
-    + destruct (tree_res titer); eauto.
-    + destruct (tree_res tskip); eauto.
-  - unfold lk_result in RES_LK. destruct positivity.
-    + destruct (tree_res treelk) eqn:Hres; [destruct l|discriminate].
-      injection RES_LK as <-.
-      repeat specialize_prove IHHtree1 by eauto. specialize (IHHtree1 (i, g) ltac:(eauto)).
-      simpl in IHHtree1. subst. eauto.
-    + destruct (tree_res treelk); [discriminate|inversion RES_LK; subst; eauto].
-  - rewrite <-read_backref_success_advance with (1:=READ_BACKREF) in Hleaf; eauto.
-Qed.
-
 
 (* if the try_lit_search returned a leaf, it is the first_leaf *)
 Theorem try_lit_search_correct {strs:StrSearch}:
@@ -111,10 +53,10 @@ Proof.
   - destruct has_asserts eqn:Hasserts; [discriminate|].
     destruct input_search eqn:Hsearch.
     (* we found a match *)
-    + destruct has_groups eqn:Hgroups; [discriminate|].
+    + eqdec; only 2: discriminate.
       injection Htry as <-.
       eapply exact_literal_result_unanchored in Hsearch as [gm' Hleaf]; eauto.
-      eapply no_groups_empty_gm in Htree; simpl; boolprop; eauto. simpl in Htree.
+      eapply no_groups_empty_gm_regex in Htree; simpl; boolprop; eauto. simpl in Htree.
       now subst.
     (* we did not find a match *)
     + injection Htry as <-.

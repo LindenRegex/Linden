@@ -289,3 +289,14 @@ Proof.
     + destruct (tree_res treelk); [discriminate|inversion RES_LK; subst; eauto].
   - rewrite <-read_backref_success_advance with (1:=READ_BACKREF) in Hleaf; eauto.
 Qed.
+
+Corollary no_groups_empty_gm_regex {params: LindenParameters} (rer: RegExpRecord) :
+  forall r inp gm dir tree leaf,
+    def_groups r = [] ->
+    is_tree rer [Areg r] inp gm dir tree ->
+    tree_res tree gm inp dir = Some leaf ->
+    snd leaf = gm.
+Proof.
+  intros. eapply no_groups_empty_gm with (acts := [Areg r]); eauto.
+  simpl. now rewrite app_nil_r.
+Qed.
