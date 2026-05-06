@@ -9,7 +9,7 @@
 From Stdlib Require Import List Lia RelationClasses FunInd Recdef Arith.
 Import ListNotations.
 
-From Linden Require Import Regex Chars Semantics Tree FunctionalSemantics.
+From Linden Require Import Regex Chars Semantics Tree FunctionalSemantics FunctionalUtils.
 From Linden Require Import Parameters LWParameters.
 From Linden Require Import StrictSuffix.
 From Linden Require Import Tactics.
@@ -327,6 +327,43 @@ Proof.
     now apply Hnf.
 Qed.
 
+(* given an input search from inp1 to inp3 where they are different *)
+(* the search on the input right after inp1 also returns inp3 *)
+Lemma input_search_advance {strs: StrSearch}:
+  forall inp1 inp2 inp3 p,
+    input_search p inp1 = Some inp3 ->
+    strict_suffix inp3 inp1 forward ->
+    advance_input inp1 forward = Some inp2 ->
+    input_search p inp2 = Some inp3.
+Proof.
+  unfold input_search.
+  intros inp1 inp2 inp3 p Hsearch Hss Hadv.
+  destruct (str_search p (next_str inp1)) as [n|] eqn:Hss1; [injection Hsearch as Heq|discriminate].
+  destruct n as [|n]; [rewrite advance_input_n_0 in Heq; subst; ss_solve|].
+  destruct inp1 as [[|c next1] pref1]; [discriminate Hadv|].
+  injection Hadv as <-.
+  simpl.
+  rewrite (str_search_succ_next _ _ _ _ Hss1).
+  f_equal. subst. symmetry. apply advance_input_n_succ_forward.
+Qed.
+
+(* given an input search from inp1 to inp3, all searches on inputs *)
+(* between inp1 and inp3 also return inp3 *)
+Lemma input_search_between {strs: StrSearch}:
+  forall inp1 inp2 inp3 p,
+    input_search p inp1 = Some inp3 ->
+    inp2 = inp1 \/ strict_suffix inp2 inp1 forward ->
+    inp3 = inp2 \/ strict_suffix inp3 inp2 forward ->
+    input_search p inp2 = Some inp3.
+Proof.
+  intros inp1 inp2 inp3 p Hsearch [<- | Hlow] Hhigh; [assumption|].
+  remember forward as dir.
+  induction Hlow; subst.
+  - eapply input_search_advance; eauto; ss_solve.
+  - apply input_search_advance with (inp1 := inp2); eauto; try ss_solve.
+    apply IHHlow; eauto; ss_solve.
+Qed.
+
 (* input_search finds no result iff str_search finds no result *)
 Lemma input_search_none_str_search {strs: StrSearch}:
   forall s inp,
@@ -410,6 +447,16 @@ Proof.
     + destruct l1; easy.
 Qed.
 
+(* if chaining of literals is exact, chaining is the concatenation of exacts *)
+Lemma chain_literals_exact:
+  forall l1 l2 p,
+    chain_literals l1 l2 = Exact p ->
+    exists p1 p2, l1 = Exact p1 /\ l2 = Exact p2 /\ p = p1 ++ p2.
+Proof.
+  destruct l1, l2; try discriminate.
+  intros p [=]; eauto.
+Qed.
+
 (* the longest string that is a prefix of both strings *)
 Fixpoint common_prefix (s1 s2 : string) : string :=
   match s1, s2 with
@@ -476,6 +523,21 @@ Proof.
   - destruct H; eqdec; subst; easy.
 Qed.
 
+(* if merging is exact, there are three possible cases *)
+Lemma merge_literals_exact:
+  forall l1 l2 p,
+    merge_literals l1 l2 = Exact p ->
+    l1 = Exact p /\ l2 = Exact p \/
+    l1 = Impossible /\ l2 = Exact p \/
+    l1 = Exact p /\ l2 = Impossible.
+Proof.
+  destruct l1, l2; simpl; try discriminate; eauto.
+  - case_if; eqdec.
+    + injection Heq as <-. intros p [=<-]; eauto.
+    + easy.
+  - now case_if.
+Qed.
+
 (* extracting literals from a character description *)
 Fixpoint extract_literal_char (cd: char_descr) : literal :=
   match cd with
@@ -504,7 +566,7 @@ Fixpoint extract_literal (r: regex) : literal :=
   | Sequence r1 r2 => chain_literals (extract_literal r1) (extract_literal r2)
   | Quantified _ min (NoI.N 0) r1 => repeat_literal (extract_literal r1) Nothing min
   | Quantified _ min _ r1 => repeat_literal (extract_literal r1) Unknown min
-  | Lookaround _ r1 => Unknown
+  | Lookaround _ r1 => Nothing
   | Group _ r1 => extract_literal r1
   | Anchor _ => Nothing
   | Backreference _ => Unknown
@@ -663,8 +725,7 @@ Proof.
     eapply IHHtree; eauto.
   (* tree_lk *)
   - simpl in Hextract |- *.
-    replace (if RegExpRecord.ignoreCase rer then Unknown else Unknown) with Unknown in Hextract by now destruct_i.
-    destruct extract_actions_literal eqn:Heqex in Hextract; try easy.
+    replace (extract_actions_literal cont) with Impossible in * by (destruct_i; now destruct extract_actions_literal).
     rewrite IHHtree2 by auto.
     destruct positivity.
     + destruct tree_res; eauto.
@@ -802,6 +863,11 @@ Proof.
       all: rewrite <- chain_literals_assoc; eapply IHHtree; eauto.
   (* tree_quant_free *)
   - destruct plus; destruct extract_actions_literal; constructor.
+  (* tree_lk *)
+  - simpl in Hleaf |- *.
+    destruct positivity, (tree_res treelk); try easy.
+    + destruct l, (extract_actions_literal cont); eauto.
+    + destruct (extract_actions_literal cont); eauto.
 Qed.
 
 (* main theorem: every match starts with the extracted literal *)
@@ -898,6 +964,205 @@ Proof.
   now rewrite Hnotfound, ISTREE1.
 Qed.
 
+
+(** * Exact literals matching *)
+
+(* If a regex contains assertions, we cannot use Exact literals to its full potential. *)
+(* For instance, the regex /(?<=abc)z/ has an exact literal of "z". But not every occurrence *)
+(* of "z" in an input is a valid match. This is because an assertion (something that does not *)
+(* contribute characters to the overall match) is present, namely /(?<=abc)/. It requires the "z" *)
+(* to be preceded by "abc", but this information is not captured in the literal Exact "z". *)
+(* Thus Exact literal theorems all work under the premise that the regex contained no assertions. *)
+
+
+(* whether a regex has assertions that do not contribute to the match range *)
+Fixpoint has_asserts (r:regex) : bool :=
+  match r with
+  | Lookaround _ _ | Anchor _ => true
+  | Sequence r1 r2 | Disjunction r1 r2 => has_asserts r1 || has_asserts r2
+  | Group _ r' | Quantified _ _ _ r' => has_asserts r'
+  | Regex.Character _ | Epsilon | Backreference _ => false
+  end.
+
+(* generalization of checking for assertions in actions *)
+Fixpoint has_asserts_actions (acts: list action) : bool :=
+  match acts with
+  | [] => false
+  | Areg r :: rest => has_asserts r || has_asserts_actions rest
+  | Acheck _ :: rest => true
+  | Aclose _ :: rest => has_asserts_actions rest
+  end.
+
+(* if a literal of a character descriptor is exact, it is a singleton *)
+Lemma extract_literal_char_exact_single:
+  forall cd s,
+    extract_literal_char cd = Exact s ->
+    exists c, s = [c].
+Proof.
+  induction cd; simpl; try discriminate; intros s H.
+  - injection H as <-. eauto.
+  - case_if; eqdec.
+    + injection H as <-. eauto.
+    + discriminate.
+  - apply merge_literals_exact in H. boolprop; eauto.
+Qed.
+
+(* if a character descriptor is exact, it matches the extracted character *)
+Lemma extract_literal_char_exact_char_match:
+  forall cd c,
+    extract_literal_char cd = Exact [c] ->
+    char_match rer c cd = true.
+Proof.
+  unfold char_match.
+  induction cd; try discriminate; simpl; intros c' H.
+  - injection H as <-. now eqdec.
+  - case_if; eqdec.
+    + injection H as <-. apply char_match_range_refl.
+    + discriminate.
+  - apply merge_literals_exact in H. boolprop; eauto.
+Qed.
+
+(* if a list of actions has no assertions, the extracted literal is exact, and the input
+  starts with that extracted literal, then the result of the tree is that literal *)
+Lemma exact_literal_result_general :
+  forall acts tree inp gm p,
+    is_tree rer acts inp gm forward tree ->
+    has_asserts_actions acts = false ->
+    extract_actions_literal acts = Exact p ->
+    starts_with p (next_str inp) ->
+    (exists gm', tree_res tree gm inp forward = Some (advance_input_n inp (length p) forward, gm')).
+Proof.
+  intros acts tree inp gm p Htree.
+  generalize dependent p.
+  remember forward as dir.
+  induction Htree; intros p Hnoassert Hlit Hsw; subst; simpl in *;
+    (* constructs that do not return an Exact *)
+    try discriminate;
+    (* remove case where ignoreCase is true *)
+    try (destruct RegExpRecord.ignoreCase; [now destruct extract_actions_literal|]);
+    (* follows from IH *)
+    try solve[destruct extract_actions_literal; easy || eapply IHHtree; boolprop; eauto].
+  (* tree_match *)
+  - injection Hlit as <-. rewrite advance_input_n_0. eauto.
+  (* tree_char *)
+  - unfold read_char in READ; destruct inp, next as [|c' next']; [discriminate|].
+    destruct char_match eqn:Hmatch; [|discriminate]. injection READ as <-. subst.
+    destruct extract_literal_char eqn:Hchar, extract_actions_literal; try easy.
+    apply extract_literal_char_exact_single in Hchar as [c'' Hchar]. subst.
+    injection Hlit as <-.
+    inversion Hsw. subst.
+    replace (length (c' :: s0)) with (S (length s0)) by easy.
+    rewrite advance_input_n_succ_forward.
+    eapply IHHtree; eauto.
+  (* tree_char_fail *)
+  - destruct extract_literal_char eqn:Hchar, extract_actions_literal; try easy.
+    pose proof (extract_literal_char_exact_single _ _ Hchar) as [c ?]. subst.
+    injection Hlit as <-.
+    unfold read_char in READ. destruct inp, next as [|c' next']; inversion Hsw. subst.
+    destruct char_match eqn:Hmatch; [discriminate|].
+    now rewrite extract_literal_char_exact_char_match in Hmatch.
+  (* disjunction *)
+  - apply chain_literals_exact in Hlit as [p1 [p2 [Hact1 [Hact2 Hchain]]]]. subst. rewrite Hact2 in IHHtree1, IHHtree2.
+    apply merge_literals_exact in Hact1 as [[Hex1 Hex2] | [[Himp1 Hex2] | [Hex1 Himp2]]].
+    + rewrite Hex1 in IHHtree1.
+      specialize (IHHtree1 ltac:(eauto) (p1 ++ p2)). boolprop. repeat specialize_prove IHHtree1 by eauto.
+      destruct IHHtree1 as [? IHHtree1].
+      erewrite IHHtree1. simpl. eauto.
+    + erewrite extract_literal_impossible_general; [simpl|eauto|simpl; now rewrite Himp1].
+      rewrite Hex2 in IHHtree2.
+      eapply IHHtree2; boolprop; eauto.
+    + rewrite Hex1 in IHHtree1.
+      specialize (IHHtree1 ltac:(eauto) (p1 ++ p2)). boolprop. repeat specialize_prove IHHtree1 by eauto.
+      destruct IHHtree1 as [? IHHtree1].
+      erewrite IHHtree1. simpl. eauto.
+  (* sequence *)
+  - rewrite <-chain_literals_assoc in Hlit.
+    eapply IHHtree; boolprop; eauto.
+  (* tree_quant_forced *)
+  - destruct plus as [[|n]|].
+    + rewrite <-chain_literals_assoc in Hlit.
+      eapply IHHtree; boolprop; eauto.
+    + destruct (extract_literal r1), extract_actions_literal, repeat_literal; try easy.
+      simpl in Hlit. rewrite <-app_assoc in Hlit.
+      eapply IHHtree; boolprop; eauto.
+    + destruct (extract_literal r1), extract_actions_literal, repeat_literal; try easy.
+      simpl in Hlit. rewrite <-app_assoc in Hlit.
+      eapply IHHtree; boolprop; eauto.
+  (* tree_quant_free *)
+  - destruct plus as [[|n]|]; now destruct extract_actions_literal.
+Qed.
+
+Lemma exact_literal_result :
+  forall r tree inp gm p,
+    is_tree rer [Areg r] inp gm forward tree ->
+    has_asserts r = false ->
+    extract_literal r = Exact p ->
+    starts_with p (next_str inp) ->
+    (exists gm', tree_res tree gm inp forward = Some (advance_input_n inp (length p) forward, gm')).
+Proof.
+  intros.
+  eapply exact_literal_result_general; eauto; simpl.
+  - now boolprop.
+  - destruct extract_literal; simpl; now rewrite ?app_nil_r.
+Qed.
+
+(* exact_literal_result_unanchored with extra premises to guide the direction *)
+(* of the input we induct on *)
+Lemma exact_literal_result_unanchored' {strs:StrSearch}:
+  forall r i inp inp' p tree,
+    input_prefix i inp forward ->
+    input_prefix inp' i forward ->
+    is_tree rer [Areg (lazy_prefix r)] i Groups.GroupMap.empty forward tree ->
+    has_asserts r = false ->
+    extract_literal r = Exact p ->
+    input_search p i = Some inp ->
+    exists gm', first_leaf tree i = Some (advance_input_n inp (length p) forward, gm').
+Proof.
+  intros r i inp inp' p tree Hhigh.
+  remember forward as dir.
+  generalize dependent tree.
+  induction Hhigh; subst; intros tree Hlow Htree Hnoassert Hlit Hsearch.
+  - inversion Htree. inversion CONT. subst.
+    eapply input_search_starts_with in Hsearch.
+    unfold first_leaf. simpl.
+    eapply exact_literal_result with (tree:=tskip) in Hsearch as [? ->]; simpl; eauto.
+  - (* relate inputs *)
+    assert (Hinp31: strict_suffix inp3 inp1 forward) by ss_solve.
+    destruct inp1 as [next1 pref1], next1 as [|c1 next1]; [discriminate|injection H as <-].
+    inversion Htree. inversion CONT. destruct plus; [discriminate|subst].
+    inversion ISTREE1; [inversion READ; subst|discriminate].
+    (* r has no results at inp1 *)
+    eapply input_search_no_earlier with (i:=Input (c::next1) pref1) in Hsearch as Hres; try split; eauto.
+    replace p with (prefix (extract_literal r)) in Hres by now rewrite Hlit.
+    eapply extract_literal_prefix_contra in Hres; eauto.
+    (* the rest of the result comes from IH *)
+    pose proof (is_tree_productivity rer [Areg (lazy_prefix r)] (Input next1 (c :: pref1)) Groups.GroupMap.empty forward) as [t' Ht'].
+    assert (Hsearch': input_search p (Input next1 (c::pref1)) = Some inp3). {
+      eapply input_search_advance with (inp1:=Input (c::next1) pref1); eauto.
+    }
+    specialize (IHHhigh ltac:(eauto) _ ltac:(ss_solve) Ht' ltac:(eauto) ltac:(eauto) ltac:(eauto)) as [gm' Hres'].
+    unfold first_leaf in *. simpl. unfold advance_input'.
+    rewrite Hres. simpl.
+    inversion TREECONT; [|exfalso; eauto using ss_advance].
+    inversion Ht'.
+    eapply is_tree_determ with (t2:=treecont) in CONT0; eauto.
+    subst. eauto.
+Qed.
+
+(* the result of a match of a the lazy prefix of an exact regex with no assertions *)
+(* is the position returned from a substring search *)
+Lemma exact_literal_result_unanchored {strs:StrSearch} :
+  forall r inp p inp' tree,
+    has_asserts r = false ->
+    extract_literal r = Exact p ->
+    is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
+    input_search p inp = Some inp' ->
+    exists gm', first_leaf tree inp = Some (advance_input_n inp' (length p) forward, gm').
+Proof.
+  intros.
+  eapply input_search_strict_suffix in H2 as Hstr.
+  eapply exact_literal_result_unanchored'; eauto; ss_solve.
+Qed.
 
 (** * Extracted literals size *)
 

@@ -27,26 +27,12 @@ Fixpoint has_groups (r:regex) : bool :=
   | Regex.Character _ | Epsilon | Backreference _ | Anchor _ => false
   end.
 
-Definition has_groups_action (a:action) : bool :=
-  match a with
-  | Areg r => has_groups r
-  | Acheck _ => false
-  | Aclose _ => true
-  end.
-
 Fixpoint has_groups_actions (acts:list action) : bool :=
   match acts with
   | [] => false
-  | a::t => has_groups_action a || has_groups_actions t
-  end.
-
-(* whether a regex has assertions that do not contribute to the match range *)
-Fixpoint has_asserts (r:regex) : bool :=
-  match r with
-  | Lookaround _ _ | Anchor _ => true
-  | Sequence r1 r2 | Disjunction r1 r2 => has_asserts r1 || has_asserts r2
-  | Group _ r' | Quantified _ _ _ r' => has_asserts r'
-  | Regex.Character _ | Epsilon | Backreference _ => false
+  | Areg r :: t => has_groups r || has_groups_actions t
+  | Acheck _ :: t => has_groups_actions t
+  | Aclose _ :: t => true
   end.
 
 (* tries to perform a search using only the literal from the regex *)
@@ -63,9 +49,7 @@ Definition try_lit_search {strs:StrSearch} (r:regex) (inp:input) : search_result
             (* if it has groups we must reconstruct them *)
             (* LATER: do group reconstruction with an anchored engine *)
             if has_groups r then Unsupported
-            (* LATER: return exact result *)
-            (* else Some (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty)) *)
-            else Unsupported
+            else Ok (Some (advance_input_n inp' (length s) forward, Groups.GroupMap.empty))
         | None => Ok None
         end
   end.
@@ -127,7 +111,11 @@ Proof.
   - destruct has_asserts eqn:Hasserts; [discriminate|].
     destruct input_search eqn:Hsearch.
     (* we found a match *)
-    + destruct has_groups eqn:Hgroups; discriminate.
+    + destruct has_groups eqn:Hgroups; [discriminate|].
+      injection Htry as <-.
+      eapply exact_literal_result_unanchored in Hsearch as [gm' Hleaf]; eauto.
+      eapply no_groups_empty_gm in Htree; simpl; boolprop; eauto. simpl in Htree.
+      now subst.
     (* we did not find a match *)
     + injection Htry as <-.
       rewrite input_search_none_str_search in Hsearch.
@@ -179,8 +167,7 @@ Proof.
     unfold first_leaf. subst. simpl. unfold advance_input'. simpl.
     assert (Hnoskip: tree_res tskip Groups.GroupMap.empty (Input (c :: next) pref) forward = None). {
       eapply extract_literal_prefix_contra, input_search_no_earlier; eauto.
-      rewrite input_prefix_strict_suffix in Hprefix, Hlow.
-      split; destruct Hprefix, Hlow; subst; eauto using ss_next', ss_advance.
+      split; ss_solve.
     }
     rewrite Hnoskip. simpl.
     inversion Htree'. inversion TREECONT.
@@ -201,7 +188,7 @@ Proof.
   - erewrite un_exec_correct; eauto.
     assert (input_prefix inp i forward). {
       apply input_search_strict_suffix in Hsearch.
-      now rewrite <-input_prefix_strict_suffix in Hsearch.
+      ss_solve.
     }
     eapply un_exec_all_between_str_search_eq; eauto using ip_eq.
   (* there is no occurrence of the literal *)

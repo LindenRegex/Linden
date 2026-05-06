@@ -319,6 +319,13 @@ Section FunctionalSemantics.
     intros [next pref] dir. simpl. now destruct dir.
   Qed.
 
+  (* advancing a cons input by n+1 is the same as advancing its tail by n *)
+  Lemma advance_input_n_succ_forward:
+    forall c next pref n, advance_input_n (Input (c :: next) pref) (S n) forward = advance_input_n (Input next (c::pref)) n forward.
+  Proof.
+    intros. simpl. now rewrite <-app_assoc.
+  Qed.
+
   (* May be used to simplify the lemma right after this one *)
   Lemma skipn_cons_length {A}:
     forall n (l: list A) x q,

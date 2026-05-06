@@ -1,4 +1,5 @@
 From Linden Require Import Chars Parameters LWParameters.
+From Linden Require Import ListLemmas.
 From Warblre Require Import Base Parameters.
 From Stdlib Require Import List Lia.
 Import ListNotations.
@@ -389,6 +390,56 @@ Section StrictSuffix.
     pose proof strict_suffix_current inp1 inp1 dir Hss. lia.
   Qed.
 
+  Lemma ss_irreflexive :
+    forall inp dir,
+      ~strict_suffix inp inp dir.
+  Proof.
+    intros inp dir H.
+    now apply ss_neq in H.
+  Qed.
+
+  Lemma ss_asymm:
+    forall inp1 inp2 dir,
+      strict_suffix inp1 inp2 dir ->
+      ~strict_suffix inp2 inp1 dir.
+  Proof.
+    intros inp1 inp2 dir H1 H2.
+    apply (ss_irreflexive inp1 dir).
+    eapply strict_suffix_trans; eauto.
+  Qed.
+
+
+  Lemma ss_forward_backward :
+    forall inp1 inp2,
+      strict_suffix inp1 inp2 forward -> strict_suffix inp2 inp1 backward.
+  Proof.
+    remember forward as dir.
+    induction 1; subst.
+    - destruct inp as [next ?], next; [discriminate|injection H as <-].
+      eauto using ss_advance.
+    - destruct inp2 as [next ?], next; [discriminate|injection H as <-].
+      eauto using ss_next'.
+  Qed.
+
+  Lemma ss_backward_forward :
+    forall inp1 inp2,
+      strict_suffix inp1 inp2 backward -> strict_suffix inp2 inp1 forward.
+  Proof.
+    remember backward as dir.
+    induction 1; subst.
+    - destruct inp as [? pref], pref; [discriminate|injection H as <-].
+      eauto using ss_advance.
+    - destruct inp2 as [? pref], pref; [discriminate|injection H as <-].
+      eauto using ss_next'.
+  Qed.
+
+  Lemma ss_backward_forward_iff :
+    forall inp1 inp2,
+      strict_suffix inp1 inp2 backward <-> strict_suffix inp2 inp1 forward.
+  Proof.
+    intros. split; eauto using ss_forward_backward, ss_backward_forward.
+  Qed.
+
   (** * Prefixes *)
 
   (* In general you should use strict_suffix in definitions. *)
@@ -426,3 +477,75 @@ Section StrictSuffix.
   Qed.
 
 End StrictSuffix.
+
+From Stdlib Require Import Classes.RelationClasses.
+From StrictOrderSolver Require Import Solver.
+
+(** Solver for strict_suffixes *)
+Section StrictSuffixSolver.
+  Context {params: LindenParameters}.
+
+  #[export]
+  Instance StrictSuffixSO : StrictOrder (fun a b => strict_suffix a b forward).
+  Proof.
+    split.
+    - (* Irreflexivity *)
+      intros x H. eapply ss_irreflexive; eauto.
+    - (* Transitivity *)
+      intros x y z Hxy Hyz. eapply strict_suffix_trans; eauto.
+  Qed.
+
+  Lemma advance_input_flip:
+    forall inp1 inp2,
+      advance_input inp1 forward = Some inp2 <->
+        advance_input inp2 backward = Some inp1.
+  Proof.
+    intros [next1 pref1] [next2 pref2]. split; intro H.
+    - destruct next1 as [|c next1']; [discriminate|]. now injection H as <- <-.
+    - destruct pref2 as [|c pref1']; [discriminate|]. now injection H as <- <-.
+  Qed.
+
+End StrictSuffixSolver.
+
+(* canonicalize into forward strict suffixes *)
+Ltac ss_canon :=
+  match goal with
+  (* split disjunctions *)
+  | [H: _ \/ _ |- _] => destruct H; subst
+  (* generate strict_suffix *)
+  | |- input_prefix _ _ _ =>
+    rewrite input_prefix_strict_suffix
+  | [H: input_prefix _ _ _ |- _] =>
+    rewrite input_prefix_strict_suffix in H
+  (* simplify advance_input *)
+  | [H: advance_input ?inp1 forward = Some _ |- _] =>
+    eapply read_suffix in H; eauto
+  | [H: context[Input ?next (?c::?pref)] |- _] =>
+    (* make sure we don't prove it more than once *)
+    let thm := constr:(strict_suffix (Input next (c::pref)) (Input (c::next) pref) forward) in
+    lazymatch goal with
+    | [H': thm |- _] => fail "already proven"
+    | _ => assert thm by (apply ss_advance; simpl; reflexivity)
+    end
+  (* flip backward to forward *)
+  | [H: advance_input ?inp1 backward = Some ?inp2 |- _] =>
+    rewrite <-advance_input_flip in H
+  | [H: strict_suffix _ _ backward |- _] =>
+    rewrite ss_backward_forward_iff in H
+  | |- strict_suffix _ _ backward =>
+    rewrite ss_backward_forward_iff
+  | [H: strict_suffix _ _ forward |- _] => idtac
+  | [H: strict_suffix _ _ ?dir |- _] => destruct dir
+  end.
+
+(* solves a strict_suffix goal by finding a proof *)
+(* or by finding a contradiction *)
+(* assumes statements are canonicalized with ss_canon *)
+Ltac ss_solve' :=
+  match goal with
+  (* input_prefix might have generated disjunctions in the goal *)
+  | |- _ \/ _ => (left; ss_solve') || (right; ss_solve')
+  | _ => strict_order (fun a b => strict_suffix a b forward) || easy
+  end.
+
+Ltac ss_solve := solve[repeat ss_canon; ss_solve'].

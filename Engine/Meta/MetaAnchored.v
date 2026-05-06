@@ -106,7 +106,7 @@ Proof.
     injection READ as <-.
     eapply res_indep; eauto.
   (* tree_disj*)
-  -  boolprop; erewrite IHHtree1; eauto.
+  - boolprop; erewrite IHHtree1; eauto.
   (* tree_sequence *)
   - simpl in IHHtree. boolprop; eauto.
   (* tree_quant_forced *)
@@ -114,8 +114,8 @@ Proof.
   (* tree_quant_free *)
   - boolprop.
     destruct greedy; simpl; erewrite IHHtree2; eauto.
-    +  erewrite res_indep; eauto.
-    +  erewrite res_indep; eauto.
+    + erewrite res_indep; eauto.
+    + erewrite res_indep; eauto.
   (* tree_lk *)
   - boolprop.
     + destruct lk; try discriminate.

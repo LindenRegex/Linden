@@ -4,4 +4,4 @@
  (name Linden)
  (package linden)
  (generate_project_file)
- (theories Warblre Ltac2 Stdlib))
+ (theories Warblre Ltac2 Stdlib StrictOrderSolver))
