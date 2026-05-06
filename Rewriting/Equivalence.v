@@ -2,7 +2,7 @@ From Stdlib Require Export Bool Arith List Equivalence Lia.
 From Warblre Require Import Base RegExpRecord.
 From Linden Require Import Regex Chars Groups Tree Semantics
   FunctionalSemantics FunctionalUtils ComputeIsTree Parameters
-  LWParameters LeavesEquivalence FlatMap.
+  LWParameters LeavesEquivalence FlatMap ListLemmas.
 
 Export ListNotations.
 

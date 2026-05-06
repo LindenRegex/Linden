@@ -2,6 +2,7 @@ From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups Parameters LWParameters.
+From Linden Require Import ListLemmas.
 From Stdlib Require Import PeanoNat.
 From Warblre Require Import Typeclasses Parameters Base.
 
@@ -217,18 +218,6 @@ Section Tree.
     forall gm idx dir, tree_res t gm idx dir = hd_error (tree_leaves t gm idx dir).
 
 
-  (* intermediate lemma about hd_error *)
-  Lemma hd_error_app:
-    forall A (l1 l2:list A),
-      hd_error (l1 ++ l2) =
-        match (hd_error l1) with
-        | Some h => Some h
-        | None => hd_error l2
-        end.
-  Proof.
-    intros A l1 l2. induction l1; simpl; auto.
-  Qed.
-
   (* Intermediate lemma for positive lookarounds *)
   Lemma first_tree_leaf_poslk:
     forall lk tlk t1,
@@ -318,20 +307,6 @@ Section Tree.
       + eapply leaves_indep_neglk; eauto.
   Qed.
 
-  Lemma app_neq_nil:
-    forall A (l1 l2: list A),
-      l1 ++ l2 <> [] <-> l1 <> [] \/ l2 <> [].
-  Proof.
-    intros A l1 l2.
-    split; intro H.
-    - destruct l1, l2; rewrite ?app_nil_r in *; eauto.
-      left. easy.
-    - destruct H.
-      + now destruct l1.
-      + destruct l2; [easy|].
-        now destruct l1.
-  Qed.
-
   Lemma leaves_indep_nonempty:
     forall t gm1 gm2 inp1 inp2 dir1 dir2,
       tree_leaves t gm1 inp1 dir1 <> [] -> tree_leaves t gm2 inp2 dir2 <> [].
@@ -354,14 +329,6 @@ Section Tree.
 
 
   (* Corollary: argument irrelevance in terms of tree_res *)
-  (* A lemma about hd_error *)
-  Lemma hd_error_none_nil {A}:
-    forall l: list A, hd_error l = None <-> l = [].
-  Proof.
-    intro l. split; intro H.
-    - destruct l. + reflexivity. + discriminate.
-    - subst l. reflexivity.
-  Qed.
 
   Lemma res_indep:
     forall t gm1 gm2 inp1 inp2 dir1 dir2,
