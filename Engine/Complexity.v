@@ -239,6 +239,7 @@ Section CodeSize.
     | Quantified g 0 (NoI.Inf) r1 => 4 + compsize r1
     | Group _ r1 => 2 + compsize r1
     | Anchor _ => 1
+    | Lookaround _ r1 => 1
     | _ => 0
     end.
 

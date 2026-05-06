@@ -8,7 +8,7 @@ Import ListNotations.
 
 From Linden Require Import Regex Chars Semantics Tree.
 From Linden Require Import Parameters LWParameters.
-From Linden Require Import PikeSubset SeenSets FunctionalPikeVM.
+From Linden Require Import PikeSubset SeenSets PikeVM FunctionalPikeVM.
 From Linden Require Import Prefix.
 From Linden Require Import Correctness.
 From Linden Require Import Tactics.
@@ -73,35 +73,45 @@ Defined.
 (* we show that the PikeVM fits the scheme of an anchored engine *)
 #[export] #[refine]
 Instance PikeVMAnchoredEngine: AnchoredEngine rer := {
-  exec r inp := match pike_vm_match rer r inp forward with
+  exec r inp := match pike_vm_match rer r inp forward (Best None) with
                 | FunctionalPikeVM.OutOfFuel => None
-                | FunctionalPikeVM.Finished res => res
+                | FunctionalPikeVM.Finished occ =>
+                    match occ with
+                    | Best ol => ol
+                    | All _ => None
+                    end
                 end;
   supported_regex := is_pike_regex;
 }.
   (* exec_correct *)
   intros r inp tree Hsubset Htree.
   rewrite is_pike_regex_correct in Hsubset.
-  pose proof (pike_vm_match_terminates rer r inp forward Hsubset) as [res Hmatch].
-  rewrite Hmatch.
-  symmetry. eauto using pike_vm_match_correct, pike_vm_correct.
+  pose proof (pike_vm_match_terminates rer r inp forward (Best None) Hsubset) as [occ Hmatch].
+  pose proof pike_vm_match_correct rer r forward inp (Best None) occ Hmatch as Htrc.
+  pose proof pike_vm_correct rer r inp (nfa_oracles_dir (nfa_oracles_create r) forward) tree occ Hsubset (nfa_oracles_create_correct rer r inp) Htree Htrc as [=->].
+  now rewrite Hmatch.
 Defined.
 
 (* we show that the PikeVM fits the scheme of an unanchored engine *)
 #[export] #[refine]
 Instance PikeVMUnanchoredEngine {strs:StrSearch}: UnanchoredEngine rer := {
-  un_exec r inp := match pike_vm_match_unanchored rer r inp forward with
+  un_exec r inp := match pike_vm_match_unanchored rer r inp forward (Best None) with
                 | FunctionalPikeVM.OutOfFuel => None
-                | FunctionalPikeVM.Finished res => res
+                | FunctionalPikeVM.Finished res =>
+                    match res with
+                    | Best ol => ol
+                    | All _ => None
+                    end
                 end;
   un_supported_regex := is_pike_regex;
 }.
   (* un_exec_correct *)
   intros r inp tree Hsubset Htree.
   rewrite is_pike_regex_correct in Hsubset.
-  pose proof (pike_vm_match_terminates_unanchored rer r inp forward Hsubset) as [res Hmatch].
-  rewrite Hmatch.
-  symmetry. eauto using pike_vm_match_correct_unanchored, pike_vm_correct_unanchored.
+  pose proof (pike_vm_match_terminates_unanchored rer r inp forward (Best None) Hsubset) as [occ Hmatch].
+  pose proof pike_vm_match_correct_unanchored rer r forward inp (Best None) occ Hmatch as Htrc.
+  pose proof pike_vm_correct_unanchored rer r inp (nfa_oracles_dir (nfa_oracles_create r) forward) tree occ Hsubset (nfa_oracles_create_correct rer r inp) Htree Htrc as [=->].
+  now rewrite Hmatch.
 Defined.
 
 (* we show that the MemoBT fits the scheme of an anchored engine *)
