@@ -60,3 +60,34 @@ Proof.
   - discriminate.
   - now inversion 1.
 Qed.
+
+Lemma in_pair_exists_r:
+  forall {A B} (x: A) (l: list (A * B)),
+    In x (List.map fst l) <->
+      exists y, In (x, y) l.
+Proof.
+  induction l as [|[a b] l]; simpl in *.
+  1: split; intros H; repeat destruct H.
+  split; intros H.
+  - destruct H as [|]; subst.
+    + exists b. now left.
+    + rewrite IHl in H.
+      destruct H. eauto.
+  - destruct H as [y [|]].
+    + injection H as <- <-. now left.
+    + right. rewrite IHl. eauto.
+Qed.
+
+Lemma skipn_nil_length {A}:
+  forall n (l: list A),
+    skipn n l = [] -> length l <= n.
+Proof.
+  intros n l Hskipn.
+  pose proof firstn_skipn n l. rewrite Hskipn in H.
+  apply (f_equal (length (A := A))) in H. rewrite length_app in H.
+  simpl in H. rewrite <- plus_n_O in H. rewrite <- H. apply firstn_le_length.
+Qed.
+
+(* extensionality for set-like lists *)
+Definition list_ext {A} (l1 l2: list A) : Prop :=
+  forall x, In x l1 <-> In x l2.

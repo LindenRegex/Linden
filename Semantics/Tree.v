@@ -291,6 +291,16 @@ Section Tree.
     - now injection H as <-.
   Qed.
 
+  Corollary first_tree_in:
+    forall t gm inp dir leaf,
+      tree_res t gm inp dir = Some leaf ->
+      In leaf (tree_leaves t gm inp dir).
+  Proof.
+    intros. rewrite first_tree_leaf in H. destruct tree_leaves.
+    - easy.
+    - injection H as <-. simpl. eauto.
+  Qed.
+
   (** * No Result - argument irrelevance  *)
   (* finding no leaves in a tree does not depend on the initial group map, the initial input, and the initial direction *)
   (* we could phrase a stronger theorem about how to relate the two results *)

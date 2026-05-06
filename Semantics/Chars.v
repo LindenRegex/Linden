@@ -356,6 +356,19 @@ Section Chars.
       + destruct (char_match t cd); auto. inversion 1.
   Qed.
 
+  Lemma advance_input_n_0:
+    forall inp dir, advance_input_n inp 0 dir = inp.
+  Proof.
+    intros [next pref] dir. simpl. now destruct dir.
+  Qed.
+
+  (* advancing a cons input by n+1 is the same as advancing its tail by n *)
+  Lemma advance_input_n_succ_forward:
+    forall c next pref n, advance_input_n (Input (c :: next) pref) (S n) forward = advance_input_n (Input next (c::pref)) n forward.
+  Proof.
+    intros. simpl. now rewrite <-app_assoc.
+  Qed.
+
   (* Inductive relation of next_inputs *)
   Inductive next_input : input -> input -> Direction -> Prop :=
   | nextin: forall i1 i2 dir (ADVANCE: advance_input i1 dir = Some i2),

@@ -3,7 +3,7 @@
 From Stdlib Require Import List Lia.
 Import ListNotations.
 
-From Linden Require Import Regex Chars Groups.
+From Linden Require Import Regex Chars StrictSuffix Groups.
 From Linden Require Import Tree Semantics BooleanSemantics.
 From Linden Require Import NFA PikeTree PikeVM.
 From Linden Require Import PikeSubset.
@@ -1124,7 +1124,7 @@ Lemma nfa_oracles_correct_advance_input_n:
 Proof.
   intros.
   destruct advance_input_n eqn:ADV.
-  eapply eq_sym in ADV as [|]%FunctionalSemantics.advance_input_n_suffix.
+  eapply eq_sym in ADV as [|]%advance_input_n_suffix.
   - now subst.
   - eapply nfa_oracles_correct_strict_suffix; eauto.
 Qed.

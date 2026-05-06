@@ -81,6 +81,15 @@ Section Semantics.
     - injection H as <- <-. simpl. now destruct inp, dir.
   Qed.
 
+  Lemma backref_suffix:
+    forall gm gid inp dir br_str nextinp,
+      read_backref gm gid inp dir = Some (br_str, nextinp) ->
+      nextinp = inp \/ strict_suffix nextinp inp dir.
+  Proof.
+    intros *. intros H%read_backref_success_advance.
+    eapply advance_input_n_suffix; eauto.
+  Qed.
+
   (** * Lookaround tree functions  *)
 
   (* Checks for a result in a lookaround tree *)

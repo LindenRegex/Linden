@@ -14,6 +14,7 @@ From Stdlib Require Import Lia.
 From Linden Require Import Regex Chars Groups Tree.
 From Linden Require Import PikeSubset SeenSets PikeVM.
 From Linden Require Import Parameters BooleanSemantics Semantics.
+From Linden Require Import ListLemmas.
 From Warblre Require Import Base RegExpRecord.
 
 (* Read, Progress, Choice, Reset *)
@@ -524,10 +525,6 @@ Section PikeTree.
       + apply IHTREEND2; auto. lia.
   Qed.
 
-  (* extensionality for set-like lists *)
-  Definition list_ext {A} (l1 l2: list A) : Prop :=
-    forall x, In x l1 <-> In x l2.
-
   Definition occurrences (occ: occurrence) : list leaf :=
     match occ with
     | Best (Some best) => [best]
@@ -563,7 +560,7 @@ Section PikeTree.
       state_nd inp active occ blocked future seen occseq.
 
   (* Invariant of the PikeTree execution *)
-  (* at any moment, all the possible results of the current state are all equal (equal to the first result of the original tree) *)
+  (* at any moment, all the possible results of the current state are all compatible (equal to the first result of the original tree or have the same positions) *)
   (* at any moment, all trees manipulated by the algorithms are trees for the subset of regexes supported  *)
   Inductive piketreeinv: pike_tree_state -> list leaf -> Prop :=
   | pi:
