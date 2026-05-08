@@ -265,6 +265,16 @@ Section StrictSuffix.
     intros inp dir nextinp H. constructor. auto.
   Qed.
 
+  Corollary read'_suffix:
+    forall inp dir nextinp,
+      advance_input' inp dir = nextinp ->
+      nextinp = inp \/ strict_suffix nextinp inp dir.
+  Proof.
+    unfold advance_input'.
+    intros inp dir nextinp H.
+    destruct advance_input eqn:Hadv; subst; auto using read_suffix.
+  Qed.
+
   Lemma advance_current_plus_one:
     forall inp1 inp2 dir,
       advance_input inp2 dir = Some inp1 ->
@@ -595,8 +605,6 @@ End StrictSuffixSolver.
 (* canonicalize into forward strict suffixes *)
 Ltac ss_canon :=
   match goal with
-  (* split disjunctions *)
-  | [H: _ \/ _ |- _] => destruct H; subst
   (* generate strict_suffix *)
   | |- input_prefix _ _ _ =>
     rewrite input_prefix_strict_suffix
@@ -613,14 +621,20 @@ Ltac ss_canon :=
     | _ => assert thm by (apply ss_advance; simpl; reflexivity)
     end
   (* flip backward to forward *)
-  | [H: advance_input ?inp1 backward = Some ?inp2 |- _] =>
+  | [H: context[advance_input ?inp1 backward = Some ?inp2] |- _] =>
     rewrite <-advance_input_flip in H
-  | [H: strict_suffix _ _ backward |- _] =>
+  | [H: context[strict_suffix _ _ backward] |- _] =>
     rewrite ss_backward_forward_iff in H
-  | |- strict_suffix _ _ backward =>
+  | |- context[strict_suffix _ _ backward] =>
     rewrite ss_backward_forward_iff
-  | [H: strict_suffix _ _ forward |- _] => idtac
-  | [H: strict_suffix _ _ ?dir |- _] => destruct dir
+  | [H: strict_suffix _ _ ?dir |- _] =>
+    lazymatch dir with
+    (* we don't want to destruct already concrete values *)
+    | backward => fail | forward => fail
+    | _ => destruct dir
+    end
+  (* split disjunctions *)
+  | [H: _ \/ _ |- _] => destruct H as [H|H]; subst
   end.
 
 (* solves a strict_suffix goal by finding a proof *)

@@ -2,6 +2,7 @@ From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups Parameters LWParameters.
+From Linden Require Import StrictSuffix.
 From Stdlib Require Import PeanoNat.
 From Warblre Require Import Typeclasses Parameters Base.
 
@@ -300,6 +301,26 @@ Section Tree.
     - easy.
     - injection H as <-. simpl. eauto.
   Qed.
+
+  Lemma tree_leaves_suffix :
+    forall t inp inp' gm gm' dir,
+      In (inp', gm') (tree_leaves t gm inp dir) ->
+      inp' = inp \/ strict_suffix inp' inp dir.
+  Proof.
+    induction t; intros inp inp' gm gm' dir H; simpl in *; try (easy || eauto).
+    - destruct H as [[=<-]|[]]. auto.
+    - apply in_app_or in H as [|]; eauto.
+    - apply IHt in H as [->|H].
+      + now apply read'_suffix.
+      + unfold advance_input' in H. destruct advance_input eqn:Hadv; ss_solve.
+    - apply IHt in H as [->|H].
+      + now eapply advance_input_n_suffix.
+      + remember (advance_input_n inp (length str) dir) as nextinp eqn:Hnext.
+        eapply advance_input_n_suffix in Hnext.
+        ss_solve.
+    - destruct positivity, tree_leaves; try destruct l; now eauto.
+  Qed.
+
 
   (** * No Result - argument irrelevance  *)
   (* finding no leaves in a tree does not depend on the initial group map, the initial input, and the initial direction *)
