@@ -88,6 +88,14 @@ Section Regex.
     | Backreference _ => 1
     end.
 
+  Fixpoint has_backreferences (r:regex) : bool :=
+    match r with
+    | Backreference _ => true
+    | Sequence r1 r2 | Disjunction r1 r2 => has_backreferences r1 || has_backreferences r2
+    | Group _ r' | Quantified _ _ _ r' | Lookaround _ r' => has_backreferences r'
+    | Regex.Character _ | Epsilon | Anchor _ => false
+    end.
+
   (** * Group Manipulation  *)
 
   (* getting all groups defined in a regex for the reset *)

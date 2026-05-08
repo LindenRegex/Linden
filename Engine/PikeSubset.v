@@ -44,6 +44,7 @@ Section PikeSubset.
       pike_regex (Quantified b 0 (NoI.N 1) r1)
   | pike_zero:
     forall r1 b,
+      pike_regex r1 ->
       pike_regex (Quantified b 0 (NoI.N 0) r1)
   | pike_group:
     forall g r1,
@@ -115,7 +116,7 @@ Section PikeSubset.
     | Regex.Character _ => true
     | Disjunction r1 r2 => is_pike_regex r1 && is_pike_regex r2
     | Sequence r1 r2 => is_pike_regex r1 && is_pike_regex r2
-    | Quantified _ 0 (NoI.N 0) r1 => true
+    | Quantified _ 0 (NoI.N 0) r1 => is_pike_regex r1
     | Quantified _ 0 NoI.Inf r1 | Quantified _ 0 (NoI.N 1) r1 => is_pike_regex r1
     | Group _ r1 => is_pike_regex r1
     | Anchor _ => true
@@ -132,7 +133,7 @@ Section PikeSubset.
       (* quatified *)
       + destruct min; [|discriminate].
         destruct delta; [|constructor; eauto].
-        destruct n; [constructor|].
+        destruct n; [constructor; eauto|].
         destruct n; [constructor; eauto|discriminate].
       (* lookaround *)
       + now eqdec.
@@ -191,6 +192,15 @@ Section PikeSubset.
     unfold pike_list. intros t1 t2 gm1 gm2 i1 i2 H H0 t gm i H1.
     inversion H1; inversion H2; try inversion H3; subst; auto.
   Qed.
+
+  Lemma pike_regex_no_backreferences:
+    forall r,
+      pike_regex r ->
+      has_backreferences r = false.
+  Proof.
+    induction 1; simpl; boolprop; eauto.
+  Qed.
+
 
   (** * Lists of trees and gm  *)
   (* For some algorithms like MemoTree, we might want to manipulate lists of (tree * group_map * input).
