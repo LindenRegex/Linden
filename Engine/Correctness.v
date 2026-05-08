@@ -10,7 +10,7 @@ From Linden Require Import PikeEquiv PikeSubset.
 From Linden Require Import EquivMain RegexpTranslation GroupMapMS.
 From Linden Require Import ResultTranslation FunctionalUtils SeenSets.
 From Linden Require Import Parameters Prefix.
-From Linden Require Import Parameters.
+From Linden Require Import Parameters ListLemmas.
 From Warblre Require Import Base Semantics Result RegExpRecord StaticSemantics.
 Import Result.Notations.
 
@@ -186,6 +186,31 @@ Proof.
   eapply pike_tree_trc_correct in TRC as FINALINV.
   2: eapply init_piketree_inv_unanchored; subst; unfold initial_future_unanchored; eauto.
   inversion FINALINV. inversion H1. subst. auto.
+Qed.
+
+Theorem pike_vm_correct_all {strs:StrSearch}:
+  forall r inp os tree occ,
+    (* the regex `r` is in the supported subset *)
+    pike_regex r ->
+    (* the oracles `os` are correct for `r` *)
+    nfa_oracles_correct rer os r inp ->
+    (* `tree` is the tree of the regex `[^]*?r` for the input `inp` *)
+    is_tree rer [Areg (lazy_prefix r)] inp GroupMap.empty forward tree ->
+    (* the result of the PikeVM is `occ` *)
+    trc_pike_vm (compilation r) forward os (pike_vm_initial_state_unanchored (extract_literal rer r) inp forward (All [])) (PVS_final occ) ->
+    (* This `occ` contains all of the match positions of `tree` *)
+    exists results,
+      occ = All results /\
+      (list_ext (List.map fst results) (List.map fst (tree_leaves tree GroupMap.empty inp forward))).
+Proof.
+  intros r inp os tree occ SUBSET OS TREE TRC.
+  eapply encode_equal with (b:=CanExit) in TREE as BOOLTREE; pike_subset.
+  inversion BOOLTREE; inversion CONT; destruct plus; [discriminate|]; subst.
+  destruct occ; eapply pike_vm_trc_same_occurrence_kind in TRC as SAMEKIND; try easy.
+  eapply pike_vm_to_pike_tree_unanchored in TRC as [? [? TRC]]; eauto.
+  eapply pike_tree_trc_correct in TRC as FINALINV.
+  2: eapply init_piketree_inv_unanchored; subst; unfold initial_future_unanchored; eauto.
+  inversion FINALINV. eauto.
 Qed.
 
 

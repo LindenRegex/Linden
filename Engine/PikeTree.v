@@ -538,7 +538,7 @@ Section PikeTree.
     (* when tracking only the best position, it must be the head of the list *)
     | Best best => best = hd_error leaves
     (* when tracking all positions, they must contain the same elements as the list *)
-    | All positions => list_ext positions leaves
+    | All positions => list_ext (List.map fst positions) (List.map fst leaves)
     end.
 
   (* whether two occurrences are of the same kind *)
@@ -609,13 +609,16 @@ Section PikeTree.
     | SAMEKIND: same_occurrence_kind (Best _) ?occ |- _ =>
       destruct occ; [clear SAMEKIND|inversion SAMEKIND];
       match goal with
-      | SEQ: occurrence_compat (Best _) _ |- _ => simpl in SEQ; subst
+      | SEQ: occurrence_compat (Best _) _ |- _ => simpl in SEQ; subst; simpl
       | _ => idtac
       end
     | SAMEKIND: same_occurrence_kind (All _) ?occ |- _ =>
       destruct occ; [inversion SAMEKIND|clear SAMEKIND];
       match goal with
-      | SEQ: occurrence_compat (All _) _ |- _ => simpl in SEQ
+      | SEQ: occurrence_compat (All _) _ |- _ =>
+        simpl in SEQ |- *;
+        try (intros ?p; unfold list_ext in SEQ; rewrite SEQ; clear SEQ);
+        simpl
       | _ => idtac
       end
     | _ => idtac
@@ -771,9 +774,9 @@ Section PikeTree.
       simpl in SEQ. rewrite app_nil_r in SEQ.
       inversion ERASE; subst; simpl in SEQ.
       (* we did not erase `future` *)
-      * now repeat rewrite app_assoc in *.
+      + now repeat rewrite app_assoc in *.
       (* we erased `future` *)
-      * unfold first_leaf in NORES.
+      + unfold first_leaf in NORES.
         rewrite first_tree_empty in NORES.
         eapply leaves_indep in NORES.
         rewrite NORES.
@@ -794,9 +797,9 @@ Section PikeTree.
       intros res STATEND. inv_state_nd.
       apply COMPAT.
       econstructor; eauto. econstructor; eauto.
-      * eapply tr_mismatch.
-      * eapply list_add_seen with (gm:=gm) (inp:=inp) in ACTIVE; eauto.
-      * eauto.
+      + eapply tr_mismatch.
+      + eapply list_add_seen with (gm:=gm) (inp:=inp) in ACTIVE; eauto.
+      + eauto.
     (* choice *)
     - simpl. constructor; pike_subset; auto.
       intros res STATEND. inv_state_nd.
@@ -811,15 +814,14 @@ Section PikeTree.
       (* case analysis: did t contribute to the result? *)
       destruct (l1 ++ l0) eqn:CHOICE.
       (* when the tree did not contribute, adding it to seen does not change the results *)
-      * destruct l1, l0; inversion CHOICE.
+      + destruct l1, l0; inversion CHOICE.
         econstructor; simpl; eauto.
         eapply list_add_seen_nd with (gm:=gm) in TLR0; eauto.
         econstructor; eauto.
-      * destruct occ; occ_simpl.
-        -- rewrite app_assoc with (l:=l1), CHOICE.
-           eapply sr with (r2:=(l :: l2) ++ (list_result (suppl active0 inp))); simpl; eauto using hd_error_app_l.
-           econstructor; eauto using list_result_nd.
-        -- admit.
+      + eapply sr with (r2:=(l :: l2) ++ (list_result (suppl active0 inp))); simpl; eauto using tlr_cons, list_result_nd.
+        destruct occ; occ_simpl; rewrite app_assoc with (l:=l1), CHOICE; simpl.
+        * eauto using hd_error_app_l.
+        * admit.
     (* progress fail *)
     - simpl. constructor; pike_subset; auto.
     (* progress *)
@@ -834,13 +836,13 @@ Section PikeTree.
       (* case analysis: did t contribute to the result? *)
       destruct l1 as [|leaf1].
       (* when the tree did not contribute, adding it to seen does not change the results *)
-      * econstructor; simpl; eauto.
+      + econstructor; simpl; eauto.
         eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
         econstructor; eauto.
-      * destruct occ; occ_simpl.
-        -- eapply sr with (r2:=(leaf1 :: l1) ++ (list_result (suppl active0 inp))); simpl; eauto using hd_error_app_l.
-           econstructor; eauto using list_result_nd.
-        -- admit.
+      + eapply sr with (r2:=(leaf1 :: l1) ++ (list_result (suppl active0 inp))); simpl; eauto using tlr_cons, list_result_nd.
+        destruct occ; occ_simpl.
+        * eauto using hd_error_app_l.
+        * admit.
     (* anchor pass *)
     - constructor; simpl; pike_subset; auto.
       intros res STATEND. inv_state_nd.
@@ -853,13 +855,13 @@ Section PikeTree.
       (* case analysis: did t contribute to the result? *)
       destruct l1 as [|leaf1].
       (* when the tree did not contribute, adding it to seen does not change the results *)
-      * econstructor; simpl; eauto.
+      + econstructor; simpl; eauto.
         eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
         econstructor; eauto.
-      * destruct occ; occ_simpl.
-        -- eapply sr with (r2:=(leaf1 :: l1) ++ (list_result (suppl active0 inp))); simpl; eauto using hd_error_app_l.
-           econstructor; eauto using list_result_nd.
-        -- admit.
+      + eapply sr with (r2:=(leaf1 :: l1) ++ (list_result (suppl active0 inp))); simpl; eauto using tlr_cons, list_result_nd.
+        destruct occ; occ_simpl.
+        * eauto using hd_error_app_l.
+        * admit.
     (* group action *)
     - simpl. constructor; pike_subset; auto.
       intros res STATEND. inv_state_nd.
@@ -875,9 +877,9 @@ Section PikeTree.
       + econstructor; simpl; eauto.
         eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
         econstructor; eauto.
-      + destruct occ; occ_simpl.
-        * eapply sr with (r2:=(leaf1 :: l1) ++ (list_result (suppl active0 inp))); simpl; eauto using hd_error_app_l.
-           econstructor; eauto using list_result_nd.
+      + eapply sr with (r2:=(leaf1 :: l1) ++ (list_result (suppl active0 inp))); simpl; eauto using tlr_cons, list_result_nd.
+        destruct occ; occ_simpl.
+        * eauto using hd_error_app_l.
         * admit.
     (* LK *)
     - constructor; try (destruct lk_result eqn:Hlk; injection H0 as <-); pike_subset; auto.
@@ -895,9 +897,9 @@ Section PikeTree.
         * econstructor; simpl; eauto.
           eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
           econstructor; eauto.
-        * destruct occ; occ_simpl.
-          -- eapply sr with (r2:=(leaf1 :: l1) ++ (list_result (suppl active0 inp))); simpl; eauto using hd_error_app_l.
-             econstructor; eauto using list_result_nd.
+        * eapply sr with (r2:=(leaf1 :: l1) ++ (list_result (suppl active0 inp))); simpl; eauto using tlr_cons, list_result_nd.
+          destruct occ; occ_simpl.
+          -- eauto using hd_error_app_l.
           -- admit.
       (* lk_result failed *)
       + intros res STATEND. inv_state_nd. apply COMPAT.
@@ -920,7 +922,7 @@ Section PikeTree.
       destruct occ; injection ACC as <- <-.
       + constructor; pike_subset; auto.
         intros res STATEND. inv_state_nd.
-        inversion ACTIVE; subst. simpl in *.
+        inversion ACTIVE; subst. simpl.
         apply (COMPAT (Best (hd_error (list_result (suppl blocked (next_inp inp)) ++ [(inp, gm)])))).
         eapply sr with (r2:=(inp,gm) :: list_result (suppl active0 inp)); simpl; eauto using hd_error_app_l.
         econstructor; eauto using tr_match, list_result_nd.
@@ -932,20 +934,20 @@ Section PikeTree.
       rewrite suppl_app, list_result_app in SEQ. simpl in SEQ.
       rewrite app_nil_r, <-app_assoc, app_assoc with (n:=(option_flat_map (fun t : tree => tree_leaves t GroupMap.empty inp forward) future ++ occurrences occ)) in SEQ.
       destruct (tree_leaves newt gm (next_inp inp)) eqn:REST.
-      * econstructor; simpl; eauto.
+      + econstructor; simpl; eauto.
         eapply tlr_cons.
         (* if the blocked tree did not contain a match, we prove that the adding it to the seen set *)
         (* does not change the skipping of the following active trees, using list_add_seen *)
-        -- apply tree_leaves_nd. pike_subset.
-        -- eapply list_add_seen in ACTIVE; simpl; eauto. pike_subset.
-        -- simpl. unfold next_inp in REST. rewrite REST. simpl. auto.
+        * apply tree_leaves_nd. pike_subset.
+        * eapply list_add_seen in ACTIVE; simpl; eauto. pike_subset.
+        * simpl. unfold next_inp in REST. rewrite REST. simpl. auto.
       (* if the blocked tree contained a match, then we don't care about the result of active *)
       (* we can simply use the result obtained without skipping anything *)
-      * eapply sr with (r2:=(l :: l0) ++ list_result (suppl active0 inp)); simpl; eauto using hd_error_app_l.
+      + eapply sr with (r2:=(l :: l0) ++ list_result (suppl active0 inp)); simpl; eauto using hd_error_app_l.
         eapply tlr_cons.
-        -- apply tree_leaves_nd. pike_subset.
-        -- apply list_result_nd; auto.
-        -- simpl. unfold next_inp in REST. rewrite REST. simpl. auto.
+        * apply tree_leaves_nd. pike_subset.
+        * apply list_result_nd; auto.
+        * simpl. unfold next_inp in REST. rewrite REST. simpl. auto.
   Admitted.
 
 End PikeTree.
