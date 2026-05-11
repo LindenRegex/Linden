@@ -68,12 +68,39 @@ Section Chars.
   Definition init_input (str:string) : input :=
     Input str [].
 
+  Definition input_rewind (i: input) (dir: Direction) : input :=
+    match dir with
+    | backward => Input (input_str i) []
+    | forward => Input [] (List.rev (input_str i))
+    end.
+
   Definition input_reverse (i: input) : input :=
     let '(Input next pref) := i in
     Input pref next.
 
   Lemma input_reverse_involutive : forall i, input_reverse (input_reverse i) = i.
   Proof. now destruct i. Qed.
+
+  Lemma input_reverse_surj :
+    forall i, exists i', input_reverse i' = i.
+  Proof.
+    intro i. exists (input_reverse i). apply input_reverse_involutive.
+  Qed.
+
+  Lemma input_reverse_inj :
+    forall i1 i2, input_reverse i1 = input_reverse i2 <-> i1 = i2.
+  Proof.
+    intros i1 i2. split; intros H.
+    - apply f_equal with (f:=input_reverse) in H.
+      now rewrite !input_reverse_involutive in H.
+    - now rewrite H.
+  Qed.
+
+  Definition direction_reverse (dir: Direction) : Direction :=
+    match dir with
+    | forward => backward
+    | backward => forward
+    end.
 
 
   (* Definition of when an input is compatible with (i.e. represents) a given input string str0. *)
