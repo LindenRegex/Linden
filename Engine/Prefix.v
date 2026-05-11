@@ -11,7 +11,7 @@ Import ListNotations.
 
 From Linden Require Import Regex Chars Semantics Tree FunctionalSemantics FunctionalUtils.
 From Linden Require Import Parameters LWParameters.
-From Linden Require Import StrictSuffix.
+From Linden Require Import StrictSuffix LazyPrefix.
 From Linden Require Import Tactics.
 From Warblre Require Import Base RegExpRecord.
 
@@ -930,26 +930,6 @@ Proof.
   eapply not_found; eauto; lia.
 Qed.
 
-(* one unfolded iteration of the lazy_prefix *)
-Lemma str_search_none_nores_unanchored_iter {strs:StrSearch}:
-  forall r inp tree,
-    is_tree rer [Areg (Regex.Character CdAll); Acheck inp; Areg dot_star; Areg r] inp Groups.GroupMap.empty forward tree ->
-    str_search (prefix (extract_literal r)) (next_str inp) = None ->
-    first_leaf tree inp = None.
-Proof.
-  intros r [next pref].
-  generalize dependent pref.
-  induction next; intros pref tree Htree Hsearch.
-  - now inversion Htree.
-  - inversion Htree; [|discriminate]. inversion READ. subst.
-    inversion TREECONT; [|easy]. inversion TREECONT0. destruct plus; [discriminate|]. subst.
-    eapply str_search_none_next in Hsearch.
-    eapply str_search_none_nores in SKIP; eauto.
-    specialize (IHnext (c::pref) titer). repeat specialize_prove IHnext by eauto.
-    unfold first_leaf in *. simpl. unfold advance_input'. simpl.
-    now rewrite SKIP, IHnext.
-Qed.
-
 (* if str_search finds nothing for the literal of r, *)
 (* then the tree over (lazy_prefix r) has no results *)
 Theorem str_search_none_nores_unanchored {strs:StrSearch}:
@@ -958,12 +938,17 @@ Theorem str_search_none_nores_unanchored {strs:StrSearch}:
     str_search (prefix (extract_literal r)) (next_str inp) = None ->
     first_leaf tree inp = None.
 Proof.
-  intros r [next pref] tree Htree Hsearch.
-  inversion Htree. inversion CONT. destruct plus; [discriminate|]. subst.
-  eapply str_search_none_nores with (tree:=tskip) in Hsearch as Hnotfound; eauto.
-  eapply str_search_none_nores_unanchored_iter with (tree:=titer) in ISTREE1; eauto.
-  unfold first_leaf in *. simpl.
-  now rewrite Hnotfound, ISTREE1.
+  unfold first_leaf.
+  intros r [next pref] tree Htree%unanchored_tree_lazy_prefix Hsearch.
+  induction Htree; subst; simpl.
+  - eapply str_search_none_nores with (tree:=t) in Hsearch as Hnotfound; eauto.
+    unfold first_leaf in *.
+    now rewrite Hnotfound.
+  - unfold advance_input'. simpl.
+    eapply str_search_none_nores in Hsearch as Hno1; eauto.
+    eapply str_search_none_next in Hsearch.
+    unfold first_leaf in Hno1.
+    rewrite Hno1, IHHtree; eauto.
 Qed.
 
 
