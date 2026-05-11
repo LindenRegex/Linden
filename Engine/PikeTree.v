@@ -11,14 +11,11 @@ From Stdlib Require Import List.
 Import ListNotations.
 From Stdlib Require Import Lia.
 
-From Linden Require Import Regex Chars Groups Tree.
+From Linden Require Import Regex Chars Groups Tree LazyPrefix.
 From Linden Require Import PikeSubset SeenSets PikeVM.
 From Linden Require Import Parameters BooleanSemantics Semantics.
 From Linden Require Import ListLemmas.
 From Warblre Require Import Base RegExpRecord.
-
-(* Read, Progress, Choice, Reset *)
-Notation lazy_iter c t1 t2 := (Read c (Progress (Choice t1 (GroupAction (Reset []) t2)))).
 
 
 Section PikeTree.
