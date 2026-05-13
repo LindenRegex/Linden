@@ -7,7 +7,7 @@ From Linden Require Import Regex Chars Groups StrictSuffix.
 From Linden Require Import FunctionalUtils.
 From Linden Require Import Tree Semantics.
 From Linden Require Import Utils Parameters LWParameters.
-From Warblre Require Import Base RegExpRecord.
+From Warblre Require Import Base RegExpRecord API.
 
 
 From Stdlib Require Import String Ascii.
@@ -48,6 +48,86 @@ Definition string_of_lk (lk: lookaround) : string :=
   | LookBehind => "LookBehind"
   | NegLookAhead => "NegLookAhead"
   | NegLookBehind => "NegLookBehind"
+  end.
+
+Definition string_of_lk_sign (lk: lookaround) : string :=
+  match lk with
+  | LookAhead => "?="
+  | LookBehind => "?<="
+  | NegLookAhead => "?!"
+  | NegLookBehind => "?<!"
+  end.
+
+Definition string_of_anchor (a: anchor) : string :=
+  match a with
+  | BeginInput => "^"
+  | EndInput => "$"
+  | WordBoundary => "\\b"
+  | NonWordBoundary => "\\B"
+  end.
+
+Fixpoint string_of_char_descr (cd: char_descr) : string :=
+  match cd with
+  | CdEmpty => "[]"
+  | CdDot => "."
+  | CdAll => "[^]"
+  | CdSingle c => String (ascii_of_char c) ""
+  | CdDigits => "\\d"
+  | CdNonDigits => "\\D"
+  | CdWhitespace => "\\s"
+  | CdNonWhitespace => "\\S"
+  | CdWordChar => "\\w"
+  | CdNonWordChar => "\\W"
+  | CdUnicodeProp p => "\\p{?}"
+  | CdNonUnicodeProp p => "\\P{?}"
+  | CdInv cd' => "[^" ++ string_of_char_descr cd' ++ "]"
+  | CdRange l h => "[" ++ (String (ascii_of_char l) "") ++ "-" ++ (String (ascii_of_char h) "") ++ "]"
+  | CdUnion cd1 cd2 => "[" ++ string_of_char_descr cd1 ++ string_of_char_descr cd2 ++ "]"
+  end.
+
+Fixpoint string_of_regex (r: regex) : string :=
+  match r with
+  | Epsilon => ""
+  | Regex.Character cd => string_of_char_descr cd
+  | Disjunction r1 r2 => "⟨" ++ string_of_regex r1 ++ "|" ++ string_of_regex r2 ++ "⟩"
+  | Sequence r1 r2 => string_of_regex r1 ++ string_of_regex r2
+  | Quantified greedy min delta r1 =>
+      let kind := if greedy then "" else "?" in
+      let quantifier := match min, delta with
+        | 0, NoI.N 1 => "?"
+        | 0, NoI.Inf => "*"
+        | 1, NoI.Inf => "+"
+        | m, NoI.Inf => "{" ++ (string_of_nat m) ++ ",}"
+        | m, NoI.N n => "{" ++ (string_of_nat m) ++ "," ++ (string_of_nat n) ++ "}"
+      end in
+      "⟨" ++ string_of_regex r1 ++ "⟩" ++ quantifier ++ kind
+  | Lookaround lk r1 => "(" ++ string_of_lk_sign lk ++ string_of_regex r1 ++ ")"
+  | Group id r1 => "(" ++ string_of_regex r1 ++ ")"
+  | Anchor a => string_of_anchor a
+  | Backreference id => "\\" ++ (string_of_nat id)
+  end.
+
+Definition string_of_input (inp: input) : string :=
+  let 'Input next pref := inp in
+  string_of_string (List.rev pref) ++ "⍘" ++ string_of_string next.
+
+Definition string_of_action (act: action) : string :=
+  match act with
+  | Areg r => "Areg " ++ string_of_regex r
+  | Acheck inp => "Acheck " ++ string_of_input inp
+  | Aclose gid => "Aclose " ++ string_of_nat gid
+  end.
+
+Definition string_of_actions (acts: list action) : string :=
+  match acts with
+  | [Areg r] => string_of_regex r
+  | _ => String.concat "; " (map string_of_action acts)
+  end.
+
+Definition string_of_direction (dir: Direction) : string :=
+  match dir with
+  | forward => "→"
+  | backward => "←"
   end.
 
 
@@ -115,13 +195,12 @@ Fixpoint tree_to_dot_aux (t : tree) (id : nat) : (string * nat) :=
       (subgraph, id')
   end.
 
-Definition tree_to_dot (t : tree) : string :=
-  let (body, _) := tree_to_dot_aux t 0 in
-  "digraph G {" ++ newline ++ "node [fontname=" ++ quoted "Arial" ++ "];" ++ newline ++ body ++ "}".
-
 Definition actions_to_dot (acts: list action) (inp: input) (dir: Direction): string :=
   let tree := compute_tr rer acts inp GroupMap.empty dir in
-  tree_to_dot tree.
+  let (body, _) := tree_to_dot_aux tree 0 in
+  "digraph G { "
+    ++ "title [shape=none, label=" ++ quoted (string_of_actions acts ++ newline ++ string_of_input inp ++ newline ++ string_of_direction dir) ++ ", fontsize=24, fontname=Courier]; { rank=source; title }"
+    ++ newline ++ body ++ newline ++ "}".
 
 End GraphViz.
 
