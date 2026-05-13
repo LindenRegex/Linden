@@ -36,17 +36,10 @@ This includes:
    opam repo add rocq-released https://rocq-prover.org/opam/released
    ```
 
-3. Pin the versions of dependencies:
-
-   ```
-   opam pin add --no-action warblre.0.1.0 https://github.com/epfl-systemf/Warblre.git#a5a312072b892f4fb0343b8c2ac9d35d451c84f1
-   opam pin add --no-action strict-order-solver.0.1.0 https://github.com/epfl-systemf/StrictOrderSolver.git#c2c6b1ff316770e9f0ec37141b465971733633e3
-   ```
-
-4. Install dependencies:
+3. Install dependencies:
 
    ```
    opam install --deps-only .
    ```
 
-5. Build all proofs with `dune build`.
+4. Build all proofs with `dune build`.

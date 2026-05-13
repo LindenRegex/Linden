@@ -11,7 +11,7 @@ depends: [
   "rocq-core" {= "9.1.1"}
   "rocq-stdlib" {= "9.0.0"}
   "warblre" {= "0.1.0"}
-  "strict-order-solver" {= "0.1.0"}
+  "strict-order-solver" {>= "1.0.0"}
   "odoc" {with-doc}
 ]
 build: [
@@ -29,3 +29,6 @@ build: [
   ]
 ]
 x-maintenance-intent: ["(latest)"]
+pin-depends: [
+  ["warblre.0.1.0" "git+https://github.com/epfl-systemf/Warblre.git#a5a312072b892f4fb0343b8c2ac9d35d451c84f1" ]
+]
