@@ -1,74 +1,9 @@
-From Linden Require Import LeavesEquivalence Parameters Tree.
+From Linden Require Import LeavesEquivalence Parameters Tree FlatMap.
 From Stdlib Require Import List.
 Import ListNotations.
 
 
-(** * Flat mapping: definition and lemmas *)
-
-(* a propositional version of flat_map *)
-(* FlatMap lbase f lmapped means that lmapped corresponds to the list lbase where each element has been replaced by its image by f *)
-Inductive FlatMap {X Y:Type} : list X -> (X -> list Y -> Prop) -> list Y -> Prop :=
-| FM_nil: forall f,
-  FlatMap [] f []
-| FM_cons:
-  forall lbase f lmapped x ly
-    (FM: FlatMap lbase f lmapped)
-    (HEAD: f x ly),
-    FlatMap (x::lbase) f (ly ++ lmapped).
-
-(* We could use the functional flat_map, but this would require using the function compute_tr that associates a tree to each regex and input. *)
-(* The proof does not strictly rely on this function, it merely relies on the
-existence of a unique tree associated to each regex and input. *)
-
-(* Used in disjunction and free quantifier cases of contextual equivalence proof *)
-Property FlatMap_app {X Y: Type}:
-  forall (lbase1 lbase2 : list X) (f: X -> list Y -> Prop) (lmapped1 lmapped2: list Y),
-    FlatMap lbase1 f lmapped1 ->
-    FlatMap lbase2 f lmapped2 ->
-    FlatMap (lbase1 ++ lbase2) f (lmapped1 ++ lmapped2).
-Proof.
-  intros lbase1 lbase2 f lmapped1 lmapped2 FM1 FM2.
-  induction FM1.
-  - auto.
-  - rewrite <- app_assoc, <- app_comm_cons. constructor; auto.
-Qed.
-
-(* Determinism of a propositional function *)
-Definition determ {A B: Type} (f: A -> B -> Prop) :=
-  forall x y1 y2, f x y1 -> f x y2 -> y1 = y2.
-
-
-(* Building up to flatmap_leaves_equiv_l *)
-
-Lemma FlatMap_in {A B}:
-  forall (l: list A) (f: A -> list B -> Prop) fl x fx,
-    (* For a deterministic f, *)
-    determ f ->
-    (* if f flat maps l to fl, *)
-    FlatMap l f fl ->
-    (* and x is in l, *)
-    In x l ->
-    f x fx ->
-    (* then all the elements of f(x) are in fl. *)
-    Forall (fun y => In y fl) fx.
-Proof.
-  intros l f fl x fx DETERM FM INxl F.
-  revert fl FM.
-  induction l.
-  1: inversion INxl.
-  intros fl FM. destruct INxl.
-  - subst a. inversion FM; subst.
-    assert (ly = fx) by eauto (* using DETERM *). subst ly. clear HEAD FM F IHl.
-    induction fx.
-    + constructor.
-    + constructor.
-      * rewrite <- app_comm_cons. left. reflexivity.
-      * eapply Forall_impl; eauto. simpl. tauto.
-  - inversion FM; subst. specialize (IHl H lmapped FM0).
-    eapply Forall_impl; eauto. simpl. intro. rewrite in_app_iff. tauto.
-Qed.
-
-(* Variant of the above lemma but using is_seen instead of In *)
+(* Variant of FlatMap_in but using is_seen instead of In *)
 Lemma FlatMap_in2 {params: LindenParameters}:
   forall f leaf fleaf seen fseen,
     (* For a deterministic f, *)

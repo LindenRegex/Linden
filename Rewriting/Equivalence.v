@@ -2,7 +2,7 @@ From Stdlib Require Export Bool Arith List Equivalence Lia.
 From Warblre Require Import Base RegExpRecord.
 From Linden Require Import Regex Chars Groups Tree Semantics
   FunctionalSemantics FunctionalUtils ComputeIsTree Parameters
-  LWParameters LeavesEquivalence FlatMap.
+  LWParameters LeavesEquivalence FlatMap FlatMapEquiv.
 
 Export ListNotations.
 
@@ -666,158 +666,10 @@ Section Congruence.
     unfold first_leaf. eauto using observe_equivalence_gen.
   Qed.
 
-
-  (* Getting the leaves of a continuation applied to a particular leaf *)
-  (* This predicate will be used to express that appending a list of actions a2 to a list
-  of actions a1 corresponds to extending the leaves of the tree corresponding to actions
-  a1 with trees corresponding to the actions of a2 (see lemma leaves_concat below) *)
-  Inductive act_from_leaf : actions -> Direction -> leaf -> list leaf -> Prop :=
-  | afl:
-    forall act dir l t
-      (TREE: is_tree rer act (fst l) (snd l) dir t),
-      act_from_leaf act dir l (tree_leaves t (snd l) (fst l) dir).
-
-
-  (* Adding new things to the continuation is the same as extending each leaf of the tree with these new things *)
-  Theorem leaves_concat:
-    forall inp gm dir act1 act2 tapp t1
-      (TREE_APP: is_tree rer (act1 ++ act2) inp gm dir tapp)
-      (TREE_1: is_tree rer act1 inp gm dir t1),
-      FlatMap (tree_leaves t1 gm inp dir) (act_from_leaf act2 dir) (tree_leaves tapp gm inp dir).
-  Proof.
-    intros. generalize dependent tapp.
-    induction TREE_1; intros; simpl in *.
-    - (* Done *)
-      rewrite <- app_nil_r. constructor; constructor. auto.
-
-    - (* Check pass *)
-      inversion TREE_APP; subst. 2: contradiction.
-      simpl. apply IHTREE_1. auto.
-
-    - (* Check fail *)
-      inversion TREE_APP; subst. 1: contradiction.
-      simpl. constructor.
-
-    - (* Close *)
-      inversion TREE_APP; subst. simpl.
-      apply IHTREE_1. auto.
-
-    - (* Epsilon *)
-      inversion TREE_APP; subst. auto.
-
-    - (* Read char success *)
-      inversion TREE_APP; subst. 2: congruence.
-      simpl.
-      rewrite READ in READ0. injection READ0 as <- <-.
-      rewrite advance_input_success with (nexti := nextinp).
-      2: eauto using read_char_success_advance.
-      auto.
-
-    - (* Read char fail *)
-      inversion TREE_APP; subst. 1: congruence.
-      simpl. constructor.
-
-    - (* Disjunction *)
-      inversion TREE_APP; subst.
-      simpl. apply FlatMap_app; auto.
-
-    - (* Sequence *)
-      inversion TREE_APP; subst.
-      rewrite app_assoc in CONT. auto.
-
-    - (* Forced quantifier *)
-      inversion TREE_APP; subst. simpl.
-      auto.
-
-    - (* Done quantifier *)
-      inversion TREE_APP; subst.
-      2: { destruct plus; discriminate. }
-      auto.
-
-    - (* Free quantifier *)
-      inversion TREE_APP; subst.
-      1: { destruct plus; discriminate. }
-      assert (plus0 = plus). {
-        destruct plus0; destruct plus; try discriminate; try reflexivity.
-        injection H1 as <-. auto.
-      }
-      subst plus0.
-      unfold greedy_choice. destruct greedy.
-      + (* Greedy *)
-        simpl. apply FlatMap_app; auto.
-      + (* Lazy *)
-        simpl. apply FlatMap_app; auto.
-
-    - (* Group *)
-      inversion TREE_APP; subst. simpl.
-      auto.
-
-    - (* Lookaround success *)
-      inversion TREE_APP; subst;
-        assert (treelk0 = treelk) by (eapply is_tree_determ; eauto); subst.
-      2: { rewrite RES_LK in FAIL_LK. inversion FAIL_LK. }
-      rewrite RES_LK in RES_LK0. injection RES_LK0 as <-.
-      destruct positivity eqn:Hpos.
-      + unfold lk_result in RES_LK. rewrite Hpos in RES_LK.
-        pose proof first_tree_leaf treelk gm inp (lk_dir lk) as LK_FIRST.
-        destruct (tree_res treelk gm inp (lk_dir lk)) as [[inplk gmlk']|] eqn:TREERES_LK; try discriminate.
-        injection RES_LK as ->.
-        destruct (tree_leaves treelk gm inp (lk_dir lk)) as [|[inplk' gmlk'] q] eqn:TREELEAVES_LK; try discriminate.
-        simpl in *. injection LK_FIRST as <- <-. rewrite Hpos.
-        rewrite TREELEAVES_LK. auto.
-      + unfold lk_result in RES_LK. rewrite Hpos in RES_LK.
-        destruct (tree_res treelk gm inp (lk_dir lk)) eqn:TREERES; inversion RES_LK. subst.
-        assert (tree_leaves treelk gmlk inp (lk_dir lk) = []).
-        { apply leaves_indep with (gm1 := gmlk) (inp1 := inp) (dir1 := lk_dir lk).
-          apply hd_error_none_nil. rewrite <- first_tree_leaf. auto. }
-        simpl. rewrite Hpos, H. auto.
-
-    - (* Lookaround failure *)
-      inversion TREE_APP; subst;
-        assert (treelk0 = treelk) by (eapply is_tree_determ; eauto); subst.
-      { rewrite RES_LK in FAIL_LK. inversion FAIL_LK. }
-      simpl. constructor.
-
-    - (* Anchor *)
-      inversion TREE_APP; subst.
-      2: congruence.
-      simpl. auto.
-
-    - (* Anchor fail *)
-      inversion TREE_APP; subst.
-      1: congruence.
-      simpl. constructor.
-
-    - (* Backref *)
-      inversion TREE_APP; subst.
-      2: congruence.
-      rewrite READ_BACKREF in READ_BACKREF0. injection READ_BACKREF0 as <- <-.
-      simpl.
-      replace (advance_input_n _ _ _) with nextinp.
-      2: eauto using read_backref_success_advance.
-      auto.
-
-    - (* Backref fail *)
-      inversion TREE_APP; subst.
-      1: congruence.
-      simpl. constructor.
-  Qed.
-
-
   (** * Continuation Lemmas  *)
 
   (* building up to contextual equivalence *)
   (* to reason about the leaves of an app, we use the flatmap result *)
-
-
-  (* The function act_from_leaf is deterministic *)
-  Lemma act_from_leaf_determ: forall act dir, determ (act_from_leaf act dir).
-  Proof.
-    intros act dir x y1 y2 Hxy1 Hxy2.
-    inversion Hxy1; subst. inversion Hxy2; subst.
-    assert (t0 = t) by eauto using is_tree_determ. subst t0. reflexivity.
-  Qed.
-
 
   (* Appending a list of actions acts to the right of two equivalent lists of actions
   a1 and a2 yields equivalent lists of actions. *)
@@ -836,8 +688,8 @@ Section Congruence.
       exists (compute_tr rer a2 inp gm dir). apply compute_tr_is_tree.
     }
     destruct H as [t1 TREE1]. destruct H0 as [t2 TREE2].
-    pose proof leaves_concat inp gm dir a1 acts t1acts t1 TREE1acts TREE1.
-    pose proof leaves_concat inp gm dir a2 acts t2acts t2 TREE2acts TREE2.
+    pose proof leaves_concat rer inp gm dir a1 acts t1acts t1 TREE1acts TREE1.
+    pose proof leaves_concat rer inp gm dir a2 acts t2acts t2 TREE2acts TREE2.
     specialize (ACTS_EQ inp gm t1 t2 TREE1 TREE2).
     unfold tree_equiv_tr_dir.
     eauto using flatmap_leaves_equiv_l, act_from_leaf_determ.
@@ -857,8 +709,8 @@ Section Congruence.
       exists (compute_tr rer acts inp gm dir). apply compute_tr_is_tree.
     }
     destruct H as [tacts TREEacts].
-    pose proof leaves_concat inp gm dir acts a1 t1acts tacts TREE1acts TREEacts.
-    pose proof leaves_concat inp gm dir acts a2 t2acts tacts TREE2acts TREEacts.
+    pose proof leaves_concat rer inp gm dir acts a1 t1acts tacts TREE1acts TREEacts.
+    pose proof leaves_concat rer inp gm dir acts a2 t2acts tacts TREE2acts TREEacts.
     eapply flatmap_leaves_equiv_r; eauto.
     (* Now act_from_leaf a1 dir and act_from_leaf a2 dir are morally equivalent *)
     unfold equiv_leaffuncts. intros lf yf yg Hyf Hyg.
@@ -909,8 +761,8 @@ Section Congruence.
     - unfold actions_equiv_dir. intros inp gm t1 t2 TREE1 TREE2.
       assert (exists ta1, is_tree rer a1 inp gm dir ta1). { exists (compute_tr rer a1 inp gm dir). apply compute_tr_is_tree. }
       destruct H as [ta1 TREEa1].
-      pose proof leaves_concat _ _ _ _ _ _ _ TREE1 TREEa1 as CONCAT1.
-      pose proof leaves_concat _ _ _ _ _ _ _ TREE2 TREEa1 as CONCAT2.
+      pose proof leaves_concat rer _ _ _ _ _ _ _ TREE1 TREEa1 as CONCAT1.
+      pose proof leaves_concat rer _ _ _ _ _ _ _ TREE2 TREEa1 as CONCAT2.
       unshelve eapply (flatmap_leaves_equiv_r_prop _ _ _ _ _ P _ _ CONCAT1 CONCAT2); auto.
       unfold equiv_leaffuncts_cond. intros. inversion H0; subst. inversion H1; subst.
       apply EQUIV_b; auto.
@@ -929,9 +781,9 @@ Section Congruence.
       exists (compute_tr rer a inp gm dir). apply compute_tr_is_tree.
     }
     destruct H as [ta TREEa].
-    pose proof leaves_concat _ _ _ _ _ _ _ TREE TREEa as CONCAT.
+    pose proof leaves_concat rer _ _ _ _ _ _ _ TREE TREEa as CONCAT.
     unfold actions_respect_prop_dir in PROPb.
-    remember (act_from_leaf b dir) as f.
+    remember (act_from_leaf rer b dir) as f.
     induction CONCAT. 1: constructor.
     apply Forall_app. split; auto. subst f.
     inversion HEAD; subst. apply PROPb. auto.
@@ -992,7 +844,7 @@ Section Congruence.
       exists (compute_tr rer a inp gm dir). apply compute_tr_is_tree.
     }
     destruct H as [ta TREEa].
-    pose proof leaves_concat _ _ _ _ _ _ _ TREEab TREEa as FLAT_MAP.
+    pose proof leaves_concat rer _ _ _ _ _ _ _ TREEab TREEa as FLAT_MAP.
     rewrite NO_LEAVES in FLAT_MAP by assumption. inversion FLAT_MAP. reflexivity.
   Qed.
 
@@ -1264,8 +1116,8 @@ Section Congruence.
       destruct TREE1' as [t1 TREE1']. destruct TREE2' as [t2 TREE2'].
       change [Areg ?A; Aclose gid] with ([Areg A] ++ [Aclose gid]) in TREECONT.
       change [Areg ?A; Aclose gid] with ([Areg A] ++ [Aclose gid]) in TREECONT0.
-      pose proof leaves_concat _ _ _ _ _ _ _ TREECONT TREE1' as APP1.
-      pose proof leaves_concat _ _ _ _ _ _ _ TREECONT0 TREE2' as APP2.
+      pose proof leaves_concat rer _ _ _ _ _ _ _ TREECONT TREE1' as APP1.
+      pose proof leaves_concat rer _ _ _ _ _ _ _ TREECONT0 TREE2' as APP2.
       eapply flatmap_leaves_equiv_l. 3: apply APP1. 3: apply APP2. 2: auto. apply act_from_leaf_determ.
   Qed.
 
