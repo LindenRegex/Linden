@@ -102,6 +102,9 @@ Section Chars.
     | backward => forward
     end.
 
+  Lemma direction_reverse_involutive : forall dir, direction_reverse (direction_reverse dir) = dir.
+  Proof. now destruct dir. Qed.
+
 
   (* Definition of when an input is compatible with (i.e. represents) a given input string str0. *)
   Inductive input_compat: input -> string -> Prop :=

@@ -570,35 +570,31 @@ Section StrictSuffix.
   Qed.
 
 
-  Lemma ss_forward_backward :
-    forall inp1 inp2,
-      strict_suffix inp1 inp2 forward -> strict_suffix inp2 inp1 backward.
+  Lemma ss_flip :
+    forall inp1 inp2 dir,
+      strict_suffix inp1 inp2 dir -> strict_suffix inp2 inp1 (direction_reverse dir).
   Proof.
-    remember forward as dir.
-    induction 1; subst.
-    - destruct inp as [next ?], next; [discriminate|injection H as <-].
-      eauto using ss_advance.
-    - destruct inp2 as [next ?], next; [discriminate|injection H as <-].
-      eauto using ss_next'.
+    induction 1.
+    - destruct inp as [next pref], dir.
+      + destruct next; [discriminate|injection H as <-].
+        eauto using ss_advance.
+      + destruct pref; [discriminate|injection H as <-].
+        eauto using ss_advance.
+    - destruct inp2 as [next pref], dir.
+      + destruct next; [discriminate|injection H as <-].
+        eauto using ss_next'.
+      + destruct pref; [discriminate|injection H as <-].
+        eauto using ss_next'.
   Qed.
 
-  Lemma ss_backward_forward :
-    forall inp1 inp2,
-      strict_suffix inp1 inp2 backward -> strict_suffix inp2 inp1 forward.
+  Lemma ss_flip_iff :
+    forall inp1 inp2 dir,
+      strict_suffix inp1 inp2 dir <-> strict_suffix inp2 inp1 (direction_reverse dir).
   Proof.
-    remember backward as dir.
-    induction 1; subst.
-    - destruct inp as [? pref], pref; [discriminate|injection H as <-].
-      eauto using ss_advance.
-    - destruct inp2 as [? pref], pref; [discriminate|injection H as <-].
-      eauto using ss_next'.
-  Qed.
-
-  Lemma ss_backward_forward_iff :
-    forall inp1 inp2,
-      strict_suffix inp1 inp2 backward <-> strict_suffix inp2 inp1 forward.
-  Proof.
-    intros. split; eauto using ss_forward_backward, ss_backward_forward.
+    split.
+    - apply ss_flip.
+    - pose proof ss_flip inp2 inp1 (direction_reverse dir) as Hflip.
+      now rewrite direction_reverse_involutive in Hflip.
   Qed.
 
   (** * Prefixes *)
@@ -692,9 +688,9 @@ Ltac ss_canon :=
   | [H: context[advance_input ?inp1 backward = Some ?inp2] |- _] =>
     rewrite <-advance_input_flip in H
   | [H: context[strict_suffix _ _ backward] |- _] =>
-    rewrite ss_backward_forward_iff in H
+    rewrite ss_flip_iff in H; simpl in H
   | |- context[strict_suffix _ _ backward] =>
-    rewrite ss_backward_forward_iff
+    rewrite ss_flip_iff; simpl
   | [H: strict_suffix _ _ ?dir |- _] =>
     lazymatch dir with
     (* we don't want to destruct already concrete values *)

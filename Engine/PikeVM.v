@@ -450,12 +450,6 @@ Definition option_reverse {A B} (f: A -> B) (o: option A) : option B :=
 
 Definition o_leaf_reverse := option_reverse leaf_reverse.
 
-Definition direction_reverse (dir: Direction) : Direction :=
-  match dir with
-  | forward => backward
-  | backward => forward
-  end.
-
 Definition occurrence_reverse (occ: occurrence) : occurrence :=
   match occ with
   | Best o => Best (o_leaf_reverse o)
@@ -485,9 +479,6 @@ Proof.
 Qed.
 
 Lemma flip_anchor_involutive : involutive flip_anchor.
-Proof. now destruct x. Qed.
-
-Lemma direction_reverse_involutive : involutive direction_reverse.
 Proof. now destruct x. Qed.
 
 Lemma leaf_reverse_involutive : involutive leaf_reverse.
