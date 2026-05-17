@@ -16,11 +16,11 @@ Authors: [Aurèle Barrière](https://aurele-barriere.github.io/), [Victor Deng](
 # About
 
 This repository contains mechanized proofs, in Rocq, about JavaScript Regular Expressions.
-This includes:
-- a new *backtracking tree* semantics for JavaScript regexes, in folder `Semantics`.
-- a proof that this semantics is equivalent to the [Warblre](https://github.com/epfl-systemf/Warblre) mechanization of JavaScript regexes, in folder `WarblreEquiv`.
-- a proof of the PikeVM linear-time matching algorithm supporting a subset of JavaScript regexes, in folder `Engine`. The algorithm is adapted to fit JavaScript unique quantifier semantics, following section 4.1 of [Linear Matching of JavaScript Regular Expressions](https://dl.acm.org/doi/10.1145/3656431).
-- proof of JavaScript regex *contextual equivalences*, in folder `Rewriting`.
+The proofs live under `theories/`. This includes:
+- a new *backtracking tree* semantics for JavaScript regexes, in folder `theories/Semantics`.
+- a proof that this semantics is equivalent to the [Warblre](https://github.com/epfl-systemf/Warblre) mechanization of JavaScript regexes, in folder `theories/WarblreEquiv`.
+- a proof of the PikeVM linear-time matching algorithm supporting a subset of JavaScript regexes, in folder `theories/Engine`. The algorithm is adapted to fit JavaScript unique quantifier semantics, following section 4.1 of [Linear Matching of JavaScript Regular Expressions](https://dl.acm.org/doi/10.1145/3656431).
+- proof of JavaScript regex *contextual equivalences*, in folder `theories/Rewriting`.
 
 # Usage
 

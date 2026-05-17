@@ -32,4 +32,4 @@ jobs:
         run: opam exec -- dune build
 
       - name: Check compiled libraries (rocqchk)
-        run: opam exec -- rocqchk -silent --output-context -R _build/default Linden _build/default/*/*.vo
+        run: opam exec -- rocqchk -silent --output-context -R _build/default/theories Linden _build/default/theories/*/*.vo
