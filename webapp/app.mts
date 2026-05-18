@@ -179,7 +179,7 @@ class TreeView {
 
 /// Engine-state pane
 
-class StatePane {
+class StateView {
   private readonly root = byId("state");
 
   private static row(label: string, input: string, lo: number, hi: number, kind: string, range: string): HTMLElement  {
@@ -210,11 +210,11 @@ class StatePane {
       `[${lo}:${hi ?? ""})`;
 
     const arrow = { Backward: "←", Forward: "→" }[state.dir];
-    this.root.append(StatePane.row(`${arrow}`, input, state.idx, state.idx, "caret", fmtRange(0, state.idx)));
+    this.root.append(StateView.row(`${arrow}`, input, state.idx, state.idx, "caret", fmtRange(0, state.idx)));
 
     for (const g of state.groups) {
       const endIdx = g.endIdx ?? state.idx;
-      this.root.append(StatePane.row(`$${g.id}`, input, g.startIdx, endIdx, "highlighted-span", fmtRange(g.startIdx, g.endIdx)));
+      this.root.append(StateView.row(`$${g.id}`, input, g.startIdx, endIdx, "highlighted-span", fmtRange(g.startIdx, g.endIdx)));
     }
   }
 }
@@ -223,8 +223,8 @@ class StatePane {
 
 class App {
   private fuel = 30;
-  private readonly tree = new TreeView((d) => this.onHover(d));
-  private readonly state = new StatePane();
+  private readonly treeView = new TreeView((d) => this.onHover(d));
+  private readonly stateView = new StateView();
   private readonly recomputeScheduler = new Debounced(() => this.recompute(), 120);
   private readonly console = new RegexConsole(() => this.recomputeScheduler.schedule());
 
@@ -235,8 +235,8 @@ class App {
 
   /** Recompute the tree */
   private recompute(): void {
-    this.state.clear();
-    this.tree.draw(null);
+    this.stateView.clear();
+    this.treeView.draw(null);
     this.console.clearErrors();
 
     const st: ConsoleState | null = this.console.state();
@@ -253,10 +253,10 @@ class App {
     this.console.renderExec(success ? st : null);
 
     if (success) {
-      this.tree.draw(result.VAL);
+      this.treeView.draw(result.VAL);
     } else if (result.NAME === "Error" && result.VAL === "out of fuel") {
       this.fuel = Math.round(this.fuel * 1.2);
-      this.tree.showRetry(this.fuel, () => this.recompute());
+      this.treeView.showRetry(this.fuel, () => this.recompute());
     } else {
       this.console.renderRegexError(result.VAL);
     }
@@ -264,8 +264,8 @@ class App {
 
   /** Highlight subregexes matching a hovered node. */
   private onHover(d: LaidOutNode | null): void {
-    if (d) this.state.show(d, this.console.input() ?? "");
-    else this.state.clear();
+    if (d) this.stateView.show(d, this.console.input() ?? "");
+    else this.stateView.clear();
     const regexId = d && d.data.regexId != null ? +d.data.regexId : null;
     this.highlight(regexId !== null ? { first: regexId, last: regexId } : null);
   }
