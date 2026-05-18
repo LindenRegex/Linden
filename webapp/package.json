@@ -1,0 +1,17 @@
+{
+  "name": "linden-viz",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Linden regex explorer",
+  "dependencies": {
+    "@eslint-community/regexpp": "^4.12.1",
+    "d3": "^7.9.0"
+  },
+  "devDependencies": {
+    "@types/d3": "^7.4.3",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.7.2",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^5.1.4"
+  }
+}

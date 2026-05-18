@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Linden regex explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inria+Sans:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Iosevka/11.1.1/iosevka/iosevka.min.css" integrity="sha512-3hU20586NsplKRzjf2jQN5vTRTI2EsXObrHDOBLGdkiRkneg699BlmBXWGHHFHADCF3TOk2BREsVy7qTkmvQqQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <h1>Linden regex explorer</h1>
+
+    <div id="console">
+      <code class="line">
+        <span class="prompt">&gt;&gt;</span>
+        <span class="lead">s = </span>
+        <span class="delim-str">"</span>
+        <textarea id="string" rows="1" spellcheck="false" autocapitalize="off"></textarea>
+        <span class="delim-str">"</span>
+      </code>
+      <code class="line">
+        <span class="prompt">&gt;&gt;</span>
+        <span class="lead">r = </span>
+        <span class="delim-rx">/</span>
+        <textarea id="regex" rows="1" spellcheck="false" autocapitalize="off"></textarea>
+        <span class="delim-rx">/</span>
+      </code>
+      <samp id="regex-error"></samp>
+      <samp id="regex-view"></samp>
+      <code class="line">
+        <span class="prompt">&gt;&gt;</span>
+        <span class="lead">r.exec(s)</span>
+      </code>
+      <samp id="exec-result"></samp>
+    </div>
+
+    <div id="panes">
+      <div id="tree"></div>
+      <div id="state"></div>
+    </div>
+
+    <footer>
+      <a href="https://lindenregex.github.io/" target="_blank">Linden: towards a formally verified, linear-time, efficient engine for JavaScript regexes</a>
+    </footer>
+
+    <script src="./linden-viz.js"></script>
+  </body>
+</html>

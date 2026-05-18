@@ -1,0 +1,6 @@
+(lang dune 3.21)
+
+(using rocq 0.11)
+(using melange 0.1)
+; the bundle rule in webapp/dune emits a whole dist/ directory
+(using directory-targets 0.1)

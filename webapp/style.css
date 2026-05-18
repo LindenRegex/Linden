@@ -1,0 +1,275 @@
+:root {
+  --sans: "Inria Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", "Iosevka Web", "Iosevka", ui-monospace, monospace;
+
+  --gap: 0.5rlh;
+  --indent: 1.5rem;
+  --radius: 0.5rem;
+  --fs: 15px;
+  --stroke-thin: 2px;
+  --stroke-thick: 3px;
+
+  --c-page: #e3e5e9;
+  --c-bg: #fbfcfd;
+  --c-panel: #f1f3f5;
+  --c-ink: #1f2430;
+  --c-muted: #9aa3b2;
+  --c-border: #d9dde3;
+  --c-out: #5b6472;
+  --c-regex: #b82ee5;
+  --c-string: #0074e8;
+  --c-error: #d70022;
+  --c-subregex: #d97706;
+  --c-highlight: #ffe08a;
+  --c-edge: #94a3b8;
+
+  /* Tree colors */
+  --c-node-bg: #eef1f4;
+  --c-node-fg: #334155;
+  --c-node-stroke: #64748b;
+  --c-start-bg: #475569;
+  --c-start-fg: #ffffff;
+  --c-start-stroke: #334155;
+  --c-choice-bg: #e7edf6;
+  --c-choice-fg: #27405f;
+  --c-choice-stroke: #41618c;
+  --c-ok-bg: #007480;
+  --c-ok-fg: #ffffff;
+  --c-ok-stroke: #005a63;
+  --c-fail-bg: #b51f1f;
+  --c-fail-fg: #ffffff;
+  --c-fail-stroke: #8a1818;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-page: #0c0e12;
+    --c-panel: #262a33;
+    --c-bg: #1b1e26;
+    --c-ink: #e4e7ec;
+    --c-muted: #79828f;
+    --c-border: #3a3f4a;
+    --c-out: #aab2bf;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+* { font-size-adjust: ex-height from-font; }
+
+html {
+    height: 100%;
+    padding: var(--gap);
+    background: var(--c-page);
+}
+
+body {
+  min-height: 100%;
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: var(--gap);
+  background: var(--c-bg);
+  border-radius: var(--radius);
+  font-family: var(--sans);
+  color: var(--c-ink);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+h1 { font-size: larger; margin: 0; }
+
+code, kbd, samp, pre { font-family: var(--mono); }
+
+#console {
+  display: flex;
+  flex-direction: column;
+
+  textarea {
+    font: inherit;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid var(--c-border);
+    box-sizing: content-box;
+    padding: 0;
+    cursor: text;
+    resize: none;
+    overflow: hidden;
+    flex: 0 1 auto;
+    line-height: 1.5; /* Reduce the underline-to-text distance */
+    min-width: 0;
+
+    &:hover, &:focus { border-bottom-color: currentColor; }
+    &:focus { outline: none; }
+  }
+}
+
+.line {
+  display: flex;
+  align-items: baseline;
+  white-space: nowrap;
+  line-height: 1.8;
+  color: var(--c-ink);
+
+  > span { flex: none; white-space: pre; }
+}
+
+samp {
+  display: block;
+  padding-left: var(--indent);
+  line-height: 1.8;
+  color: var(--c-out);
+  overflow-wrap: anywhere;
+}
+#regex-error:empty,
+#regex-error:not(:empty) + #regex-view:empty {
+    display: none;
+}
+
+.prompt {
+  width: var(--indent);
+  color: var(--c-muted);
+  user-select: none;
+  letter-spacing: -0.3em;
+}
+.delim-rx { color: var(--c-regex); }
+.delim-str { color: var(--c-string); }
+
+#regex {
+  color: var(--c-regex);
+  &.bad { color: var(--c-error); }
+}
+#string { color: var(--c-string); }
+#regex-error { color: var(--c-error); }
+
+.rx {
+  border-radius: 0.2em;
+  cursor: default;
+  &.subregex { background: var(--c-highlight); }
+  sub {
+      bottom: -0.25em;
+      color: var(--c-muted);
+      font-family: var(--sans);
+      margin-right: 0.1em;
+      position: relative;
+  }
+}
+
+#panes {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+  gap: var(--gap);
+}
+#tree, #state {
+  border: thin solid var(--c-border);
+  border-radius: var(--radius);
+  box-sizing: content-box;
+}
+#tree {
+  flex: 2 1 0;
+  overflow: hidden;
+  background: var(--c-bg);
+}
+
+.tree-msg { padding: var(--gap); color: var(--c-ink); }
+.retry {
+  color: var(--c-string);
+  text-decoration: underline;
+  cursor: pointer;
+  user-select: none; /* Prevent double-click from selecting */
+}
+#state {
+  flex: 1 1 0;
+  overflow: auto;
+  padding: var(--gap);
+  background: var(--c-panel);
+  font-family: var(--mono);
+  line-height: 1.5;
+
+  &:empty::before {
+    content: "Hover tree nodes to see match states. "
+             "Hover the parsed regex to highlight subtrees.";
+    color: var(--c-muted);
+    font-family: var(--sans);
+  }
+}
+
+.st-row { white-space: pre; }
+.st-label, .st-dim { color: var(--c-muted); }
+.st-label { padding-right: 0.25em; min-width: 2em; display: inline-block; }
+.caret, .highlighted-span { padding: 0 1px; margin: 0 -1px; }
+.caret { background: var(--c-ink); }
+.highlighted-span { background: var(--c-highlight); border-radius: 0.15em; }
+
+.tree-svg {
+  display: block;
+  cursor: grab;
+  &.panning { cursor: grabbing; }
+}
+
+.tedge {
+  fill: none;
+  stroke: var(--c-edge);
+  stroke-width: var(--stroke-thin);
+  &.subregex { stroke: var(--c-subregex); stroke-width: var(--stroke-thick); }
+}
+.tedge[data-has-ghost] {
+    stroke-dasharray: 5 4;
+}
+
+.tnode {
+  --bg: var(--c-node-bg);
+  --fg: var(--c-node-fg);
+  --stroke: var(--c-node-stroke);
+
+  > :first-child {
+      stroke-width: var(--stroke-thin);
+      fill: var(--bg);
+      stroke: var(--stroke);
+  }
+  text {
+    font-size: var(--fs);
+    text-anchor: middle;
+    pointer-events: none;
+    fill: var(--fg);
+  }
+  .tlabel[data-part="name"] { font-family: var(--sans); }
+  .tlabel[data-part="arg"] { font-family: var(--mono); }
+
+  &[data-kind="Start"] { --bg: var(--c-start-bg); --fg: var(--c-start-fg); --stroke: var(--c-start-stroke); }
+  &[data-kind="Choice"] { --bg: var(--c-choice-bg); --fg: var(--c-choice-fg); --stroke: var(--c-choice-stroke); }
+  &[data-status="Match"] { --bg: var(--c-ok-bg); --fg: var(--c-ok-fg); --stroke: var(--c-ok-stroke); }
+  &[data-status="Mismatch"] { --bg: var(--c-fail-bg); --fg: var(--c-fail-fg); --stroke: var(--c-fail-stroke); }
+
+  &.subregex > :first-child { stroke: var(--c-subregex); stroke-width: var(--stroke-thick); }
+}
+
+footer {
+  font-size: smaller;
+  a {
+    color: var(--c-muted);
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (max-width: 640px) {
+  h1 { display: none; }
+  html { padding: 0; }
+  body { border-radius: 0; }
+  #panes {
+      flex-direction: column;
+      min-height: unset;
+  }
+  #tree {
+      min-height: 5lh;
+  }
+  #state {
+      flex-grow: 0;
+      min-height: 2lh;
+      max-height: 5lh;
+  }
+}

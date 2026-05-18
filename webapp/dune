@@ -1,0 +1,49 @@
+;; Rocq's extraction setup
+(rocq.extraction
+ (prelude Extraction)
+ (extracted_modules LindenAPI)
+ (theories Linden Warblre Ltac2 Stdlib StrictOrderSolver))
+
+;; Melange build of Rocq's output
+(library
+ (name webapp_extracted)
+ (modes melange)
+ (wrapped false)
+ (modules LindenAPI BigInt Interop)
+ (libraries warblre-engines.js)
+ (flags (:standard -w -a)) ;; Silence warnings in Rocq-generated code
+ (preprocess (pps melange.ppx)))
+
+;; Melange build of our code
+(melange.emit
+ (target app)
+ (alias web)
+ (module_systems (es6 mjs))
+ (libraries warblre-engines.js melange-webapi webapp_extracted)
+ (modules :standard \ LindenAPI BigInt Interop)
+ ;; Copy handwritten ts sources so they sit next to Melange's generated files
+ (runtime_deps (glob_files *.mts))
+ (preprocess (pps melange.ppx)))
+
+;; Ignore NPM's package directory
+(data_only_dirs node_modules)
+
+;; Webpack bundle of the Melange build and our TS code
+;; The custom webpack.config.js tells webpack where to find node_modules (that
+;; directory is neither copied to nor a parent of _build/).
+(rule
+ (targets (dir dist))
+ (alias bundle)
+ (deps
+  (alias_rec web) ;; Depend on the Melange build above
+  (:config (file webpack.config.js))
+  (:entrypoint (file app/webapp/app.mts))
+  (glob_files app/webapp/*.mts)
+  tsconfig.json index.html style.css)
+ (action
+  (no-infer ;; dune can't track webpack's reads; (deps) declared manually above
+   (progn (run node ../../../webapp/node_modules/webpack/bin/webpack.js
+               ./%{entrypoint} --config %{config} --env profile=%{profile}
+               --stats errors-warnings)
+    (copy index.html dist/index.html)
+    (copy style.css dist/style.css)))))
