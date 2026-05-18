@@ -146,12 +146,17 @@ samp {
   color: var(--c-regex);
 
   input { display: none; }
-  .flag-indicator {
-    cursor: pointer;
-    user-select: none;
-  }
   .flag-unavailable { display: none; }
   input:not(:checked) + label { color: var(--c-muted); }
+}
+
+#raw-string { display: none; }
+#raw-string:not(:checked) + label { color: var(--c-muted); }
+
+label[for] {
+  cursor: pointer;
+  user-select: none;
+  flex: none;
 }
 
 #regex {

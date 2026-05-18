@@ -42,6 +42,7 @@ interface ConsoleState {
 
 class RegexConsole {
   private readonly stringInput = byId<HTMLTextAreaElement>("string");
+  private readonly rawStringFlag = byId<HTMLInputElement>("raw-string")
 
   private readonly regexInput = byId<HTMLTextAreaElement>("regex");
   private readonly regexFlags = [...byId("regex-flags").querySelectorAll<HTMLInputElement>("input")];
@@ -59,6 +60,7 @@ class RegexConsole {
     this.regexInput.addEventListener("input", sync);
     this.stringInput.addEventListener("input", sync);
     this.lastIndexInput.addEventListener("input", sync);
+    this.rawStringFlag.addEventListener("change", sync);
     this.regexFlags.forEach((box) => box.addEventListener("change", sync));
   }
 
@@ -72,9 +74,10 @@ class RegexConsole {
     box.style.width = `${2 + Math.max(1, box.value.length)}ch`;
   }
 
-  /** The current input string, parsed as a JSON string */
+  /** The current input string, possibly parsed as a JSON string */
   input(): string {
-    return JSON.parse(`"${this.stringInput.value}"`);
+    const value = this.stringInput.value;
+    return this.rawStringFlag.checked ? value : JSON.parse(`"${value}"`);
   }
 
   /** Snapshot the inputs (input-string decoding may throw). */
