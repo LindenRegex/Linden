@@ -270,6 +270,7 @@ class App {
   private readonly console = new RegexConsole(() => this.recomputeScheduler.schedule());
 
   start(): void {
+    byId("panes").addEventListener("mouseleave", () => this.onHover(null));
     this.console.readFromUrlHash();
     this.console.syncUI();
     this.recomputeScheduler.force();
