@@ -17,7 +17,8 @@ type warble_regex =
 (** Parse a JavaScript regex. *)
 let parseRegex (str : string) : warble_regex =
   let module Parser = Warblre_js.Parser.Parser (WarbleParams) (StringLike) in
-  warblre_Regex_to_viz (Parser.parseRegex str)
+  let str = if str = "" then "(?:)" else str in (* regexpp rejects // *)
+  warblre_Regex_to_viz (Parser.parseRegex ("/" ^ str ^ "/"))
 
 (** Format an exception. *)
 let error_message (e : exn) : string =
@@ -58,7 +59,7 @@ let run (pattern : string) (flags : V.Extraction.regex_flags)
   clear regexView;
   let go () =
     let regex =
-      let wregex = parseRegex ("/" ^ pattern ^ "/") |> Obj.magic in
+      let wregex = parseRegex pattern |> Obj.magic in
       let parsed = V.Extraction.linden_regex_of_warblre_regex linden_params wregex in
       V.Extraction.maybe_add_lazy_prefix linden_params flags parsed in
     let chars =
