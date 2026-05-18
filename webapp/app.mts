@@ -22,11 +22,11 @@ function el(tag: string, cls: string | null, ...children: (string | Node)[]): HT
 /** Runs `fn` once calls to schedule() have paused for `delay` ms. */
 class Debounced {
   private timer: ReturnType<typeof setTimeout> | undefined;
-  constructor(private readonly fn: () => void, private readonly delay: number) {}
+  constructor(public fn: (() => void) | undefined, private readonly delay: number) {}
 
   schedule(): void {
     clearTimeout(this.timer);
-    this.timer = setTimeout(this.fn, this.delay);
+    if (this.fn) this.timer = setTimeout(this.fn, this.delay);
   }
 }
 
@@ -90,25 +90,23 @@ class RegexConsole {
 class TreeView {
   private readonly root = byId("tree");
   private last: TreeNode | null = null;
-  // re-fits the current SVG to its container, without rebuilding the tree
-  private refit: (() => void) | undefined;
-  private readonly refitSoon = new Debounced(() => this.refit?.(), 150);
+  private readonly refitScheduler: Debounced = new Debounced(undefined, 120);
 
   constructor(private readonly onHover: (d: LaidOutNode | null) => void) {
-    window.addEventListener("resize", () => this.refitSoon.schedule());
+    window.addEventListener("resize", () => this.refitScheduler.schedule());
   }
 
   /** Draw a tree. */
   draw(tree?: TreeNode | null): void {
     if (tree !== undefined) this.last = tree;
-    if (this.last) this.refit = render(this.last, this.root, this.onHover);
-    else { this.root.replaceChildren(); this.refit = undefined; }
+    if (this.last) this.refitScheduler.fn = render(this.last, this.root, this.onHover);
+    else { this.root.replaceChildren(); this.refitScheduler.fn = undefined; }
   }
 
   /** Show an out-of-fuel notice with a retry button. */
   showRetry(fuel: number, onRetry: () => void): void {
     this.last = null;
-    this.refit = undefined;
+    this.refitScheduler.fn = undefined;
     const link = el("a", "retry", `try harder (${fuel})`);
     link.addEventListener("click", onRetry);
     this.root.replaceChildren(el("div", "tree-msg", "Stack overflow; ", link));
@@ -166,7 +164,7 @@ class App {
   private readonly console = new RegexConsole();
   private readonly tree = new TreeView((d) => this.onHover(d));
   private readonly state = new StatePane();
-  private readonly recomputeSoon = new Debounced(() => this.recompute(), 120);
+  private readonly recomputeScheduler = new Debounced(() => this.recompute(), 120);
 
   constructor() {
     this.console.regexInput.addEventListener("input", () => this.scheduleRecompute());
@@ -186,7 +184,7 @@ class App {
   /** Resize the inputs now, and recompute once typing pauses. */
   private scheduleRecompute(): void {
     this.console.fitInputs();
-    this.recomputeSoon.schedule();
+    this.recomputeScheduler.schedule();
   }
 
   /** Recompute the tree */
