@@ -207,7 +207,6 @@ class StateView {
     this.clear();
 
     const state = d.data.post ?? d.data.pre;
-    if (!state) return;
 
     const fmtRange = (lo: number, hi: number | null): string =>
       `[${lo}:${hi ?? ""})`;

@@ -79,7 +79,7 @@ export type OnSelect = (d: LaidOutNode | null) => void;
 export function render(data: TreeNode, container: HTMLElement, onSelect: OnSelect): () => void {
   const start: TreeNode = {
     name: "Start", arg: "", result: null, hasGhostSubtree: false,
-    regexId: null, pre: null, post: data.pre, children: [data],
+    regexId: null, pre: data.pre, post: data.pre, children: [data],
   };
 
   const root = d3.hierarchy<TreeNode>(start, (d) => d.children);

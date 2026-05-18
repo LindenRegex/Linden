@@ -73,7 +73,7 @@ type node = {
   result : [ `Match | `Mismatch ] Js.Nullable.t;
   hasGhostSubtree : bool;
   regexId : int Js.Nullable.t;
-  pre : engine_state Js.Nullable.t;
+  pre : engine_state;
   post : engine_state Js.Nullable.t;
   children : node array;
 }

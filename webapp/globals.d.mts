@@ -19,7 +19,7 @@ interface TreeNode {
   result: "Match" | "Mismatch" | null;
   hasGhostSubtree: boolean;
   regexId: number | null;
-  pre: EngineState | null;
+  pre: EngineState;
   post: EngineState | null;
   children: TreeNode[];
 }
