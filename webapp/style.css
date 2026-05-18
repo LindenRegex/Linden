@@ -18,7 +18,7 @@
   --c-out: #5b6472;
   --c-regex: #b82ee5;
   --c-string: #0074e8;
-  --c-error: #d70022;
+  --c-error: #e30613;
   --c-subregex: #d97706;
   --c-highlight: #ffe08a;
   --c-edge: #94a3b8;
@@ -33,10 +33,10 @@
   --c-choice-bg: #e7edf6;
   --c-choice-fg: #27405f;
   --c-choice-stroke: #41618c;
-  --c-ok-bg: #007480;
+  --c-ok-bg: #007380;
   --c-ok-fg: #ffffff;
   --c-ok-stroke: #005a63;
-  --c-fail-bg: #b51f1f;
+  --c-fail-bg: #b51f1e;
   --c-fail-fg: #ffffff;
   --c-fail-stroke: #8a1818;
 }
