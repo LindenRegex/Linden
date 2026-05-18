@@ -19,7 +19,7 @@ Section RegexpTranslation.
   (* NamedMap: relating named groups to indices  *)
 
   Definition patname_eq_dec : forall (x y : Patterns.GroupName), { x = y } + { x <> y }.
-  Proof. decide equality. apply Character.eq_dec. Qed.
+  Proof. decide equality. apply Character.eq_dec. Defined.
   Definition patname_eqb (n1 n2:Patterns.GroupName) : bool :=
     if patname_eq_dec n1 n2 then true else false.
 
@@ -1098,7 +1098,7 @@ Section SanityCheck.
 
   Lemma lr1_Success: exists lr, lr1_res = Success lr.
   Proof.
-    compute.
+    cbv -[patname_eq_dec].
     destruct patname_eq_dec. 2: contradiction.
     eexists. reflexivity.
   Qed.
@@ -1110,7 +1110,7 @@ Section SanityCheck.
 
   Lemma lr2_Success: exists lr, lr2_res = Success lr.
   Proof.
-    compute.
+    cbv -[patname_eq_dec].
     destruct patname_eq_dec. 2: contradiction.
     eexists. reflexivity.
   Qed.
