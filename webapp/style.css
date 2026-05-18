@@ -169,11 +169,12 @@ label[for] {
   cursor: default;
   &.subregex { background: var(--c-highlight); }
   sub {
-      bottom: -0.25em;
+      bottom: -0.5em;
       color: var(--c-muted);
       font-family: var(--sans);
       margin-right: 0.1em;
       position: relative;
+      vertical-align: baseline;
   }
 }
 
