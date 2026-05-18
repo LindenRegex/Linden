@@ -8,6 +8,7 @@ interface GroupState {
 
 interface EngineState {
   idx: number;
+  input: string;
   dir: "Forward" | "Backward";
   groups: GroupState[];
 }

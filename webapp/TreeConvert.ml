@@ -5,6 +5,8 @@ module A = LindenAPI.AnnotatedTrees
 module GM = LindenAPI.GroupMap
 module R = RegexRender
 
+let debug = false
+
 (** * Regex ID checks
 
     The matching process annotates tree nodes with actions that contains
@@ -64,7 +66,7 @@ let fail_label : V.actions -> string * string = function
 
 (** See `globals.d.ts` for documentation. *)
 type group_state = { id : int; startIdx : int; endIdx : int Js.Nullable.t }
-type engine_state = { idx : int; dir : string; groups : group_state array }
+type engine_state = { idx : int ; input : string ; dir : string; groups : group_state array }
 type node = {
   name : string;
   arg : string;
@@ -76,14 +78,20 @@ type node = {
   children : node array;
 }
 
-let state_js (a : A.annotation) : engine_state =
-  let (V.Input (_, pref)) = a.A.inp in
+let state_js (input : string) (a : A.annotation) : engine_state =
+  let (V.Input (suffix, prefix)) = a.A.inp in
   let group (id, (r : GM.range)) : group_state =
     { id = id |> BigInt.to_int;
       startIdx = r.GM.startIdx |> BigInt.to_int;
       endIdx = r.GM.endIdx |> Option.map BigInt.to_int |> Js.Nullable.fromOption } in
-  { idx = List.length pref;
-    dir = a.A.dir |> dir_str;
+  let assert_same_input () =
+    let module StringLike = Warblre_js.JsEngineParameters.JsStringLike in
+    let module WarbleParams = Warblre_js.JsEngineParameters.JsParameters in
+    let str (s: 'a list) = s |> Obj.magic |> WarbleParams.String.list_to_string |> StringLike.to_string in
+    if debug then assert (str (List.rev prefix) ^ str suffix = input) in
+  assert_same_input ();
+  { idx = List.length prefix;
+    input; dir = a.A.dir |> dir_str;
     groups = GM.MapS.this a.A.gm |> List.map group |> Array.of_list }
 
 (** Remove layers of redundant annotations. *)
@@ -92,14 +100,15 @@ let rec unwrap (default : A.annotation) : A.tree -> A.annotation * A.tree = func
   | bare -> (default, bare)
 
 (** Convert an annotated tree. *)
-let rec to_node (idMap : (V.regex * int) list) (default : A.annotation) (t : A.tree) : node =
+let rec to_node (idMap : (V.regex * int) list) (input : string)
+          (default : A.annotation) (t : A.tree) : node =
   let ann, tree_node = unwrap default t in
-  let pre = Js.Nullable.return (state_js ann) in
+  let pre = state_js input ann in
   let regex_id = regex_id_of idMap ann.A.acts in
   let make ?(result = Js.Nullable.null) ?(ghost = false) name arg subjs : node =
-    let children = List.map (to_node idMap ann) subjs in
+    let children = List.map (to_node idMap input ann) subjs in
     let post = match children with
-      | f :: _ -> f.pre
+      | f :: _ -> Js.Nullable.return f.pre
       | [] -> Js.Nullable.null in
     { name; arg; result; hasGhostSubtree = ghost; regexId = regex_id; pre; post;
       children = Array.of_list children } in
@@ -131,6 +140,6 @@ let rec to_node (idMap : (V.regex * int) list) (default : A.annotation) (t : A.t
      assert false
 
 (** Entry point. *)
-let to_tree (idMap : (V.regex * int) list) : A.tree -> node = function
-  | A.Annot (root, _) as t -> to_node idMap root t
+let to_tree (idMap : (V.regex * int) list) (input: string) : A.tree -> node = function
+  | A.Annot (ann, _) as t -> to_node idMap input ann t
   | _ -> assert false

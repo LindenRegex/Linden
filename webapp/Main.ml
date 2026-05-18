@@ -70,7 +70,7 @@ let run (pattern : string) (flags : V.Extraction.regex_flags)
     let idMap = numberSubregexes regex in
     RegexRender.render_regex regex regexView idMap onHover;
     match V.Extraction.tree_of_linden_regex linden_params regex flags chars startIdx fuel with
-    | V.Extraction.TETree tree -> `Ok (TreeConvert.to_tree idMap tree)
+    | V.Extraction.TETree tree -> `Ok (TreeConvert.to_tree idMap input tree)
     | V.Extraction.TEOutOfFuel -> `Error "out of fuel"
     | V.Extraction.TEBadFlags -> `Error "unsupported regex flag" in
   try go ()

@@ -75,7 +75,7 @@ class RegexConsole {
   }
 
   /** The current input string, possibly parsed as a JSON string */
-  input(): string | null {
+  private input(): string | null {
     try {
       const value = this.stringInput.value;
       return this.rawStringFlag.checked ? value : JSON.parse(`"${value}"`);
@@ -201,19 +201,21 @@ class StateView {
   }
 
   /** Show the state corresponding to a given node. */
-  show(d: LaidOutNode, input: string): void {
-    this.root.replaceChildren();
+  show(d: LaidOutNode): void {
+    this.clear();
+
     const state = d.data.post ?? d.data.pre;
     if (!state) return;
 
     const fmtRange = (lo: number, hi: number | null): string =>
       `[${lo}:${hi ?? ""})`;
 
+    const idx = state.idx, input = state.input;
     const arrow = { Backward: "←", Forward: "→" }[state.dir];
-    this.root.append(StateView.row(`${arrow}`, input, state.idx, state.idx, "caret", fmtRange(0, state.idx)));
+    this.root.append(StateView.row(`${arrow}`, input, idx, idx, "caret", fmtRange(0, idx)));
 
     for (const g of state.groups) {
-      const endIdx = g.endIdx ?? state.idx;
+      const endIdx = g.endIdx ?? idx;
       this.root.append(StateView.row(`$${g.id}`, input, g.startIdx, endIdx, "highlighted-span", fmtRange(g.startIdx, g.endIdx)));
     }
   }
@@ -264,7 +266,7 @@ class App {
 
   /** Highlight subregexes matching a hovered node. */
   private onHover(d: LaidOutNode | null): void {
-    if (d) this.stateView.show(d, this.console.input() ?? "");
+    if (d) this.stateView.show(d);
     else this.stateView.clear();
     const regexId = d && d.data.regexId != null ? +d.data.regexId : null;
     this.highlight(regexId !== null ? { first: regexId, last: regexId } : null);
