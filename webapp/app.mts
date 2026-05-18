@@ -32,18 +32,35 @@ class Debounced {
 
 /// Input console
 
-class RegexConsole {
-  readonly regexInput = byId<HTMLTextAreaElement>("regex");
-  readonly stringInput = byId<HTMLTextAreaElement>("string");
-  readonly lastIndexInput = byId<HTMLInputElement>("last-index");
-  readonly regexView = byId("regex-view");
-  readonly regexFlags = byId("regex-flags");
+interface ConsoleState {
+  pattern: string;
+  input: string;
+  flags: RegexFlags;
+  flagString: string;
+  startIndex: number;
+}
 
-  private readonly stickyPrefix = byId("sticky-prefix");
+class RegexConsole {
+  private readonly stringInput = byId<HTMLTextAreaElement>("string");
+
+  private readonly regexInput = byId<HTMLTextAreaElement>("regex");
+  private readonly regexFlags = [...byId("regex-flags").querySelectorAll<HTMLInputElement>("input")];
+
+  private readonly lastIndexInput = byId<HTMLInputElement>("last-index");
+  private readonly stickyPrefixText = byId("sticky-prefix");
+
   private readonly error = byId("regex-error");
   private readonly exec = byId("exec-result");
 
-  constructor() {}
+  readonly regexView = byId("regex-view");
+
+  constructor(private readonly onStateChanged: () => void) {
+    const sync = () => this.syncUI();
+    this.regexInput.addEventListener("input", sync);
+    this.stringInput.addEventListener("input", sync);
+    this.lastIndexInput.addEventListener("input", sync);
+    this.regexFlags.forEach((box) => box.addEventListener("change", sync));
+  }
 
   static fitAreaToContent(box: HTMLTextAreaElement): void {
     box.cols = Math.max(1, box.value.length);
@@ -55,23 +72,45 @@ class RegexConsole {
     box.style.width = `${2 + Math.max(1, box.value.length)}ch`;
   }
 
+  /** The current input string, parsed as a JSON string */
+  input(): string {
+    return JSON.parse(`"${this.stringInput.value}"`);
+  }
+
+  /** Snapshot the inputs (input-string decoding may throw). */
+  state(): ConsoleState {
+    return {
+      pattern: this.regexInput.value,
+      input: this.input(),
+      flags: Object.fromEntries(
+        this.regexFlags.map((box) => [box.id.replace("flag-", ""), box.checked] as const),
+      ) as unknown as RegexFlags,
+      flagString: this.regexFlags.filter((box) => box.checked)
+        .map((box) => box.nextElementSibling?.textContent ?? "").join(""),
+      startIndex: +this.lastIndexInput.value,
+    };
+  }
+
+  /** Resize the inputs, toggle the sticky UI, and notify the app. */
   syncUI(): void {
     RegexConsole.fitAreaToContent(this.regexInput);
     RegexConsole.fitAreaToContent(this.stringInput);
     RegexConsole.fitInputToContent(this.lastIndexInput);
     this.lastIndexInput.max = String(1 + this.stringInput.value.length);
-    this.stickyPrefix.hidden = !byId<HTMLInputElement>("flag-sticky").checked;
+    this.stickyPrefixText.hidden = !byId<HTMLInputElement>("flag-sticky").checked;
+    this.onStateChanged();
   }
 
   /** Compute and format the result of a regex.exec at `lastIndex`. */
-  static execResult(pattern: string, flags: string, s: string, lastIndex: number): string | null {
+  execResult(): string | null {
     try {
-      const r = new RegExp(pattern, flags);
-      r.lastIndex = lastIndex;
-      const m = r.exec(s);
+      const { pattern, input, flagString, startIndex } = this.state();
+      const r = new RegExp(pattern, flagString);
+      r.lastIndex = startIndex;
+      const m = r.exec(input);
       return m ? `${JSON.stringify([...m])}  (index ${m.index})` : "null";
-    } catch {
-      return null;
+    } catch (e) {
+      return String(e);
     }
   }
 
@@ -82,25 +121,8 @@ class RegexConsole {
   }
 
   /** Display the results of the browser's own `exec`. */
-  renderExec(success: boolean) {
-    this.exec.textContent = !success ? "" :
-      RegexConsole.execResult(this.regexInput.value, this.flagString(),
-        this.stringInput.value, +this.lastIndexInput.value) ?? "";
-  }
-
-  /** The letters of every checked flag, e.g. "dimsy". */
-  flagString(): string {
-    return [...this.regexFlags.querySelectorAll("input:checked + label")]
-      .map((label) => label.textContent)
-      .join("");
-  }
-
-  /** The flags as a record keyed by their long names. */
-  flags(): RegexFlags {
-    return Object.fromEntries(
-      [...this.regexFlags.querySelectorAll<HTMLInputElement>("input")]
-        .map((box) => [box.id.replace("flag-", ""), box.checked] as const),
-    ) as unknown as RegexFlags;
+  renderExec(success: boolean): void {
+    this.exec.textContent = success ? this.execResult() : "";
   }
 }
 
@@ -161,8 +183,6 @@ class StatePane {
     const state = d.data.post ?? d.data.pre;
     if (!state) return;
 
-    const chars = [...input];
-
     const fmtRange = (lo: number, hi: number | null): string =>
       `[${lo}:${hi ?? ""})`;
 
@@ -180,33 +200,14 @@ class StatePane {
 
 class App {
   private fuel = 30;
-  private readonly console = new RegexConsole();
   private readonly tree = new TreeView((d) => this.onHover(d));
   private readonly state = new StatePane();
   private readonly recomputeScheduler = new Debounced(() => this.recompute(), 120);
+  private readonly console = new RegexConsole(() => this.recomputeScheduler.schedule());
 
-  constructor() {
-    this.console.regexInput.addEventListener("input", () => this.scheduleRecompute());
-    this.console.stringInput.addEventListener("input", () => this.scheduleRecompute());
-    this.console.lastIndexInput.addEventListener("input", () => this.scheduleRecompute());
-    this.console.regexFlags.querySelectorAll("input").forEach((box) =>
-      box.addEventListener("change", () => this.scheduleRecompute()));
-    this.console.regexView.addEventListener("mouseleave", () => this.onHover(null));
-  }
-
-  /** Start with a sample regex. */
+  /** Lay out the inputs and compute the initial tree. */
   start(): void {
-    this.console.regexInput.value = "(?:a|(?:a(b)|a))bc";
-    this.console.stringInput.value = "abc";
-    this.console.lastIndexInput.value = "0";
-    byId<HTMLInputElement>("flag-sticky").checked = true;
-    this.scheduleRecompute();
-  }
-
-  /** Resize the inputs now, and recompute once typing pauses. */
-  private scheduleRecompute(): void {
     this.console.syncUI();
-    this.recomputeScheduler.schedule();
   }
 
   /** Recompute the tree */
@@ -214,13 +215,19 @@ class App {
     this.state.clear();
     this.console.renderError(null);
 
-    const r = this.console.regexInput.value;
-    const s = this.console.stringInput.value;
-    const flags = this.console.flags();
-    const lastIndex = +this.console.lastIndexInput.value;
-    const hl: HoverFn = (first, last, e) =>
-      this.highlight(first !== null && last !== null ? { first, last } : null, e);
-    const result = run(r, flags, s, lastIndex, this.fuel, this.console.regexView, hl);
+    let st: ConsoleState;
+    try {
+      st = this.console.state();
+    } catch (e) {
+      this.console.renderExec(false);
+      this.console.renderError(String(e));
+      this.tree.draw(null);
+      return;
+    }
+
+    const { pattern, flags, input, startIndex } = st;
+    const hl: HoverFn = (range, e) => this.highlight(range, e);
+    const result = run(pattern, flags, input, startIndex, this.fuel, this.console.regexView, hl);
 
     if (result.NAME === "Ok") {
       this.tree.draw(result.VAL);
@@ -240,7 +247,7 @@ class App {
 
   /** Highlight subregexes matching a hovered node. */
   private onHover(d: LaidOutNode | null): void {
-    if (d) this.state.show(d, this.console.stringInput.value);
+    if (d) this.state.show(d, this.console.input());
     else this.state.clear();
     const regexId = d && d.data.regexId != null ? +d.data.regexId : null;
     this.highlight(regexId !== null ? { first: regexId, last: regexId } : null);

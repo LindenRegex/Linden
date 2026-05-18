@@ -23,8 +23,8 @@ interface TreeNode {
   children: TreeNode[];
 }
 
-// [first:last]: inclusive on both sides
-type HoverFn = (first: number | null, last: number | null, event?: Event) => void;
+// [first:last] inclusive
+type HoverFn = (range: { first: number; last: number } | null, event?: Event) => void;
 
 /** A JavaScript regex's flags, keyed by their long names. */
 interface RegexFlags {

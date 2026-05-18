@@ -102,7 +102,8 @@ module Prec = struct
     | _ -> false
 end
 
-type hover = first:int -> last:int -> Dom.mouseEvent -> unit
+type range = { first : int; last : int }
+type hover = range Js.Nullable.t -> Dom.mouseEvent -> unit
 
 (** Render `root` into `target`.
 
@@ -124,7 +125,7 @@ let render_regex (root : V.regex) (target : Dom.element)
     if wrap then text span {js|⟩|js};
     D.Element.addMouseOverEventListener
       (let lastId = !lastId in
-       fun e -> onHover ~first:firstId ~last:lastId e)
+       fun e -> onHover (Js.Nullable.return { first = firstId; last = lastId }) e)
       span;
     D.Element.appendChild span parent
   (* write `r`'s rendering into `span`, recursing through render_subregex *)
@@ -148,4 +149,7 @@ let render_regex (root : V.regex) (target : Dom.element)
     | V.Lookaround (lk, r1) ->
       txt ("(?" ^ lk_marker lk); nested ~strict:false r1; txt ")"
   in
-  render_subregex ~wrap:false root target
+  render_subregex ~wrap:false root target;
+  (* a mouseleave clears the highlight; the event is always a MouseEvent *)
+  D.Element.addEventListener "mouseleave"
+    (fun e -> onHover Js.Nullable.null (Obj.magic e)) target

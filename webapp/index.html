@@ -16,16 +16,17 @@
     <div id="console">
       <code class="line">
         <span class="prompt">&gt;&gt;</span>
-        <span class="lead">s = </span>
+        <span class="lead">s = JSON.parse('</span>
         <span class="delim-str">"</span>
-        <textarea id="string" rows="1" spellcheck="false" autocapitalize="off"></textarea>
+        <textarea id="string" rows="1" spellcheck="false" autocapitalize="off">abc</textarea>
         <span class="delim-str">"</span>
+        <span class="lead">')</span>
       </code>
       <code class="line">
         <span class="prompt">&gt;&gt;</span>
         <span class="lead">r = </span>
         <span class="delim-rx">/</span>
-        <textarea id="regex" rows="1" spellcheck="false" autocapitalize="off"></textarea>
+        <textarea id="regex" rows="1" spellcheck="false" autocapitalize="off">(?:a|(?:a(b)|a))bc</textarea>
         <span class="delim-rx">/</span>
         <span id="regex-flags">
           <input type="checkbox" id="flag-hasIndices" checked>
@@ -49,7 +50,7 @@
           <input type="checkbox" id="flag-unicodeSets">
           <label class="flag-indicator flag-unavailable" for="flag-unicodeSets">v</label>
 
-          <input type="checkbox" id="flag-sticky">
+          <input type="checkbox" id="flag-sticky" checked>
           <label class="flag-indicator" for="flag-sticky">y</label>
         </span>
       </code>
