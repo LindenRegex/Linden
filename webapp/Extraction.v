@@ -256,6 +256,10 @@ Section Generic.
   Definition linden_regex_of_warblre_regex (wr: Patterns.Regex) : regex :=
     warblre_to_linden' wr 0 (buildnm wr).
 
+  (** Add a lazy prefix if the `y` flag is not present. *)
+  Definition maybe_add_lazy_prefix (f: regex_flags) (r: regex) : regex :=
+    if sticky f then r else lazy_prefix (Group 0 r).
+
   (** Outcome of building a tree: success, fuel exhaustion, or bad flags. *)
   Inductive tree_or_error :=
   | TETree (t: tree)
@@ -277,5 +281,5 @@ End Generic.
 
 Set Extraction Output Directory ".".
 Extraction "LindenAPI.ml"
-  tree_of_linden_regex linden_regex_of_warblre_regex lindenParameters_of_warblre.
+  tree_of_linden_regex maybe_add_lazy_prefix linden_regex_of_warblre_regex lindenParameters_of_warblre.
 End Extraction.

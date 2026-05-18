@@ -59,7 +59,8 @@ let run (pattern : string) (flags : V.Extraction.regex_flags)
   let go () =
     let regex =
       let wregex = parseRegex ("/" ^ pattern ^ "/") |> Obj.magic in
-      V.Extraction.linden_regex_of_warblre_regex linden_params wregex in
+      let parsed = V.Extraction.linden_regex_of_warblre_regex linden_params wregex in
+      V.Extraction.maybe_add_lazy_prefix linden_params flags parsed in
     let chars =
       input |> StringLike.of_string
       |> WarbleParams.String.list_from_string
