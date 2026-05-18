@@ -28,6 +28,12 @@ class Debounced {
     clearTimeout(this.timer);
     if (this.fn) this.timer = setTimeout(this.fn, this.delay);
   }
+
+  /** Run `fn` now, cancelling any pending call. */
+  force(): void {
+    clearTimeout(this.timer);
+    this.fn?.();
+  }
 }
 
 /// Input console
@@ -42,7 +48,7 @@ interface ConsoleState {
 
 class RegexConsole {
   private readonly stringInput = byId<HTMLTextAreaElement>("string");
-  private readonly rawStringFlag = byId<HTMLInputElement>("raw-string");
+  private readonly rawCheckbox = byId<HTMLInputElement>("raw");
   private readonly stringErrorMessage = byId("string-error");
 
   private readonly regexInput = byId<HTMLTextAreaElement>("regex");
@@ -55,12 +61,15 @@ class RegexConsole {
 
   readonly regexView = byId("regex-view");
 
+  // Browsers don't like constant history updates
+  private readonly urlWriter = new Debounced(() => this.writeToUrlHash(), 500);
+
   constructor(private readonly onStateChanged: () => void) {
-    const sync = () => this.syncUI();
+    const sync = () => { this.urlWriter.schedule(); this.syncUI(); };
     this.regexInput.addEventListener("input", sync);
     this.stringInput.addEventListener("input", sync);
     this.lastIndexInput.addEventListener("input", sync);
-    this.rawStringFlag.addEventListener("change", sync);
+    this.rawCheckbox.addEventListener("change", sync);
     this.regexFlags.forEach((box) => box.addEventListener("change", sync));
   }
 
@@ -78,7 +87,7 @@ class RegexConsole {
   private input(): string | null {
     try {
       const value = this.stringInput.value;
-      return this.rawStringFlag.checked ? value : JSON.parse(`"${value}"`);
+      return this.rawCheckbox.checked ? value : JSON.parse(`"${value}"`);
     } catch (e) {
       this.renderStringError(String(e));
       return null;
@@ -104,6 +113,30 @@ class RegexConsole {
       flagString: this.flagString(),
       startIndex: +this.lastIndexInput.value,
     };
+  }
+
+  /** Read inputs from the `#…` part of the URL, if any. */
+  readFromUrlHash(): void {
+    const q = new URLSearchParams(location.hash.slice(1));
+    for (const input of [this.regexInput, this.stringInput, this.lastIndexInput])
+      input.value = q.get(input.id) ?? input.value;
+    for (const box of [this.rawCheckbox])
+      box.checked = q.has(box.id) ? q.get(box.id) === "1" : box.checked;
+    const flags = q.get("flags");
+    if (flags !== null)
+      for (const box of this.regexFlags)
+        box.checked = flags.includes(box.dataset.str!);
+  }
+
+  /** Write inputs to `#…` part of the URL. */
+  writeToUrlHash(): void {
+    const q = new URLSearchParams();
+    for (const input of [this.regexInput, this.stringInput, this.lastIndexInput])
+      q.set(input.id, input.value);
+    for (const box of [this.rawCheckbox])
+      q.set(box.id, box.checked ? "1" : "0");
+    q.set("flags", this.flagString());
+    history.replaceState(null, "", `#${q}`);
   }
 
   /** Resize the inputs, toggle the sticky UI, and notify the app. */
@@ -236,9 +269,10 @@ class App {
   private readonly recomputeScheduler = new Debounced(() => this.recompute(), 120);
   private readonly console = new RegexConsole(() => this.recomputeScheduler.schedule());
 
-  /** Lay out the inputs and compute the initial tree. */
   start(): void {
+    this.console.readFromUrlHash();
     this.console.syncUI();
+    this.recomputeScheduler.force();
   }
 
   /** Recompute the tree */

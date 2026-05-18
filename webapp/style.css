@@ -150,8 +150,8 @@ samp {
   input:not(:checked) + label { color: var(--c-muted); }
 }
 
-#raw-string { display: none; }
-#raw-string:not(:checked) + label { color: var(--c-muted); }
+#raw { display: none; }
+#raw:not(:checked) + label { color: var(--c-muted); }
 
 label[for] {
   cursor: pointer;
