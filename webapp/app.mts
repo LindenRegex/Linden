@@ -85,6 +85,12 @@ class RegexConsole {
     }
   }
 
+  /** Read checked flags as their string representation, e.g. "dy". */
+  private flagString(): string {
+    return this.regexFlags.filter((box) => box.checked)
+      .map((box) => box.dataset.str).join("");
+  }
+
   /** Snapshot the inputs (input-string decoding may throw). */
   state(): ConsoleState | null {
     const input: string | null = this.input();
@@ -95,8 +101,7 @@ class RegexConsole {
       flags: Object.fromEntries(
         this.regexFlags.map((box) => [box.id.replace("flag-", ""), box.checked] as const),
       ) as unknown as RegexFlags,
-      flagString: this.regexFlags.filter((box) => box.checked)
-        .map((box) => box.nextElementSibling?.textContent ?? "").join(""),
+      flagString: this.flagString(),
       startIndex: +this.lastIndexInput.value,
     };
   }
