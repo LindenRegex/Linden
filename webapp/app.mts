@@ -112,9 +112,9 @@ class RegexConsole {
   }
 
   /** Compute and format the result of a regex.exec at `lastIndex`. */
-  execResult(): string | null {
+  execResult(state: ConsoleState): string {
     try {
-      const { pattern, input, flagString, startIndex } = this.state()!;
+      const { pattern, input, flagString, startIndex } = state;
       const r = new RegExp(pattern, flagString);
       r.lastIndex = startIndex;
       const m = r.exec(input);
@@ -144,8 +144,8 @@ class RegexConsole {
   }
 
   /** Display the results of the browser's own `exec`. */
-  renderExec(success: boolean): void {
-    this.exec.textContent = success ? this.execResult() : "";
+  renderExec(state: ConsoleState | null): void {
+    this.exec.textContent = state ? this.execResult(state) : "";
   }
 }
 
@@ -241,7 +241,7 @@ class App {
 
     const st: ConsoleState | null = this.console.state();
     if (st === null) {
-      this.console.renderExec(false);
+      this.console.renderExec(null);
       return;
     }
 
@@ -250,7 +250,7 @@ class App {
     const result = run(pattern, flags, input, startIndex, this.fuel, this.console.regexView, hl);
 
     const success = result.NAME === "Ok";
-    this.console.renderExec(success);
+    this.console.renderExec(success ? st : null);
 
     if (success) {
       this.tree.draw(result.VAL);
