@@ -84,7 +84,7 @@ code, kbd, samp, pre { font-family: var(--mono); }
   display: flex;
   flex-direction: column;
 
-  textarea {
+  textarea, input {
     font: inherit;
     background: transparent;
     border: 0;
@@ -97,10 +97,17 @@ code, kbd, samp, pre { font-family: var(--mono); }
     flex: 0 1 auto;
     line-height: 1.5; /* Reduce the underline-to-text distance */
     min-width: 0;
+    margin: -0.2em 0; /* Prevent border from increasing the line height. */
 
     &:hover, &:focus { border-bottom-color: currentColor; }
     &:focus { outline: none; }
   }
+}
+
+#last-index {
+    width: 2em;
+    flex: none;
+    user-select: none; /* Prevent double-click from selecting */
 }
 
 .line {

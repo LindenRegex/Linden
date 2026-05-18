@@ -241,8 +241,8 @@ Section Generic.
     warblre_to_linden' wr 0 (buildnm wr).
 
   (** Compute the annotated tree for a given regex and input. *)
-  Definition tree_of_linden_regex (r: regex) (input: string) (fuel: nat) : option tree :=
-    let inp := init_input input in
+  Definition tree_of_linden_regex (r: regex) (input: string) (startIdx: nat) (fuel: nat) : option tree :=
+    let inp := advance_input_n (init_input input) startIdx forward in
     let rer := reg_exp_record false false false tt (max_group r) in
     compute_tree rer [Areg r] inp GroupMap.empty forward fuel.
 End Generic.

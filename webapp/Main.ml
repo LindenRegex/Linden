@@ -52,7 +52,7 @@ let clear (target : Dom.element) : unit =
 type result = [ `Ok of TreeConvert.node | `Error of string ]
 
 (** Parse `pattern`, render it into `regexView`, and build the tree. *)
-let run (pattern : string) (input : string) (fuel : int)
+let run (pattern : string) (input : string) (startIdx : int) (fuel : int)
       (regexView : Dom.element) (onHover : RegexRender.hover) : result =
   clear regexView;
   let go () =
@@ -63,10 +63,11 @@ let run (pattern : string) (input : string) (fuel : int)
       input |> StringLike.of_string
       |> WarbleParams.String.list_from_string
       |> Obj.magic in
+    let startIdx = BigInt.of_int startIdx in
     let fuel = BigInt.of_int fuel in
     let idMap = numberSubregexes regex in
     RegexRender.render_regex regex regexView idMap onHover;
-    match V.Extraction.tree_of_linden_regex linden_params regex chars fuel with
+    match V.Extraction.tree_of_linden_regex linden_params regex chars startIdx fuel with
     | Some tree -> `Ok (TreeConvert.to_tree idMap tree)
     | None -> `Error "out of fuel" in
   try go ()

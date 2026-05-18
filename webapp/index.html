@@ -26,13 +26,15 @@
         <span class="lead">r = </span>
         <span class="delim-rx">/</span>
         <textarea id="regex" rows="1" spellcheck="false" autocapitalize="off"></textarea>
-        <span class="delim-rx">/</span>
+        <span class="delim-rx">/y</span>
       </code>
       <samp id="regex-error"></samp>
       <samp id="regex-view"></samp>
       <code class="line">
         <span class="prompt">&gt;&gt;</span>
-        <span class="lead">r.exec(s)</span>
+        <span class="lead">r.lastIndex = </span>
+        <input id="last-index" type="number" min="0" value="0" />
+        <span class="lead">; r.exec(s)</span>
       </code>
       <samp id="exec-result"></samp>
     </div>

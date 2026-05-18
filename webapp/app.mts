@@ -35,6 +35,7 @@ class Debounced {
 class RegexConsole {
   readonly regexInput = byId<HTMLTextAreaElement>("regex");
   readonly stringInput = byId<HTMLTextAreaElement>("string");
+  readonly lastIndexInput = byId<HTMLInputElement>("last-index");
   readonly regexView = byId("regex-view");
 
   private readonly error = byId("regex-error");
@@ -42,22 +43,29 @@ class RegexConsole {
 
   constructor() {}
 
-  /** Resize a textarea to its content. */
-  static fitToContent(box: HTMLTextAreaElement): void {
+  static fitAreaToContent(box: HTMLTextAreaElement): void {
     box.cols = Math.max(1, box.value.length);
     box.style.height = "auto";
     box.style.height = `${box.scrollHeight}px`;
   }
 
-  fitInputs(): void {
-    RegexConsole.fitToContent(this.regexInput);
-    RegexConsole.fitToContent(this.stringInput);
+  static fitInputToContent(box: HTMLInputElement): void {
+    box.style.width = `${2 + Math.max(1, box.value.length)}ch`;
   }
 
-  /** Compute and format the result of regex.exec */
-  static execResult(pattern: string, s: string): string | null {
+  fitInputs(): void {
+    RegexConsole.fitAreaToContent(this.regexInput);
+    RegexConsole.fitAreaToContent(this.stringInput);
+    RegexConsole.fitInputToContent(this.lastIndexInput);
+    this.lastIndexInput.max = String(1 + this.stringInput.value.length);
+  }
+
+  /** Compute and format the result of a regex.exec at `lastIndex`. */
+  static execResult(pattern: string, s: string, lastIndex: number): string | null {
     try {
-      const m = new RegExp(pattern).exec(s);
+      const r = new RegExp(pattern, "y");
+      r.lastIndex = lastIndex;
+      const m = r.exec(s);
       return m ? `${JSON.stringify([...m])}  (index ${m.index})` : "null";
     } catch {
       return null;
@@ -73,7 +81,7 @@ class RegexConsole {
   /** Display the results of the browser's own `exec`. */
   renderExec(success: boolean) {
     this.exec.textContent = !success ? "" :
-      RegexConsole.execResult(this.regexInput.value, this.stringInput.value) ?? "";
+      RegexConsole.execResult(this.regexInput.value, this.stringInput.value, +this.lastIndexInput.value) ?? "";
   }
 }
 
@@ -163,6 +171,7 @@ class App {
   constructor() {
     this.console.regexInput.addEventListener("input", () => this.scheduleRecompute());
     this.console.stringInput.addEventListener("input", () => this.scheduleRecompute());
+    this.console.lastIndexInput.addEventListener("input", () => this.scheduleRecompute());
     this.console.regexView.addEventListener("mouseleave", () => this.onHover(null));
   }
 
@@ -170,6 +179,7 @@ class App {
   start(): void {
     this.console.regexInput.value = "(?:a|(?:a(b)|a))bc";
     this.console.stringInput.value = "abc";
+    this.console.lastIndexInput.value = "0";
     this.scheduleRecompute();
   }
 
@@ -186,9 +196,10 @@ class App {
 
     const r = this.console.regexInput.value;
     const s = this.console.stringInput.value;
+    const lastIndex = +this.console.lastIndexInput.value;
     const hl: HoverFn = (first, last, e) =>
       this.highlight(first !== null && last !== null ? { first, last } : null, e);
-    const result = run(r, s, this.fuel, this.console.regexView, hl);
+    const result = run(r, s, lastIndex, this.fuel, this.console.regexView, hl);
 
     if (result.NAME === "Ok") {
       this.tree.draw(result.VAL);
