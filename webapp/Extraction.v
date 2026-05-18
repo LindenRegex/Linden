@@ -233,6 +233,22 @@ Module Extraction.
 Import AnnotatedTrees.
 Import ExtractionSetup.
 
+(** Regex flags provided by the UI. *)
+Record regex_flags := {
+  hasIndices : bool;
+  global : bool;
+  ignoreCase : bool;
+  multiline : bool;
+  dotAll : bool;
+  unicode : bool;
+  unicodeSets : bool;
+  sticky : bool;
+}.
+
+(** Check if any unsupported flags are set (`u`, `v`, `g`). *)
+Definition unsupported_flags (f: regex_flags) : bool :=
+  orb (global f) (orb (unicode f) (unicodeSets f)).
+
 Section Generic.
   Context {params: LindenParameters}.
 
@@ -240,11 +256,23 @@ Section Generic.
   Definition linden_regex_of_warblre_regex (wr: Patterns.Regex) : regex :=
     warblre_to_linden' wr 0 (buildnm wr).
 
-  (** Compute the annotated tree for a given regex and input. *)
-  Definition tree_of_linden_regex (r: regex) (input: string) (startIdx: nat) (fuel: nat) : option tree :=
-    let inp := advance_input_n (init_input input) startIdx forward in
-    let rer := reg_exp_record false false false tt (max_group r) in
-    compute_tree rer [Areg r] inp GroupMap.empty forward fuel.
+  (** Outcome of building a tree: success, fuel exhaustion, or bad flags. *)
+  Inductive tree_or_error :=
+  | TETree (t: tree)
+  | TEOutOfFuel
+  | TEBadFlags.
+
+  (** Build the annotated tree for a regex, flags, input, and start index. *)
+  Definition tree_of_linden_regex (r: regex) (f: regex_flags) (input: string) (startIdx: nat) (fuel: nat) : tree_or_error :=
+    if unsupported_flags f then
+      TEBadFlags
+    else
+      let inp := advance_input_n (init_input input) startIdx forward in
+      let rer := reg_exp_record (ignoreCase f) (multiline f) (dotAll f) tt (max_group r) in
+      match compute_tree rer [Areg r] inp GroupMap.empty forward fuel with
+      | Some t => TETree t
+      | None => TEOutOfFuel
+      end.
 End Generic.
 
 Set Extraction Output Directory ".".

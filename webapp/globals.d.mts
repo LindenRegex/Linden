@@ -26,6 +26,18 @@ interface TreeNode {
 // [first:last]: inclusive on both sides
 type HoverFn = (first: number | null, last: number | null, event?: Event) => void;
 
+/** A JavaScript regex's flags, keyed by their long names. */
+interface RegexFlags {
+  hasIndices: boolean;
+  global: boolean;
+  ignoreCase: boolean;
+  multiline: boolean;
+  dotAll: boolean;
+  unicode: boolean;
+  unicodeSets: boolean;
+  sticky: boolean;
+}
+
 /** The result of a Linden run (as encoded by Melange). */
 type RunResult =
   | { NAME: "Ok"; VAL: TreeNode }

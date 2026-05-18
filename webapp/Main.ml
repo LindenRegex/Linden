@@ -52,7 +52,8 @@ let clear (target : Dom.element) : unit =
 type result = [ `Ok of TreeConvert.node | `Error of string ]
 
 (** Parse `pattern`, render it into `regexView`, and build the tree. *)
-let run (pattern : string) (input : string) (startIdx : int) (fuel : int)
+let run (pattern : string) (flags : V.Extraction.regex_flags)
+      (input : string) (startIdx : int) (fuel : int)
       (regexView : Dom.element) (onHover : RegexRender.hover) : result =
   clear regexView;
   let go () =
@@ -67,8 +68,9 @@ let run (pattern : string) (input : string) (startIdx : int) (fuel : int)
     let fuel = BigInt.of_int fuel in
     let idMap = numberSubregexes regex in
     RegexRender.render_regex regex regexView idMap onHover;
-    match V.Extraction.tree_of_linden_regex linden_params regex chars startIdx fuel with
-    | Some tree -> `Ok (TreeConvert.to_tree idMap tree)
-    | None -> `Error "out of fuel" in
+    match V.Extraction.tree_of_linden_regex linden_params regex flags chars startIdx fuel with
+    | V.Extraction.TETree tree -> `Ok (TreeConvert.to_tree idMap tree)
+    | V.Extraction.TEOutOfFuel -> `Error "out of fuel"
+    | V.Extraction.TEBadFlags -> `Error "unsupported regex flag" in
   try go ()
   with e -> `Error (error_message e)

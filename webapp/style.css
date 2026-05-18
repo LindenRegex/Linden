@@ -141,12 +141,26 @@ samp {
 .delim-rx { color: var(--c-regex); }
 .delim-str { color: var(--c-string); }
 
+#regex-flags {
+  display: inline-flex;
+  color: var(--c-regex);
+
+  input { display: none; }
+  .flag-indicator {
+    cursor: pointer;
+    user-select: none;
+  }
+  .flag-unavailable { display: none; }
+  input:not(:checked) + label { color: var(--c-muted); }
+}
+
 #regex {
   color: var(--c-regex);
   &.bad { color: var(--c-error); }
 }
 #string { color: var(--c-string); }
 #regex-error { color: var(--c-error); }
+#sticky-prefix:not([hidden]) { display: contents; }
 
 .rx {
   border-radius: 0.2em;

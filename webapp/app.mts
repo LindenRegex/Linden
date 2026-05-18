@@ -37,7 +37,9 @@ class RegexConsole {
   readonly stringInput = byId<HTMLTextAreaElement>("string");
   readonly lastIndexInput = byId<HTMLInputElement>("last-index");
   readonly regexView = byId("regex-view");
+  readonly regexFlags = byId("regex-flags");
 
+  private readonly stickyPrefix = byId("sticky-prefix");
   private readonly error = byId("regex-error");
   private readonly exec = byId("exec-result");
 
@@ -53,17 +55,18 @@ class RegexConsole {
     box.style.width = `${2 + Math.max(1, box.value.length)}ch`;
   }
 
-  fitInputs(): void {
+  syncUI(): void {
     RegexConsole.fitAreaToContent(this.regexInput);
     RegexConsole.fitAreaToContent(this.stringInput);
     RegexConsole.fitInputToContent(this.lastIndexInput);
     this.lastIndexInput.max = String(1 + this.stringInput.value.length);
+    this.stickyPrefix.hidden = !byId<HTMLInputElement>("flag-sticky").checked;
   }
 
   /** Compute and format the result of a regex.exec at `lastIndex`. */
-  static execResult(pattern: string, s: string, lastIndex: number): string | null {
+  static execResult(pattern: string, flags: string, s: string, lastIndex: number): string | null {
     try {
-      const r = new RegExp(pattern, "y");
+      const r = new RegExp(pattern, flags);
       r.lastIndex = lastIndex;
       const m = r.exec(s);
       return m ? `${JSON.stringify([...m])}  (index ${m.index})` : "null";
@@ -81,7 +84,23 @@ class RegexConsole {
   /** Display the results of the browser's own `exec`. */
   renderExec(success: boolean) {
     this.exec.textContent = !success ? "" :
-      RegexConsole.execResult(this.regexInput.value, this.stringInput.value, +this.lastIndexInput.value) ?? "";
+      RegexConsole.execResult(this.regexInput.value, this.flagString(),
+        this.stringInput.value, +this.lastIndexInput.value) ?? "";
+  }
+
+  /** The letters of every checked flag, e.g. "dimsy". */
+  flagString(): string {
+    return [...this.regexFlags.querySelectorAll("input:checked + label")]
+      .map((label) => label.textContent)
+      .join("");
+  }
+
+  /** The flags as a record keyed by their long names. */
+  flags(): RegexFlags {
+    return Object.fromEntries(
+      [...this.regexFlags.querySelectorAll<HTMLInputElement>("input")]
+        .map((box) => [box.id.replace("flag-", ""), box.checked] as const),
+    ) as unknown as RegexFlags;
   }
 }
 
@@ -170,6 +189,8 @@ class App {
     this.console.regexInput.addEventListener("input", () => this.scheduleRecompute());
     this.console.stringInput.addEventListener("input", () => this.scheduleRecompute());
     this.console.lastIndexInput.addEventListener("input", () => this.scheduleRecompute());
+    this.console.regexFlags.querySelectorAll("input").forEach((box) =>
+      box.addEventListener("change", () => this.scheduleRecompute()));
     this.console.regexView.addEventListener("mouseleave", () => this.onHover(null));
   }
 
@@ -178,12 +199,13 @@ class App {
     this.console.regexInput.value = "(?:a|(?:a(b)|a))bc";
     this.console.stringInput.value = "abc";
     this.console.lastIndexInput.value = "0";
+    byId<HTMLInputElement>("flag-sticky").checked = true;
     this.scheduleRecompute();
   }
 
   /** Resize the inputs now, and recompute once typing pauses. */
   private scheduleRecompute(): void {
-    this.console.fitInputs();
+    this.console.syncUI();
     this.recomputeScheduler.schedule();
   }
 
@@ -194,10 +216,11 @@ class App {
 
     const r = this.console.regexInput.value;
     const s = this.console.stringInput.value;
+    const flags = this.console.flags();
     const lastIndex = +this.console.lastIndexInput.value;
     const hl: HoverFn = (first, last, e) =>
       this.highlight(first !== null && last !== null ? { first, last } : null, e);
-    const result = run(r, s, lastIndex, this.fuel, this.console.regexView, hl);
+    const result = run(r, flags, s, lastIndex, this.fuel, this.console.regexView, hl);
 
     if (result.NAME === "Ok") {
       this.tree.draw(result.VAL);
