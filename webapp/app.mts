@@ -153,7 +153,6 @@ class RegexConsole {
 
 class TreeView {
   private readonly root = byId("tree");
-  private last: TreeNode | null = null;
   private readonly refitScheduler: Debounced = new Debounced(undefined, 120);
 
   constructor(private readonly onHover: (d: LaidOutNode | null) => void) {
@@ -161,16 +160,19 @@ class TreeView {
   }
 
   /** Draw a tree. */
-  draw(tree?: TreeNode | null): void {
-    if (tree !== undefined) this.last = tree;
-    if (this.last) this.refitScheduler.fn = render(this.last, this.root, this.onHover);
-    else { this.root.replaceChildren(); this.refitScheduler.fn = undefined; }
+  draw(tree: TreeNode): void {
+    this.refitScheduler.fn = render(tree, this.root, this.onHover);
+  }
+
+  /** Empty the pane. */
+  clear(): void {
+    this.root.replaceChildren();
+    this.refitScheduler.fn = undefined;
   }
 
   /** Show an out-of-fuel notice with a retry button. */
   showRetry(fuel: number, onRetry: () => void): void {
-    this.last = null;
-    this.refitScheduler.fn = undefined;
+    this.clear();
     const link = el("a", "retry", `try harder (${fuel})`);
     link.addEventListener("click", onRetry);
     this.root.replaceChildren(el("div", "tree-msg", "Stack overflow; ", link));
@@ -237,8 +239,8 @@ class App {
 
   /** Recompute the tree */
   private recompute(): void {
+    this.treeView.clear();
     this.stateView.clear();
-    this.treeView.draw(null);
     this.console.clearErrors();
 
     const st: ConsoleState | null = this.console.state();
