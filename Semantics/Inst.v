@@ -14,8 +14,5 @@ Proof.
   rewrite Hcasesenst. reflexivity.
 Qed.
 
-Instance naive_params: LindenParameters := make
-    (@Parameters.character_class parameters)
-    (@Parameters.unicode_property_class parameters)
-    (@Parameters.set_class parameters)
-    canonicalize_casesenst.
+Instance naive_params: LindenParameters :=
+  lindenParameters_of_warblre parameters canonicalize_casesenst.
