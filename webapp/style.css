@@ -127,7 +127,7 @@ samp {
   color: var(--c-out);
   overflow-wrap: anywhere;
 }
-#regex-error:empty,
+#regex-error:empty, #string-error:empty,
 #regex-error:not(:empty) + #regex-view:empty {
     display: none;
 }
@@ -159,12 +159,9 @@ label[for] {
   flex: none;
 }
 
-#regex {
-  color: var(--c-regex);
-  &.bad { color: var(--c-error); }
-}
+#regex { color: var(--c-regex); }
 #string { color: var(--c-string); }
-#regex-error { color: var(--c-error); }
+#regex.bad, #string.bad, #regex-error, #string-error { color: var(--c-error); }
 #sticky-prefix:not([hidden]) { display: contents; }
 
 .rx {

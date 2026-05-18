@@ -42,15 +42,15 @@ interface ConsoleState {
 
 class RegexConsole {
   private readonly stringInput = byId<HTMLTextAreaElement>("string");
-  private readonly rawStringFlag = byId<HTMLInputElement>("raw-string")
+  private readonly rawStringFlag = byId<HTMLInputElement>("raw-string");
+  private readonly stringErrorMessage = byId("string-error");
 
   private readonly regexInput = byId<HTMLTextAreaElement>("regex");
   private readonly regexFlags = [...byId("regex-flags").querySelectorAll<HTMLInputElement>("input")];
+  private readonly regexErrorMessage = byId("regex-error");
 
-  private readonly lastIndexInput = byId<HTMLInputElement>("last-index");
   private readonly stickyPrefixText = byId("sticky-prefix");
-
-  private readonly error = byId("regex-error");
+  private readonly lastIndexInput = byId<HTMLInputElement>("last-index");
   private readonly exec = byId("exec-result");
 
   readonly regexView = byId("regex-view");
@@ -75,16 +75,23 @@ class RegexConsole {
   }
 
   /** The current input string, possibly parsed as a JSON string */
-  input(): string {
-    const value = this.stringInput.value;
-    return this.rawStringFlag.checked ? value : JSON.parse(`"${value}"`);
+  input(): string | null {
+    try {
+      const value = this.stringInput.value;
+      return this.rawStringFlag.checked ? value : JSON.parse(`"${value}"`);
+    } catch (e) {
+      this.renderStringError(String(e));
+      return null;
+    }
   }
 
   /** Snapshot the inputs (input-string decoding may throw). */
-  state(): ConsoleState {
+  state(): ConsoleState | null {
+    const input: string | null = this.input();
+    if (input == null) return null;
     return {
+      input,
       pattern: this.regexInput.value,
-      input: this.input(),
       flags: Object.fromEntries(
         this.regexFlags.map((box) => [box.id.replace("flag-", ""), box.checked] as const),
       ) as unknown as RegexFlags,
@@ -107,7 +114,7 @@ class RegexConsole {
   /** Compute and format the result of a regex.exec at `lastIndex`. */
   execResult(): string | null {
     try {
-      const { pattern, input, flagString, startIndex } = this.state();
+      const { pattern, input, flagString, startIndex } = this.state()!;
       const r = new RegExp(pattern, flagString);
       r.lastIndex = startIndex;
       const m = r.exec(input);
@@ -117,10 +124,23 @@ class RegexConsole {
     }
   }
 
-  /** Display or clear a parsing error. */
-  renderError(error: string | null): void {
-    this.regexInput.classList.toggle("bad", error !== null);
-    this.error.textContent = error ?? "";
+  /** Display or clear an error. */
+  private renderError(error: string | null, source: Element, target: Element): void {
+    source.classList.toggle("bad", error !== null);
+    target.textContent = error ?? "";
+  }
+
+  renderStringError(error: string | null): void {
+    this.renderError(error, this.stringInput, this.stringErrorMessage);
+  }
+
+  renderRegexError(error: string | null): void {
+    this.renderError(error, this.regexInput, this.regexErrorMessage);
+  }
+
+  clearErrors(): void {
+    this.renderStringError(null);
+    this.renderRegexError(null);
   }
 
   /** Display the results of the browser's own `exec`. */
@@ -216,15 +236,12 @@ class App {
   /** Recompute the tree */
   private recompute(): void {
     this.state.clear();
-    this.console.renderError(null);
+    this.tree.draw(null);
+    this.console.clearErrors();
 
-    let st: ConsoleState;
-    try {
-      st = this.console.state();
-    } catch (e) {
+    const st: ConsoleState | null = this.console.state();
+    if (st === null) {
       this.console.renderExec(false);
-      this.console.renderError(String(e));
-      this.tree.draw(null);
       return;
     }
 
@@ -232,25 +249,22 @@ class App {
     const hl: HoverFn = (range, e) => this.highlight(range, e);
     const result = run(pattern, flags, input, startIndex, this.fuel, this.console.regexView, hl);
 
-    if (result.NAME === "Ok") {
+    const success = result.NAME === "Ok";
+    this.console.renderExec(success);
+
+    if (success) {
       this.tree.draw(result.VAL);
-      this.console.renderError(null);
-      this.console.renderExec(true);
+    } else if (result.NAME === "Error" && result.VAL === "out of fuel") {
+      this.fuel = Math.round(this.fuel * 1.2);
+      this.tree.showRetry(this.fuel, () => this.recompute());
     } else {
-      this.console.renderExec(false);
-      if (result.NAME === "Error" && result.VAL === "out of fuel") {
-        this.fuel = Math.round(this.fuel * 1.2);
-        this.tree.showRetry(this.fuel, () => this.recompute());
-      } else {
-        this.console.renderError(result.VAL);
-        this.tree.draw(null);
-      }
+      this.console.renderRegexError(result.VAL);
     }
   }
 
   /** Highlight subregexes matching a hovered node. */
   private onHover(d: LaidOutNode | null): void {
-    if (d) this.state.show(d, this.console.input());
+    if (d) this.state.show(d, this.console.input() ?? "");
     else this.state.clear();
     const regexId = d && d.data.regexId != null ? +d.data.regexId : null;
     this.highlight(regexId !== null ? { first: regexId, last: regexId } : null);
