@@ -10,6 +10,10 @@ jobs:
   check:
     name: Check Linden
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rocq: [ "9.2.0" ]
+      fail-fast: false
 
     steps:
       - name: Checkout repository
@@ -24,6 +28,7 @@ jobs:
       - name: Install opam dependencies
         run: |
           opam repo add rocq-released https://rocq-prover.org/opam/released
+          opam pin add --no-action --kind version rocq-core ${{ matrix.rocq }}
           opam install . --deps-only --yes
 
       - name: Dune build
