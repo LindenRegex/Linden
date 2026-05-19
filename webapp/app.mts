@@ -144,7 +144,7 @@ class RegexConsole {
     RegexConsole.fitAreaToContent(this.regexInput);
     RegexConsole.fitAreaToContent(this.stringInput);
     RegexConsole.fitInputToContent(this.lastIndexInput);
-    this.lastIndexInput.max = String(1 + this.stringInput.value.length);
+    this.lastIndexInput.max = String(this.stringInput.value.length);
     this.stickyPrefixText.hidden = !byId<HTMLInputElement>("flag-sticky").checked;
     this.onStateChanged();
   }
