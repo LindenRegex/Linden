@@ -12,3 +12,17 @@ Class LindenParameters := make {
   (* As per the ECMA specification (22.2.2.7.3 Canonicalize ( rer, ch )), when we do not ignore case, canonicalization is the identity function. *)
   canonicalize_casesenst: forall rer chr, RegExpRecord.ignoreCase rer = false -> Character.canonicalize rer chr = chr;
 }.
+
+Section OfWarblre.
+  Context (p: Parameters).
+  Context (canon: forall rer chr,
+              RegExpRecord.ignoreCase rer = false ->
+              Character.canonicalize rer chr = chr).
+
+  Definition lindenParameters_of_warblre : LindenParameters :=
+    make
+      (@Parameters.character_class p)
+      (@Parameters.unicode_property_class p)
+      (@Parameters.set_class p)
+      canon.
+End OfWarblre.
