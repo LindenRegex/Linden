@@ -17,6 +17,6 @@
  (synopsis "Formal Verification for JavaScript Regular Expressions")
  (depends
   (rocq-core (= 9.1.1))
-  (rocq-stdlib (= 9.0.0))
+  (rocq-stdlib (= 9.1.0))
   (warblre (= 0.1.0))
   (strict-order-solver (>= 1.0.0))))
