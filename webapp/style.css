@@ -276,9 +276,6 @@ label[for] {
   stroke-width: var(--stroke-thin);
   &.subregex { stroke: color-mix(in srgb, var(--c-subregex), var(--c-bg) var(--dim, 0%)); stroke-width: var(--stroke-medium); }
 }
-.tedge[data-has-ghost] {
-    stroke-dasharray: 5 4;
-}
 
 .tnode {
   --bg: var(--c-node-bg);
@@ -302,10 +299,14 @@ label[for] {
 
   &[data-kind="Start"] { --bg: var(--c-start-bg); --fg: var(--c-start-fg); --stroke: var(--c-start-stroke); }
   &[data-kind="Choice"] { --bg: var(--c-choice-bg); --fg: var(--c-choice-fg); --stroke: var(--c-choice-stroke); }
-  &[data-status="Match"] { --bg: var(--c-ok-bg); --fg: var(--c-ok-fg); --stroke: var(--c-ok-stroke); }
-  &[data-status="Mismatch"] { --bg: var(--c-fail-bg); --fg: var(--c-fail-fg); --stroke: var(--c-fail-stroke); }
+  &[data-status="Match"]:not([data-ghost]) { --bg: var(--c-ok-bg); --fg: var(--c-ok-fg); --stroke: var(--c-ok-stroke); }
+  &[data-status="Mismatch"]:not([data-ghost]) { --bg: var(--c-fail-bg); --fg: var(--c-fail-fg); --stroke: var(--c-fail-stroke); }
 
   &.subregex > :first-child { stroke: var(--c-subregex); stroke-width: var(--stroke-medium); }
+}
+
+.tedge:is([data-has-ghost], [data-ghost]), .tnode:is([data-ghost]) {
+  stroke-dasharray: 5 4;
 }
 
 #panes:not(:has(.tnode.hover)) .tnode.active > :first-child {

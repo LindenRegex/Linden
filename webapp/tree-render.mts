@@ -79,7 +79,7 @@ export type TreeClickFn = (g: SVGGElement) => void;
 
 export function render(data: TreeNode, container: HTMLElement, onHover: TreeHoverFn, onClick: TreeClickFn): () => void {
   const start: TreeNode = {
-    name: "Start", arg: "", result: null, hasGhostSubtree: false,
+    name: "Start", arg: "", result: null, ghost: false, hasGhostSubtree: false,
     regexId: null, redundant: false, pre: data.pre, post: data.pre, children: [data],
   };
 
@@ -138,6 +138,8 @@ export function render(data: TreeNode, container: HTMLElement, onHover: TreeHove
       (d.target as LaidOutNode).data.regexId)
     .attr("data-redundant", (d) =>
       (d.target as LaidOutNode).data.redundant ? "" : null)
+    .attr("data-ghost", (d) =>
+      (d.target as LaidOutNode).data.ghost ? "" : null)
     .attr("data-has-ghost", (d) =>
       d.source.data.hasGhostSubtree && d.source.children?.[0] === d.target ? "" : null)
     .attr("d", d3.linkVertical<HierarchyPointLink<TreeNode>, LaidOutNode>()
@@ -154,6 +156,7 @@ export function render(data: TreeNode, container: HTMLElement, onHover: TreeHove
     .attr("data-status", (d) => d.data.result)
     .attr("data-regex-id", (d) => d.data.regexId)
     .attr("data-redundant", (d) => d.data.redundant ? "" : null)
+    .attr("data-ghost", (d) => d.data.ghost ? "" : null)
     .attr("transform", (d) => `translate(${d.x},${d.y})`)
     .on("mouseenter", (e, _) => { onHover(e.currentTarget); })
     .on("mouseleave", () => onHover(null))
