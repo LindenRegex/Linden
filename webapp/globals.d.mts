@@ -19,6 +19,7 @@ interface TreeNode {
   result: "Match" | "Mismatch" | null;
   hasGhostSubtree: boolean;
   regexId: number | null;
+  redundant: boolean;
   pre: EngineState;
   post: EngineState | null;
   children: TreeNode[];
@@ -37,6 +38,7 @@ interface RegexFlags {
   unicode: boolean;
   unicodeSets: boolean;
   sticky: boolean;
+  linear: boolean;
 }
 
 /** The result of a Linden run (as encoded by Melange). */

@@ -101,7 +101,7 @@ class RegexConsole {
 
   /** Read checked flags as their string representation, e.g. "dy". */
   private flagString(): string {
-    return this.regexFlags.filter((box) => box.checked)
+    return this.regexFlags.filter((box) => box.checked && box.dataset.skip === undefined)
       .map((box) => box.dataset.str).join("");
   }
 

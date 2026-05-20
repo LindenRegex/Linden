@@ -18,17 +18,39 @@ let same (action : V.action) (regex : V.regex) : bool =
   match action, regex with
   | V.Areg (V.Quantified0 (_, _, _, lb)), V.Quantified0 (_, _, _, rb) -> lb == rb
   | V.Aclose gid, V.Group0 (g, _) -> BigInt.equal g gid
-  | V.Areg ar, _ -> ar == regex
+  | V.Areg ar, r -> ar == r
   | _ -> false
 
 (** Compute the id of the first regex in `acts`. *)
-let rec regex_id_of (idMap : (V.regex * int) list) (acts : V.actions)
-    : int Js.Nullable.t =
+let rec regex_id_of (idMap : (V.regex * int) list) (acts : V.actions) : int option =
   match acts with
-  | [] -> Js.Nullable.null
+  | [] -> None
   | V.Acheck _ :: rest -> regex_id_of idMap rest
-  | a :: _ -> List.find_opt (fun (r, _) -> same a r) idMap
-              |> Option.map snd |> Js.Nullable.fromOption
+  | a :: _ -> List.find_opt (fun (r, _) -> same a r) idMap |> Option.map snd
+
+(** * Redundancy checks *)
+
+let same_regex (r0 : V.regex) (r1 : V.regex) : bool =
+  match r0, r1 with
+  | V.Quantified0 (lg, lm, ld, lb), V.Quantified0 (rg, rm, rd, rb) ->
+     lg = rg && lm = rm && ld = rd && lb == rb
+  | _, _ -> r0 == r1
+
+let same_action (a0 : V.action) (a1 : V.action) : bool =
+  match a0, a1 with
+  | V.Areg r0, V.Areg r1 -> same_regex r0 r1
+  | V.Aclose g0, V.Aclose g1 -> BigInt.equal g0 g1
+  | V.Acheck i0, V.Acheck i1 -> i0 = i1
+  | _, _ -> false
+
+let rec same_actions (acts0 : V.actions) (acts1 : V.actions) : bool =
+  match acts0, acts1 with
+  | [], [] -> true
+  | a0 :: r0, a1 :: r1 -> same_action a0 a1 && same_actions r0 r1
+  | _, _ -> false
+
+let same_match_state (idx, dir, acts) (idx', dir', acts') =
+  idx = idx' && dir = dir' && same_actions acts acts'
 
 (** * Pretty-printing *)
 
@@ -73,6 +95,7 @@ type node = {
   result : [ `Match | `Mismatch ] Js.Nullable.t;
   hasGhostSubtree : bool;
   regexId : int Js.Nullable.t;
+  redundant : bool;
   pre : engine_state;
   post : engine_state Js.Nullable.t;
   children : node array;
@@ -99,19 +122,30 @@ let rec unwrap (default : A.annotation) : A.tree -> A.annotation * A.tree = func
   | A.Annot (a, t) -> unwrap a t
   | bare -> (default, bare)
 
+(** Record this match state in `seen` and return whether it was already there. *)
+let check_seen (seen : (int * string * V.actions) list ref)
+      (acts : V.actions) (pre : engine_state) : bool =
+  let key = (pre.idx, pre.dir, acts) in
+  let was_seen = List.exists (same_match_state key) !seen in
+  if not was_seen then seen := key :: !seen;
+  was_seen
+
 (** Convert an annotated tree. *)
 let rec to_node (idMap : (V.regex * int) list) (input : string)
+          (seen : (int * string * V.actions) list ref) (parent_redundant : bool)
           (default : A.annotation) (t : A.tree) : node =
   let ann, tree_node = unwrap default t in
   let pre = state_js input ann in
   let regex_id = regex_id_of idMap ann.A.acts in
+  let redundant = parent_redundant || (not (ann == default) && check_seen seen ann.A.acts pre) in
   let make ?(result = Js.Nullable.null) ?(ghost = false) name arg subjs : node =
-    let children = List.map (to_node idMap input ann) subjs in
+    let children = List.map (to_node idMap input seen redundant ann) subjs in
     let post = match children with
       | f :: _ -> Js.Nullable.return f.pre
       | [] -> Js.Nullable.null in
-    { name; arg; result; hasGhostSubtree = ghost; regexId = regex_id; pre; post;
-      children = Array.of_list children } in
+    { name; arg; result; hasGhostSubtree = ghost;
+      regexId = regex_id |> Js.Nullable.fromOption; redundant;
+      pre; post; children = Array.of_list children } in
   match tree_node with
   | A.Mismatch ->
     let name, arg = fail_label ann.A.acts in
@@ -141,5 +175,6 @@ let rec to_node (idMap : (V.regex * int) list) (input : string)
 
 (** Entry point. *)
 let to_tree (idMap : (V.regex * int) list) (input: string) : A.tree -> node = function
-  | A.Annot (ann, _) as t -> to_node idMap input ann t
+  | A.Annot (ann, _) as t ->
+    to_node idMap input (ref []) false ann t
   | _ -> assert false

@@ -215,6 +215,12 @@ label[for] {
   background: var(--c-bg);
 }
 
+#console:has(#flag-linear:checked) ~ #panes {
+  .tedge, .tnode:not(.active) {
+    &[data-redundant] { --dim: 80%; }
+  }
+}
+
 .tree-msg { padding: var(--gap); color: var(--c-ink); }
 .retry {
   color: var(--c-string);

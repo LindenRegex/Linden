@@ -243,6 +243,7 @@ Record regex_flags := {
   unicode : bool;
   unicodeSets : bool;
   sticky : bool;
+  linear : bool;
 }.
 
 (** Check if any unsupported flags are set (`u`, `v`, `g`). *)
