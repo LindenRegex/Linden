@@ -74,9 +74,9 @@ function drawShape(target: SVGGElement, d: LaidOutNode): void {
   }
 }
 
-export type OnSelect = (d: LaidOutNode | null) => void;
+export type TreeHoverFn = (g: SVGGElement | null) => void;
 
-export function render(data: TreeNode, container: HTMLElement, onSelect: OnSelect): () => void {
+export function render(data: TreeNode, container: HTMLElement, onHover: TreeHoverFn): () => void {
   const start: TreeNode = {
     name: "Start", arg: "", result: null, hasGhostSubtree: false,
     regexId: null, pre: data.pre, post: data.pre, children: [data],
@@ -84,9 +84,12 @@ export function render(data: TreeNode, container: HTMLElement, onSelect: OnSelec
 
   const root = d3.hierarchy<TreeNode>(start, (d) => d.children);
 
+  // Nodes in pre-order (the engine's exploration order)
+  const allNodes: LaidOutNode[] = [];
+  root.eachBefore((node) => allNodes.push(node as LaidOutNode));
+
   // Precompute node parameters before rendering
-  root.descendants().forEach((node) => {
-    const d = node as LaidOutNode;
+  allNodes.forEach((d) => {
     const { name, arg, result } = d.data;
     const mark = (result && { "Match": " ✓", "Mismatch": " ✗" }[result]) ?? "";
     d.label = { name, arg, mark };
@@ -110,10 +113,15 @@ export function render(data: TreeNode, container: HTMLElement, onSelect: OnSelec
   const view = svg
     .append("g");
 
+  const mayPan = (e: any) =>
+    e.button == 0 && (e.type === "wheel" ||
+      (e.target as Element).closest(".tnode") == null);
+
   const zoom = d3
     .zoom<SVGSVGElement, unknown>()
     .scaleExtent([MIN_ZOOM, MAX_ZOOM])
     .extent([[0, 0], [W, H]])
+    .filter(mayPan)
     .on("start", () => svg.classed("panning", true))
     .on("zoom", (e) => view.attr("transform", e.transform))
     .on("end", () => svg.classed("panning", false));
@@ -136,14 +144,15 @@ export function render(data: TreeNode, container: HTMLElement, onSelect: OnSelec
   const nodes = view
     .append("g")
     .selectAll<SVGGElement, LaidOutNode>("g")
-    .data(root.descendants() as LaidOutNode[])
+    .data(allNodes)
     .join("g")
     .attr("class", "tnode")
     .attr("data-kind", (d) => d.data.name)
     .attr("data-status", (d) => d.data.result)
     .attr("data-regex-id", (d) => d.data.regexId ?? null)
     .attr("transform", (d) => `translate(${d.x},${d.y})`)
-    .on("mouseenter", (_e, d) => onSelect(d));
+    .on("mouseenter", (e, _) => { onHover(e.currentTarget); })
+    .on("mouseleave", () => onHover(null));
 
   nodes.each(function (d) { drawShape(this, d); });
 

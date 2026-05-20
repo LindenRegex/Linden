@@ -9,5 +9,5 @@ export function run(
   startIdx: number,
   fuel: number,
   regexView: HTMLElement,
-  onHover: HoverFn,
+  onHover: RangeHoverFn,
 ): RunResult;

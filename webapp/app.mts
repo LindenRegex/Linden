@@ -1,14 +1,20 @@
 /** Linden regex explorer */
 
+import { select } from "d3";
 import { run } from "./Main.mjs";
 import { render } from "./tree-render.mjs";
-import type { LaidOutNode } from "./tree-render.mjs";
+import type { LaidOutNode, TreeHoverFn } from "./tree-render.mjs";
 
 /// Utilities
 
 /** Like `getElementById`, but with types */
 function byId<E extends HTMLElement = HTMLElement>(id: string): E {
   return document.getElementById(id) as E;
+}
+
+/** Like `getElementsByClassName`, but return just the first element, if any. */
+function byClass<E extends Element = HTMLElement>(cls: string): E | null {
+  return document.getElementsByClassName(cls).item(0) as E | null;
 }
 
 /** Build an element */
@@ -193,7 +199,7 @@ class TreeView {
   private readonly root = byId("tree");
   private readonly refitScheduler: Debounced = new Debounced(undefined, 120);
 
-  constructor(private readonly onHover: (d: LaidOutNode | null) => void) {
+  constructor(private readonly onHover: TreeHoverFn) {
     window.addEventListener("resize", () => this.refitScheduler.schedule());
   }
 
@@ -264,13 +270,27 @@ class StateView {
 
 class App {
   private fuel = 30;
-  private readonly treeView = new TreeView((d) => this.onHover(d));
+  private readonly treeView = new TreeView((el) => this.onTreeHover(el));
   private readonly stateView = new StateView();
   private readonly recomputeScheduler = new Debounced(() => this.recompute(), 120);
   private readonly console = new RegexConsole(() => this.recomputeScheduler.schedule());
 
   start(): void {
-    byId("panes").addEventListener("mouseleave", () => this.onHover(null));
+    byId("panes").addEventListener("mouseleave", () => this.clearFocus("hover"));
+    byId("tree").addEventListener("click", (e) => {
+      const g = (e.target as Element).closest(".tnode");
+      if (g) this.toggleFocus("active", g);
+    });
+
+    byId("step-stop").addEventListener("click", () => this.clearFocus("active"));
+    byId("step-back").addEventListener("click", () => this.moveFocus(-1));
+    byId("step-fwd").addEventListener("click", () => this.moveFocus(1));
+
+    document.addEventListener("keydown", (e) => {
+      const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (dir && !(e.target as Element).closest("#console")) this.moveFocus(dir);
+    });
+
     this.console.readFromUrlHash();
     this.console.syncUI();
     this.recomputeScheduler.force();
@@ -289,7 +309,7 @@ class App {
     }
 
     const { pattern, flags, input, startIndex } = st;
-    const hl: HoverFn = (range, e) => this.highlight(range, e);
+    const hl: RangeHoverFn = (range, e) => this.highlight(range, e);
     const result = run(pattern, flags, input, startIndex, this.fuel, this.console.regexView, hl);
 
     const success = result.NAME === "Ok";
@@ -305,12 +325,55 @@ class App {
     }
   }
 
-  /** Highlight subregexes matching a hovered node. */
-  private onHover(d: LaidOutNode | null): void {
-    if (d) this.stateView.show(d);
-    else this.stateView.clear();
-    const regexId = d && d.data.regexId != null ? +d.data.regexId : null;
-    this.highlight(regexId !== null ? { first: regexId, last: regexId } : null);
+  /** Highlight or clear subregexes matching a hovered node.
+      Hovers persist unless there's an active node. */
+  private onTreeHover(g: Element | null): void {
+    if (g) this.setFocus("hover", g);
+    else if (byClass("active")) this.clearFocus("hover");
+  }
+
+  /** Mark `g` with `cls`, unmarking any other. */
+  private setFocus(cls: string, g: Element | null): void {
+    byClass(cls)?.classList.remove(cls);
+    g?.classList.add(cls);
+    this.refreshFocusState();
+  }
+
+  /** Unmark the node tagged with cls, if any. */
+  private clearFocus(cls: string): void {
+    this.setFocus(cls, null);
+  }
+
+  /** Toggle `cls` on `g`, unmarking any other. */
+  private toggleFocus(cls: string, g: Element): void {
+    if (g.classList.contains(cls)) this.clearFocus(cls);
+    else this.setFocus(cls, g);
+  }
+
+  /** Update subregex highlights and state pane contents. */
+  private refreshFocusState(): void {
+    const source = byClass<SVGGElement>("hover") ?? byClass<SVGGElement>("active");
+    if (source) {
+      const d = select<SVGGElement, LaidOutNode>(source).datum();
+      this.stateView.show(d);
+      const regexId = d.data.regexId && +d.data.regexId;
+      this.highlight(regexId !== null ? { first: regexId, last: regexId } : null);
+    } else {
+      this.stateView.clear();
+      this.highlight(null);
+    }
+  }
+
+  /** Move the .active node by `dir` (±1) in document order. */
+  private moveFocus(dir: number): void {
+    const current = byClass("active");
+    const next = current ?
+      (dir > 0 ? current.nextElementSibling : current.previousElementSibling)
+      : document.querySelector(".tnode"); // Default to selecting first node
+    if (next) {
+      this.clearFocus("hover"); // Disable hover so we can see the active
+      this.setFocus("active", next);
+    }
   }
 
   /** Highlight all subregexes whose id is in [first:last]. */

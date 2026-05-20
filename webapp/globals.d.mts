@@ -25,7 +25,7 @@ interface TreeNode {
 }
 
 // [first:last] inclusive
-type HoverFn = (range: { first: number; last: number } | null, event?: Event) => void;
+type RangeHoverFn = (range: { first: number; last: number } | null, event?: Event) => void;
 
 /** A JavaScript regex's flags, keyed by their long names. */
 interface RegexFlags {
