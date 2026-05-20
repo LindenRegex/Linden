@@ -108,7 +108,7 @@ class RegexConsole {
   /** Snapshot the inputs (input-string decoding may throw). */
   state(): ConsoleState | null {
     const input: string | null = this.input();
-    if (input == null) return null;
+    if (input === null) return null;
     const flags = Object.fromEntries(
       this.regexFlags.map((box) => [box.title, box.checked] as const)
     ) as unknown as RegexFlags;
@@ -397,7 +397,7 @@ class App {
   static highlight(range: { first: number; last: number } | null, event?: Event): void {
     event?.stopPropagation();
     const inRange = (id: string | undefined) =>
-      range !== null && id != null && +id >= range.first && +id <= range.last;
+      range !== null && id !== undefined && +id >= range.first && +id <= range.last;
     const selector = "#regex-view .rx, #tree svg .tnode, #tree svg .tedge";
     document.querySelectorAll<SVGElement | HTMLElement>(selector).forEach((g) =>
       g.classList.toggle("subregex", inRange(g.dataset.regexId)));

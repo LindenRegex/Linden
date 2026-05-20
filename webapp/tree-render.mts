@@ -115,8 +115,8 @@ export function render(data: TreeNode, container: HTMLElement, onHover: TreeHove
     .append("g");
 
   const mayPan = (e: any) =>
-    e.button == 0 && (e.type === "wheel" ||
-      (e.target as Element).closest(".tnode") == null);
+    e.button === 0 && (e.type === "wheel" ||
+      (e.target as Element).closest(".tnode") === null);
 
   const zoom = d3
     .zoom<SVGSVGElement, unknown>()
