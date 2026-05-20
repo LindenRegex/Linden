@@ -178,7 +178,10 @@ label[for] {
 #regex { color: var(--c-regex); }
 #string { color: var(--c-string); }
 #regex.bad, #string.bad, #regex-error, #string-error { color: var(--c-error); }
-#sticky-prefix:not([hidden]) { display: contents; }
+#sticky-prefix {
+  display: contents;
+  #console:has(#flag-sticky:not(:checked)) & { display: none; }
+}
 
 .rx {
   border-radius: 0.2em;

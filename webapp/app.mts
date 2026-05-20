@@ -61,7 +61,6 @@ class RegexConsole {
   private readonly regexFlags = [...byId("regex-flags").querySelectorAll<HTMLInputElement>("input")];
   private readonly regexErrorMessage = byId("regex-error");
 
-  private readonly stickyPrefixText = byId("sticky-prefix");
   private readonly lastIndexInput = byId<HTMLInputElement>("last-index");
   private readonly exec = byId("exec-result");
 
@@ -110,14 +109,14 @@ class RegexConsole {
   state(): ConsoleState | null {
     const input: string | null = this.input();
     if (input == null) return null;
+    const flags = Object.fromEntries(
+      this.regexFlags.map((box) => [box.title, box.checked] as const)
+    ) as unknown as RegexFlags;
     return {
       input,
       pattern: this.regexInput.value,
-      flags: Object.fromEntries(
-        this.regexFlags.map((box) => [box.id.replace("flag-", ""), box.checked] as const),
-      ) as unknown as RegexFlags,
-      flagString: this.flagString(),
-      startIndex: +this.lastIndexInput.value,
+      flags, flagString: this.flagString(),
+      startIndex: flags.sticky ? +this.lastIndexInput.value : 0
     };
   }
 
@@ -145,13 +144,12 @@ class RegexConsole {
     history.replaceState(null, "", `#${q}`);
   }
 
-  /** Resize the inputs, toggle the sticky UI, and notify the app. */
+  /** Resize the inputs and notify the app. */
   syncUI(): void {
     RegexConsole.fitAreaToContent(this.regexInput);
     RegexConsole.fitAreaToContent(this.stringInput);
     RegexConsole.fitInputToContent(this.lastIndexInput);
     this.lastIndexInput.max = String(this.stringInput.value.length);
-    this.stickyPrefixText.hidden = !byId<HTMLInputElement>("flag-sticky").checked;
     this.onStateChanged();
   }
 
