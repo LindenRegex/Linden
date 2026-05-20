@@ -306,16 +306,16 @@ label[for] {
 }
 
 :is(.tedge, .tnode):not([data-ghost-depth="0"]) {
-  &[data-ghost-depth="1"] { --dash-gap: 1; }
-  &[data-ghost-depth="2"] { --dash-gap: 2; }
-  &[data-ghost-depth="3"] { --dash-gap: 3; }
-  &[data-ghost-depth="4"] { --dash-gap: 4; }
-  &[data-ghost-depth="5"] { --dash-gap: 5; }
-  &[data-ghost-depth="6"] { --dash-gap: 6; }
-  &[data-ghost-depth="7"] { --dash-gap: 7; }
-  &[data-ghost-depth="8"] { --dash-gap: 8; }
-  &[data-ghost-depth="9"] { --dash-gap: 9; }
-  stroke-dasharray: 4 calc(2 + 3 * (var(--dash-gap) - 1));
+  &[data-ghost-depth="1"] { --dash-gap: 2; }
+  &[data-ghost-depth="2"] { --dash-gap: 5; }
+  &[data-ghost-depth="3"] { --dash-gap: 8; }
+  &[data-ghost-depth="4"] { --dash-gap: 11; }
+  &[data-ghost-depth="5"] { --dash-gap: 14; }
+  &[data-ghost-depth="6"] { --dash-gap: 17; }
+  &[data-ghost-depth="7"] { --dash-gap: 20; }
+  &[data-ghost-depth="8"] { --dash-gap: 23; }
+  &[data-ghost-depth="9"] { --dash-gap: 26; }
+  stroke-dasharray: 4 var(--dash-gap);
 }
 
 #panes:not(:has(.tnode.hover)) .tnode.active > :first-child {
