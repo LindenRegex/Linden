@@ -53,6 +53,7 @@
     --c-muted: #79828f;
     --c-border: #3a3f4a;
     --c-out: #aab2bf;
+    --c-highlight: royalblue;
   }
 }
 
@@ -83,7 +84,7 @@ h1 { font-size: larger; margin: 0; }
 
 code, kbd, samp, pre { font-family: var(--mono); }
 
-textarea, input, button { font: inherit; }
+textarea, input, button { font: inherit; color: inherit; }
 
 label[for], button {
   cursor: pointer;
@@ -188,7 +189,6 @@ label[for] {
   &.subregex { background: var(--c-highlight); }
   sub {
       bottom: -0.5em;
-      color: var(--c-muted);
       font-family: var(--sans);
       margin-right: 0.1em;
       position: relative;
