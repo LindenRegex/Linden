@@ -3,7 +3,7 @@
 import { select } from "d3";
 import { run } from "./Main.mjs";
 import { render } from "./tree-render.mjs";
-import type { LaidOutNode, TreeHoverFn } from "./tree-render.mjs";
+import type { LaidOutNode, TreeHoverFn, TreeClickFn } from "./tree-render.mjs";
 
 /// Utilities
 
@@ -199,13 +199,13 @@ class TreeView {
   private readonly root = byId("tree");
   private readonly refitScheduler: Debounced = new Debounced(undefined, 120);
 
-  constructor(private readonly onHover: TreeHoverFn) {
+  constructor(readonly onHover: TreeHoverFn, readonly onClick: TreeClickFn,) {
     window.addEventListener("resize", () => this.refitScheduler.schedule());
   }
 
   /** Draw a tree. */
   draw(tree: TreeNode): void {
-    this.refitScheduler.fn = render(tree, this.root, this.onHover);
+    this.refitScheduler.fn = render(tree, this.root, this.onHover, this.onClick);
   }
 
   /** Empty the pane. */
@@ -266,63 +266,34 @@ class StateView {
   }
 }
 
-/// Main app
+/// Display
 
-class App {
-  private fuel = 30;
-  private readonly treeView = new TreeView((el) => this.onTreeHover(el));
+class Display {
+  private readonly treeView: TreeView;
   private readonly stateView = new StateView();
-  private readonly recomputeScheduler = new Debounced(() => this.recompute(), 120);
-  private readonly console = new RegexConsole(() => this.recomputeScheduler.schedule());
 
-  start(): void {
+  constructor() {
+    this.treeView = new TreeView(
+      (g) => this.onTreeHover(g),
+      (g) => this.toggleFocus("active", g),
+    );
+
     byId("panes").addEventListener("mouseleave", () => this.clearFocus("hover"));
-    byId("tree").addEventListener("click", (e) => {
-      const g = (e.target as Element).closest(".tnode");
-      if (g) this.toggleFocus("active", g);
-    });
-
     byId("step-stop").addEventListener("click", () => this.clearFocus("active"));
     byId("step-back").addEventListener("click", () => this.moveFocus(-1));
     byId("step-fwd").addEventListener("click", () => this.moveFocus(1));
-
-    document.addEventListener("keydown", (e) => {
-      const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-      if (dir && !(e.target as Element).closest("#console")) this.moveFocus(dir);
-    });
-
-    this.console.readFromUrlHash();
-    this.console.syncUI();
-    this.recomputeScheduler.force();
+    document.addEventListener("keydown", (e) => this.onKeyDown(e));
   }
 
-  /** Recompute the tree */
-  private recompute(): void {
-    this.treeView.clear();
-    this.stateView.clear();
-    this.console.clearErrors();
+  /** Draw a tree. */
+  drawTree(tree: TreeNode): void { this.treeView.draw(tree); }
 
-    const st: ConsoleState | null = this.console.state();
-    if (st === null) {
-      this.console.renderExec(null);
-      return;
-    }
+  /** Empty both panes. */
+  clear(): void { this.treeView.clear(); this.stateView.clear(); }
 
-    const { pattern, flags, input, startIndex } = st;
-    const hl: RangeHoverFn = (range, e) => this.highlight(range, e);
-    const result = run(pattern, flags, input, startIndex, this.fuel, this.console.regexView, hl);
-
-    const success = result.NAME === "Ok";
-    this.console.renderExec(success ? st : null);
-
-    if (success) {
-      this.treeView.draw(result.VAL);
-    } else if (result.NAME === "Error" && result.VAL === "out of fuel") {
-      this.fuel = Math.round(this.fuel * 1.2);
-      this.treeView.showRetry(this.fuel, () => this.recompute());
-    } else {
-      this.console.renderRegexError(result.VAL);
-    }
+  /** Show an out-of-fuel notice with a retry button. */
+  showRetry(fuel: number, onRetry: () => void): void {
+    this.treeView.showRetry(fuel, onRetry);
   }
 
   /** Highlight or clear subregexes matching a hovered node.
@@ -330,6 +301,12 @@ class App {
   private onTreeHover(g: Element | null): void {
     if (g) this.setFocus("hover", g);
     else if (byClass("active")) this.clearFocus("hover");
+  }
+
+  /** Step the active node using arrow keys. */
+  private onKeyDown(e: KeyboardEvent): void {
+    const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (dir && !(e.target as Element).closest("#console")) this.moveFocus(dir);
   }
 
   /** Mark `g` with `cls`, unmarking any other. */
@@ -350,20 +327,6 @@ class App {
     else this.setFocus(cls, g);
   }
 
-  /** Update subregex highlights and state pane contents. */
-  private refreshFocusState(): void {
-    const source = byClass<SVGGElement>("hover") ?? byClass<SVGGElement>("active");
-    if (source) {
-      const d = select<SVGGElement, LaidOutNode>(source).datum();
-      this.stateView.show(d);
-      const regexId = d.data.regexId && +d.data.regexId;
-      this.highlight(regexId !== null ? { first: regexId, last: regexId } : null);
-    } else {
-      this.stateView.clear();
-      this.highlight(null);
-    }
-  }
-
   /** Move the .active node by `dir` (±1) in document order. */
   private moveFocus(dir: number): void {
     const current = byClass("active");
@@ -376,8 +339,64 @@ class App {
     }
   }
 
+  /** Update subregex highlights and state pane contents. */
+  private refreshFocusState(): void {
+    const source = byClass<SVGGElement>("hover") ?? byClass<SVGGElement>("active");
+    if (source) {
+      const d = select<SVGGElement, LaidOutNode>(source).datum();
+      this.stateView.show(d);
+      const regexId = d.data.regexId;
+      App.highlight(regexId !== null ? { first: regexId, last: regexId } : null);
+    } else {
+      this.stateView.clear();
+      App.highlight(null);
+    }
+  }
+}
+
+/// Main app
+
+class App {
+  private fuel = 30;
+  private readonly recomputeScheduler = new Debounced(() => this.recompute(), 120);
+  private readonly display = new Display();
+  private readonly console = new RegexConsole(() => this.recomputeScheduler.schedule());
+
+  start(): void {
+    this.console.readFromUrlHash();
+    this.console.syncUI();
+    this.recomputeScheduler.force();
+  }
+
+  /** Recompute the tree */
+  private recompute(): void {
+    this.display.clear();
+    this.console.clearErrors();
+
+    const st: ConsoleState | null = this.console.state();
+    if (st === null) {
+      this.console.renderExec(null);
+      return;
+    }
+
+    const { pattern, flags, input, startIndex } = st;
+    const result = run(pattern, flags, input, startIndex, this.fuel, this.console.regexView, App.highlight);
+
+    const success = result.NAME === "Ok";
+    this.console.renderExec(success ? st : null);
+
+    if (success) {
+      this.display.drawTree(result.VAL);
+    } else if (result.NAME === "Error" && result.VAL === "out of fuel") {
+      this.fuel = Math.round(this.fuel * 1.2);
+      this.display.showRetry(this.fuel, () => this.recompute());
+    } else {
+      this.console.renderRegexError(result.VAL);
+    }
+  }
+
   /** Highlight all subregexes whose id is in [first:last]. */
-  private highlight(range: { first: number; last: number } | null, event?: Event): void {
+  static highlight(range: { first: number; last: number } | null, event?: Event): void {
     event?.stopPropagation();
     const inRange = (id: string | undefined) =>
       range !== null && id != null && +id >= range.first && +id <= range.last;

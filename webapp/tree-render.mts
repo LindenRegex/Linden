@@ -75,8 +75,9 @@ function drawShape(target: SVGGElement, d: LaidOutNode): void {
 }
 
 export type TreeHoverFn = (g: SVGGElement | null) => void;
+export type TreeClickFn = (g: SVGGElement) => void;
 
-export function render(data: TreeNode, container: HTMLElement, onHover: TreeHoverFn): () => void {
+export function render(data: TreeNode, container: HTMLElement, onHover: TreeHoverFn, onClick: TreeClickFn): () => void {
   const start: TreeNode = {
     name: "Start", arg: "", result: null, hasGhostSubtree: false,
     regexId: null, pre: data.pre, post: data.pre, children: [data],
@@ -152,7 +153,8 @@ export function render(data: TreeNode, container: HTMLElement, onHover: TreeHove
     .attr("data-regex-id", (d) => d.data.regexId ?? null)
     .attr("transform", (d) => `translate(${d.x},${d.y})`)
     .on("mouseenter", (e, _) => { onHover(e.currentTarget); })
-    .on("mouseleave", () => onHover(null));
+    .on("mouseleave", () => onHover(null))
+    .on("click", (e) => { onClick(e.currentTarget); });
 
   nodes.each(function (d) { drawShape(this, d); });
 
