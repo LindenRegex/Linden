@@ -165,7 +165,6 @@ samp {
   color: var(--c-regex);
 
   input { display: none; }
-  .flag-unavailable { display: none; }
   input:not(:checked) + label { color: var(--c-muted); }
 }
 
