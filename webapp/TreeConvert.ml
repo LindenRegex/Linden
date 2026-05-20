@@ -93,7 +93,7 @@ type node = {
   name : string;
   arg : string;
   result : [ `Match | `Mismatch ] Js.Nullable.t;
-  ghost : bool;
+  ghostDepth : int;
   hasGhostSubtree : bool;
   regexId : int Js.Nullable.t;
   redundant : bool;
@@ -134,7 +134,7 @@ let check_seen (seen : (int * string * V.actions) list ref)
 (** Convert an annotated tree. *)
 let rec to_node (idMap : (V.regex * int) list) (input : string)
           (seen : (int * string * V.actions) list ref) (parent_redundant : bool)
-          (default : A.annotation) (ghost : bool) (t : A.tree) : node =
+          (default : A.annotation) (ghostDepth : int) (t : A.tree) : node =
   let ann, tree_node = unwrap default t in
   let pre = state_js input ann in
   let regex_id = regex_id_of idMap ann.A.acts in
@@ -143,11 +143,12 @@ let rec to_node (idMap : (V.regex * int) list) (input : string)
     let loop = to_node idMap input seen redundant ann in
     let children = match subjs with
       | [] -> []
-      | hd :: tl -> (loop (ghost || hasGhostSubtree) hd) :: List.map (loop ghost) tl in
+      | hd :: tl -> loop (ghostDepth + if hasGhostSubtree then 1 else 0) hd
+                    :: List.map (loop ghostDepth) tl in
     let post = match children with
       | f :: _ -> Js.Nullable.return f.pre
       | [] -> Js.Nullable.null in
-    { name; arg; result; ghost; hasGhostSubtree;
+    { name; arg; result; ghostDepth; hasGhostSubtree;
       regexId = regex_id |> Js.Nullable.fromOption; redundant;
       pre; post; children = Array.of_list children } in
   match tree_node with
@@ -180,5 +181,5 @@ let rec to_node (idMap : (V.regex * int) list) (input : string)
 (** Entry point. *)
 let to_tree (idMap : (V.regex * int) list) (input: string) : A.tree -> node = function
   | A.Annot (ann, _) as t ->
-    to_node idMap input (ref []) false ann false t
+    to_node idMap input (ref []) false ann 0 t
   | _ -> assert false

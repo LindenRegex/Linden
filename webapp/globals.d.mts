@@ -17,7 +17,7 @@ interface TreeNode {
   name: string;
   arg: string;
   result: "Match" | "Mismatch" | null;
-  ghost: boolean;
+  ghostDepth: number;
   hasGhostSubtree: boolean;
   regexId: number | null;
   redundant: boolean;
