@@ -128,6 +128,8 @@ export function render(data: TreeNode, container: HTMLElement, onHover: TreeHove
     .on("end", () => svg.classed("panning", false));
   svg.call(zoom);
 
+  const nonzero = (x: number) => x > 0 ? x : null;
+
   view
     .append("g")
     .selectAll("path")
@@ -138,8 +140,10 @@ export function render(data: TreeNode, container: HTMLElement, onHover: TreeHove
       (d.target as LaidOutNode).data.regexId)
     .attr("data-redundant", (d) =>
       (d.target as LaidOutNode).data.redundant ? "" : null)
+    .attr("data-ghost", (d) =>
+      (d.target as LaidOutNode).data.ghostDepth > 0 ? "" : null)
     .attr("data-ghost-depth", (d) =>
-      (d.target as LaidOutNode).data.ghostDepth)
+      nonzero((d.target as LaidOutNode).data.ghostDepth))
     .attr("d", d3.linkVertical<HierarchyPointLink<TreeNode>, LaidOutNode>()
       .x((d) => d.x)
       .y((d) => d.y));
@@ -154,7 +158,8 @@ export function render(data: TreeNode, container: HTMLElement, onHover: TreeHove
     .attr("data-status", (d) => d.data.result)
     .attr("data-regex-id", (d) => d.data.regexId)
     .attr("data-redundant", (d) => d.data.redundant ? "" : null)
-    .attr("data-ghost-depth", (d) => d.data.ghostDepth)
+    .attr("data-ghost", (d) => d.data.ghostDepth > 0 ? "" : null)
+    .attr("data-ghost-depth", (d) => nonzero(d.data.ghostDepth))
     .attr("transform", (d) => `translate(${d.x},${d.y})`)
     .on("mouseenter", (e, _) => { onHover(e.currentTarget); })
     .on("mouseleave", () => onHover(null))

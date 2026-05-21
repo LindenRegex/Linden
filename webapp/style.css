@@ -299,13 +299,13 @@ label[for] {
 
   &[data-kind="Start"] { --bg: var(--c-start-bg); --fg: var(--c-start-fg); --stroke: var(--c-start-stroke); }
   &[data-kind="Choice"] { --bg: var(--c-choice-bg); --fg: var(--c-choice-fg); --stroke: var(--c-choice-stroke); }
-  &[data-status="Match"][data-ghost-depth="0"] { --bg: var(--c-ok-bg); --fg: var(--c-ok-fg); --stroke: var(--c-ok-stroke); }
-  &[data-status="Mismatch"][data-ghost-depth="0"] { --bg: var(--c-fail-bg); --fg: var(--c-fail-fg); --stroke: var(--c-fail-stroke); }
+  &[data-status="Match"]:not([data-ghost]) { --bg: var(--c-ok-bg); --fg: var(--c-ok-fg); --stroke: var(--c-ok-stroke); }
+  &[data-status="Mismatch"]:not([data-ghost]) { --bg: var(--c-fail-bg); --fg: var(--c-fail-fg); --stroke: var(--c-fail-stroke); }
 
   &.subregex > :first-child { stroke: var(--c-subregex); stroke-width: var(--stroke-medium); }
 }
 
-:is(.tedge, .tnode):not([data-ghost-depth="0"]) {
+:is(.tedge, .tnode)[data-ghost] {
   &[data-ghost-depth="1"] { --dash-gap: 2; }
   &[data-ghost-depth="2"] { --dash-gap: 5; }
   &[data-ghost-depth="3"] { --dash-gap: 8; }
@@ -315,6 +315,7 @@ label[for] {
   &[data-ghost-depth="7"] { --dash-gap: 20; }
   &[data-ghost-depth="8"] { --dash-gap: 23; }
   &[data-ghost-depth="9"] { --dash-gap: 26; }
+  --dash-gap: 29;
   stroke-dasharray: 4 var(--dash-gap);
 }
 
