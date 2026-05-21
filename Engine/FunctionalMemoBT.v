@@ -307,4 +307,37 @@ Proof.
   eauto using memobt_match_correct_unanchored', correctms_init.
 Qed.
 
+(* the unanchored function always terminates *)
+Lemma memobt_match_terminates_unanchored' {strs:StrSearch}:
+  forall r inp ms,
+    pike_regex r ->
+    validms ms (codesize r) inp ->
+    exists result ms',
+      memobt_match_unanchored' strs r inp ms (prefix (extract_literal rer r)) = Finished result ms'.
+Proof.
+  intros * Hsubset Hvalid.
+  functional induction memobt_match_unanchored' strs r inp ms (prefix (extract_literal rer r)); eauto.
+  - apply IHm.
+    admit.
+  - (* we jumped to some position and anchored matching ran out of fuel *)
+    rename e into Hsearch, y into Hmatch.
+    assert (Hvalid': validms ms (codesize r) inp'). {
+      admit.
+    }
+    pose proof (memobt_match'_terminates r inp' ms Hsubset Hvalid') as [result [ms' Hres]].
+    eauto.
+Admitted.
+
+(* the unanchored function always terminates *)
+Theorem memobt_match_terminates_unanchored {strs:StrSearch}:
+  forall r inp,
+    pike_regex r ->
+    exists result ms, memobt_match_unanchored r inp = Finished result ms.
+Proof.
+  intros * Hsubset.
+  apply memobt_match_terminates_unanchored'; auto.
+  exists []. apply mswf_init.
+Qed.
+
+
 End FunctionMemoBT.

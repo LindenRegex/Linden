@@ -54,6 +54,7 @@ End Engines.
 Section Instances.
   Context {VMS: VMSeen}.
   Context {params: LindenParameters}.
+  Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
 
 (* predicate stating that if we support a regex then we support its lazy prefix *)
@@ -122,6 +123,22 @@ Instance MemoBTAnchoredEngine: AnchoredEngine rer := {
   symmetry. eapply memobt_correct; eauto using memobt_match_correct, correctms_init.
 Defined.
 
+(* we show that the unanchored MemoBT fits the scheme of an unanchored engine *)
+#[export] #[refine]
+Instance MemoBTUnanchoredEngine {strs:StrSearch}: UnanchoredEngine rer := {
+  un_exec r inp := match memobt_match_unanchored rer r inp with
+                | FunctionalMemoBT.OutOfFuel => None
+                | FunctionalMemoBT.Finished res _ => res
+                end;
+  un_supported_regex := is_pike_regex;
+}.
+  (* un_exec_correct *)
+  intros r inp tree Hsubset Htree.
+  rewrite is_pike_regex_correct in Hsubset.
+  pose proof (memobt_match_terminates_unanchored rer r inp Hsubset) as [res [ms Hmatch]].
+  rewrite Hmatch.
+  eauto using memobt_match_correct_unanchored.
+Defined.
 
 (* result type for search procedures that can potentially not support finding a match *)
 Variant search_result :=

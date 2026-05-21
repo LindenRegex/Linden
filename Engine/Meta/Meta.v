@@ -81,10 +81,6 @@ Record meta_config := {
   memory_limit : option nat;
 }.
 
-(* MemoBT supports lazy_prefix *)
-Lemma lazy_prefix_supported_memobt:
-  @lazy_prefix_supported _ rer (MemoBTAnchoredEngine rer).
-Proof. intro r. eauto. Qed.
 
 Definition memobt_peak_memory_usage (r:regex) (inp:input) : nat :=
   regex_size r * total_length inp.
@@ -98,14 +94,14 @@ Definition can_use_memobt (config:meta_config) (r:regex) (inp:input) : bool :=
 (* a choice of an anchored engine *)
 Definition pick_meta_anchored (config:meta_config) (r:regex) (inp:input) : AnchoredEngine rer :=
   if can_use_memobt config r inp then
-    @MemoBTAnchoredEngine _ rer
+    @MemoBTAnchoredEngine _ (MemoList _) rer
   else
     @PikeVMAnchoredEngine VMSlist _ rer.
 
 (* a choice of an unanchored engine *)
 Definition pick_meta_unanchored (config:meta_config) (r:regex) (inp:input) : UnanchoredEngine rer :=
   if can_use_memobt config r inp then
-    @SearchAccOnceEngine _ rer BruteForceStrSearch (@UnanchorEngine _ rer (@MemoBTAnchoredEngine _ rer) lazy_prefix_supported_memobt)
+    @SearchAccOnceEngine _ rer BruteForceStrSearch (@MemoBTUnanchoredEngine _ (MemoList _) rer BruteForceStrSearch)
   else
     @SearchAccOnceEngine _ rer BruteForceStrSearch (@PikeVMUnanchoredEngine VMSlist _ rer BruteForceStrSearch).
 
