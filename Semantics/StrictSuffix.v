@@ -448,6 +448,30 @@ Section StrictSuffix.
         * reflexivity.
   Qed.
 
+  Lemma advance_suffix2:
+    forall inp inppref inpsuf dir,
+      strict_suffix inpsuf inppref dir ->
+      advance_input inp dir = Some inpsuf ->
+      inp = inppref \/ strict_suffix inp inppref dir.
+  Proof.
+    intros * Hss Hadv.
+    destruct dir.
+    - destruct inp as [[|c next] pref]; only 1: discriminate.
+      injection Hadv as <-.
+      inversion Hss; subst; [left|right].
+      + destruct inppref as [[|c' next'] pref']; only 1: discriminate.
+        now injection H as <- <- <-.
+      + destruct inp2 as [[|c' next'] pref']; only 1: discriminate.
+        now injection H as <- <- <-.
+    - destruct inp as [next [|c pref]]; only 1: discriminate.
+      injection Hadv as <-.
+      inversion Hss; subst; [left|right].
+      + destruct inppref as [next' [|c' pref']]; only 1: discriminate.
+        now injection H as <- <- <-.
+      + destruct inp2 as [next' [|c' pref']]; only 1: discriminate.
+        now injection H as <- <- <-.
+  Qed.
+
   Lemma ss_neq:
     forall inp1 inp2 dir,
       strict_suffix inp1 inp2 dir -> inp1 <> inp2.

@@ -1,10 +1,10 @@
 (* The MemoBT algorithm, expressed as a fuel-based function *)
 
-From Stdlib Require Import List Lia.
+From Stdlib Require Import List Lia FunInd.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups StrictSuffix.
-From Linden Require Import Tree Semantics NFA.
+From Linden Require Import Tree Semantics NFA LazyPrefix.
 From Linden Require Import BooleanSemantics PikeSubset.
 From Linden Require Import MemoBT Correctness SeenSets.
 From Linden Require Import Complexity.
@@ -217,6 +217,99 @@ Proof.
   intros.
   apply memobt_match'_terminates; auto.
   exists []. apply mswf_init.
+Qed.
+
+(* when the unanchored function finishes, it returns the correct result *)
+Theorem memobt_match_correct_unanchored' {strs:StrSearch}:
+  forall r result inp tree ms ms',
+    pike_regex r ->
+    correctms rer ms (compilation r) ->
+    memobt_match_unanchored' strs r inp ms (prefix (extract_literal rer r)) = Finished_un result ms' ->
+    is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
+    first_leaf tree inp = result.
+Proof.
+  intros *.
+  remember (prefix (extract_literal rer r)) as p.
+  generalize dependent tree.
+  functional induction memobt_match_unanchored' strs r inp ms p;
+    try discriminate; intros tree Hsubset Hcorrect Hres Htree.
+  - (* the input search did not find the prefix, there is no match *)
+    injection Hres as <- <-.
+    rewrite input_search_none_str_search in *.
+    eauto using str_search_none_nores_unanchored.
+  - (* we jumped to the position with the result *)
+    (* all previous positions have no results *)
+    injection Hres as <- ->.
+    rename e into Hsearch, e0 into Hmatch.
+    pose proof is_tree_productivity rer [Areg r] inp' GroupMap.empty forward as [tree' Htree'].
+    eapply memobt_match'_correct, memobt_correct in Hmatch as [Hres _]; eauto.
+    eapply input_search_strict_suffix in Hsearch as Hss.
+    eapply lazy_prefix_result_some; eauto.
+    intros.
+    eapply extract_literal_prefix_contra; eauto.
+    eapply input_search_no_earlier; try split; eauto.
+  - (* we jumped to a position with no result, but the match is present in the rest of the matching *)
+    rename e into Hsearch, e0 into Hmatch, e1 into Hadv.
+    pose proof is_tree_productivity rer [Areg r] inp' GroupMap.empty forward as [tree' Htree'].
+    pose proof is_tree_productivity rer [Areg (lazy_prefix r)] inp'' GroupMap.empty forward as [tree'' Htree''].
+    eapply memobt_match'_correct, memobt_correct in Hmatch as [Hres' Hms]; eauto.
+    specialize (IHm eq_refl tree'' Hsubset (Hms eq_refl) Hres Htree'').
+    eapply input_search_strict_suffix in Hsearch as Hss.
+    (* some hypothesis are causing big slowdowns for cbv reductions (ss_solve uses them) *)
+    clear Hres.
+    eapply lazy_prefix_result_tail with (inp':=inp''); eauto; only 1: ss_solve.
+    intros.
+    edestruct advance_suffix2; eauto.
+    + (* we are at the position we jumped to *)
+      subst.
+      eapply is_tree_determ in Htree' as ->; eauto.
+    + (* we are strictly before the jump position *)
+      eapply extract_literal_prefix_contra; eauto.
+      eapply input_search_no_earlier; try split; eauto.
+  - (* we tried all positions and there is no match anywhere *)
+    injection Hres as <- ->.
+    rename e into Hsearch, e0 into Hmatch, e1 into Hadv.
+    (* get statements about no leafs *)
+    eapply input_search_strict_suffix in Hsearch as Hss.
+    pose proof (is_tree_productivity rer [Areg r] inp' GroupMap.empty forward) as [tree' Htree'].
+    eapply memobt_match'_correct in Hmatch.
+    eapply memobt_correct in Hmatch as [Hres' Hms]; eauto.
+    (* show that there is no match at any position *)
+    eapply lazy_prefix_result_none; eauto.
+    intros inp'' tree'' Hss'' Htree''.
+    assert (Hss': inp' = inp'' \/ strict_suffix inp' inp'' forward). {
+      (* since both inp' and inp'' are related to inp, then inp' is related to inp'' *)
+      (* but inp' is the last position, inp'' must be a prefix *)
+      assert (Hrew1: input_rewind inp forward = input_rewind inp' forward). {
+        destruct Hss as [->|Hss]; eauto using input_rewind_suffix_eq.
+      }
+      assert (Hrew2: input_rewind inp forward = input_rewind inp'' forward). {
+        destruct Hss'' as [->|Hss'']; eauto using input_rewind_suffix_eq.
+      }
+      rewrite Hrew2 in Hrew1.
+      destruct inp' as [[] pref']; only 2: discriminate.
+      rewrite input_rewind_fwd in Hrew1.
+      now eapply input_rewind_suffix in Hrew1.
+    }
+    destruct Hss' as [->|Hss'].
+    + (* we are at the position we jumped to *)
+      eapply is_tree_determ in Htree'' as <-; eauto.
+    + (* we are strictly before the jump position *)
+      eapply extract_literal_prefix_contra; eauto.
+      eapply input_search_no_earlier; try split; eauto.
+Qed.
+
+
+(* when the unanchored function finishes, it returns the correct result *)
+Theorem memobt_match_correct_unanchored {strs:StrSearch}:
+  forall r result inp tree ms,
+    pike_regex r ->
+    memobt_match_unanchored r inp = Finished_un result ms ->
+    is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
+    first_leaf tree inp = result.
+Proof.
+  intros * Hsubset Hres Htree.
+  eauto using memobt_match_correct_unanchored', correctms_init.
 Qed.
 
 End FunctionMemoBT.
