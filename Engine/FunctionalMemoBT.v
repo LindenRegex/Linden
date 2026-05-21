@@ -3,12 +3,13 @@
 From Stdlib Require Import List Lia.
 Import ListNotations.
 
-From Linden Require Import Regex Chars Groups.
+From Linden Require Import Regex Chars Groups StrictSuffix.
 From Linden Require Import Tree Semantics NFA.
 From Linden Require Import BooleanSemantics PikeSubset.
 From Linden Require Import MemoBT Correctness SeenSets.
 From Linden Require Import Complexity.
-From Linden Require Import Parameters.
+From Linden Require Import Parameters LWParameters.
+From Linden Require Import Prefix Tactics.
 From Linden Require Import FunctionalUtils FunctionalSemantics.
 From Warblre Require Import Base RegExpRecord.
 
@@ -65,11 +66,51 @@ Definition getres (mbt:mbt_state) : matchres :=
   end.
 
 (* Functional version of the MemoBT *)
-Definition memobt_match (r:regex) (inp:input) : matchres :=
+Definition memobt_match' (r:regex) (inp:input) (ms:memoset) : matchres :=
   let code := compilation r in
   let fuel := memobt_fuel r inp in
-  let mbtinit := initial_state inp in
-  getres (memobt_loop code (mbtinit initial_memoset) fuel).
+  let mbtinit := initial_state inp ms in
+  getres (memobt_loop code mbtinit fuel).
+
+Definition memobt_match (r:regex) (inp:input) : matchres :=
+  memobt_match' r inp initial_memoset.
+
+(* For the MemoBT, we can run prefix acceleration multiple times after each failed anchored search. *)
+(* Instead of running MemoBT with a lazy prefix, we run it in anchored mode at each position where *)
+(* the prefix matches. By reusing cache from each anchored run, this still executes in linear time. *)
+
+Inductive matchres_unanchored : Type :=
+| OutOfFuel_un
+| Finished_un: option leaf -> memoset -> matchres_unanchored.
+
+(* unanchored search for MemoBT with prefix acceleration *)
+Function memobt_match_unanchored' {strs:StrSearch} (r:regex) (inp:input) (ms:memoset) (p:string)
+  {measure (fun inp => remaining_length inp forward) inp}: matchres_unanchored :=
+  (* we skip the initial input that does not match the prefix *)
+  match (input_search p inp) with
+  | None => Finished_un None ms (* if prefix is not present anywhere, then we cannot match *)
+  | Some inp' =>
+    match memobt_match' r inp' ms with
+    | OutOfFuel => OutOfFuel_un
+    | Finished (Some leaf) ms' => Finished_un (Some leaf) ms'
+    | Finished None ms' =>
+      match advance_input inp' forward with
+      | Some inp'' => memobt_match_unanchored' r inp'' ms' p
+      | None => Finished_un None ms' (* we already tried to match at every potential position *)
+      end
+    end
+  end.
+Proof.
+  intros strs r [next pref] ms p [next' pref'] Hsearch result ms' Hres Hmatch [next'' pref''] Hinp''.
+  destruct next' as [|c' next']; [discriminate|].
+  inversion Hinp''; subst.
+  eapply (strict_suffix_current (Input next'' (c' :: pref')) (Input next pref) forward).
+  eapply input_search_strict_suffix in Hsearch as [<-|Hss]; ss_solve.
+Defined.
+
+Definition memobt_match_unanchored {strs:StrSearch} (r:regex) (inp:input) : matchres_unanchored :=
+  memobt_match_unanchored' strs r inp initial_memoset (prefix (extract_literal rer r)).
+
 
 (** * Smallstep correspondence  *)
 
@@ -135,17 +176,37 @@ Proof.
     erewrite step_loop; eauto.
 Qed.
 
+Theorem memobt_match'_correct:
+  forall r inp result ms ms',
+    memobt_match' r inp ms = Finished result ms' ->
+    trc_memo_bt rer (compilation r) (initial_state inp ms) (MBT_final result ms').
+Proof.
+  unfold memobt_match', getres. intros r inp result ms ms' H.
+  match_destr; inversion H; subst.
+  eapply loop_trc; eauto.
+Qed.
+
 (* when the function finishes, it returns the correct result *)
 Theorem memobt_match_correct:
   forall r inp result ms,
     memobt_match r inp = Finished result ms ->
     trc_memo_bt rer (compilation r) (initial_state inp initial_memoset) (MBT_final result ms).
 Proof.
-  unfold memobt_match, getres. intros r inp result ms H.
-  match_destr; inversion H; subst.
-  eapply loop_trc; eauto.
+  intros.
+  now apply memobt_match'_correct.
 Qed.
 
+
+Lemma memobt_match'_terminates:
+  forall r inp ms,
+    pike_regex r ->
+    validms ms (codesize r) inp ->
+    exists result ms', memobt_match' r inp ms = Finished result ms'.
+Proof.
+  intros * SUBSET VALID. unfold memobt_match', memobt_fuel.
+  eapply memobt_complexity with (rer:=rer) (r:=r) (inp:=inp) (2:=VALID) in SUBSET as [result [finalms [TERM VAL]]].
+  exists result. exists finalms. apply steps_loop in TERM. now rewrite TERM.
+Qed.
 
 (* the function always terminates *)
 Theorem memobt_match_terminates:
@@ -153,9 +214,9 @@ Theorem memobt_match_terminates:
     pike_regex r ->
     exists result ms, memobt_match r inp = Finished result ms.
 Proof.
-  intros r inp SUBSET. unfold memobt_match, memobt_fuel.
-  eapply memobt_complexity_empty_memoset with (rer:=rer) (r:=r) (inp:=inp) in SUBSET as [result [finalms [TERM VAL]]].
-  exists result. exists finalms. apply steps_loop in TERM. rewrite TERM. auto.
+  intros.
+  apply memobt_match'_terminates; auto.
+  exists []. apply mswf_init.
 Qed.
 
 End FunctionMemoBT.
