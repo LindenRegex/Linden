@@ -44,6 +44,7 @@ Section LazyPrefix.
 
 	(* this inductive is proven to yield the same trees as the lazy-prefixed tree *)
 	(* yet it has a simpler definition that makes induction easier to work with *)
+  (* the induction goes from the end of the input to the preceding inputs *)
   Inductive unanchored_tree (r: regex): input -> tree -> Prop :=
   | unanchored_done:
     forall inp t pref
@@ -165,7 +166,7 @@ Section LazyPrefix.
       first_leaf tree inp = None.
   Proof.
     unfold first_leaf.
-    intros r inp tree Htree%unanchored_tree_lazy_prefix.
+    intros * Htree%unanchored_tree_lazy_prefix.
     induction Htree; intros Hnone; subst; simpl.
     - rewrite Hnone; auto.
     - unfold advance_input'.
@@ -175,5 +176,34 @@ Section LazyPrefix.
         eauto using strict_suffix_trans, ss_advance.
   Qed.
 
+  (* lazy-prefixed tree's first leaf is the earliest input where the regex matches *)
+  Lemma lazy_prefix_result_some :
+    forall r inp inp' tree tree' leaf,
+      is_tree rer [Areg (lazy_prefix r)] inp GroupMap.empty forward tree ->
+      inp' = inp \/ strict_suffix inp' inp forward ->
+      is_tree rer [Areg r] inp' GroupMap.empty forward tree' ->
+      first_leaf tree' inp' = Some leaf ->
+      (forall inp'' tree'',
+        inp'' = inp \/ strict_suffix inp'' inp forward ->
+        strict_suffix inp' inp'' forward ->
+        is_tree rer [Areg r] inp'' GroupMap.empty forward tree'' ->
+        first_leaf tree'' inp'' = None
+      ) ->
+      first_leaf tree inp = Some leaf.
+  Proof.
+    unfold first_leaf.
+    intros * Htree%unanchored_tree_lazy_prefix Hpref%input_prefix_strict_suffix.
+    generalize dependent tree.
+    remember forward as dir.
+    induction Hpref; intros tree Htree Htree' Hres' Hnone; subst.
+    - inversion Htree; subst; simpl;
+        eapply is_tree_determ in Htree'; eauto;
+        now rewrite Htree', Hres'.
+    - inversion Htree; subst; simpl; only 1: discriminate.
+      unfold advance_input'. simpl.
+      injection H as <-.
+      rewrite Hnone, IHHpref; eauto; [..|ss_solve].
+      intros. eapply Hnone; eauto; [..|ss_solve].
+  Qed.
 
 End LazyPrefix.
