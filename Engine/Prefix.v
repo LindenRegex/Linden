@@ -938,17 +938,12 @@ Theorem str_search_none_nores_unanchored {strs:StrSearch}:
     str_search (prefix (extract_literal r)) (next_str inp) = None ->
     first_leaf tree inp = None.
 Proof.
-  unfold first_leaf.
-  intros r [next pref] tree Htree%unanchored_tree_lazy_prefix Hsearch.
-  induction Htree; subst; simpl.
-  - eapply str_search_none_nores with (tree:=t) in Hsearch as Hnotfound; eauto.
-    unfold first_leaf in *.
-    now rewrite Hnotfound.
-  - unfold advance_input'. simpl.
-    eapply str_search_none_nores in Hsearch as Hno1; eauto.
-    eapply str_search_none_next in Hsearch.
-    unfold first_leaf in Hno1.
-    rewrite Hno1, IHHtree; eauto.
+  intros r inp tree Htree Hsearch.
+  eapply lazy_prefix_result_none; eauto.
+  intros inp' tree' [Heq | Hss] Htree'.
+  - subst. eauto using str_search_none_nores.
+  - rewrite <-input_search_none_str_search in Hsearch.
+    eauto using extract_literal_prefix_contra, input_search_not_found.
 Qed.
 
 
