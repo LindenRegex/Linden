@@ -202,8 +202,37 @@ Section LazyPrefix.
     - inversion Htree; subst; simpl; only 1: discriminate.
       unfold advance_input'. simpl.
       injection H as <-.
-      rewrite Hnone, IHHpref; eauto; [..|ss_solve].
-      intros. eapply Hnone; eauto; [..|ss_solve].
+      rewrite Hnone, IHHpref; eauto; only 2: ss_solve.
+      intros. eapply Hnone; eauto. ss_solve.
+  Qed.
+
+  (* if at some continuation the result is `res` and at every earlier position there is nothing, *)
+  (* then the result of the entire lazy-prefixed tree is `res` *)
+  Lemma lazy_prefix_result_tail :
+    forall r inp inp' tree tree' leaf,
+      is_tree rer [Areg (lazy_prefix r)] inp GroupMap.empty forward tree ->
+      inp' = inp \/ strict_suffix inp' inp forward ->
+      is_tree rer [Areg (lazy_prefix r)] inp' GroupMap.empty forward tree' ->
+      first_leaf tree' inp' = leaf ->
+      (forall inp'' tree'',
+        inp'' = inp \/ strict_suffix inp'' inp forward ->
+        strict_suffix inp' inp'' forward ->
+        is_tree rer [Areg r] inp'' GroupMap.empty forward tree'' ->
+        first_leaf tree'' inp'' = None
+      ) ->
+      first_leaf tree inp = leaf.
+  Proof.
+    unfold first_leaf.
+    intros * Htree%unanchored_tree_lazy_prefix Hpref%input_prefix_strict_suffix Htree'%unanchored_tree_lazy_prefix.
+    generalize dependent tree.
+    remember forward as dir.
+    induction Hpref; intros tree Htree Hres' Hnone; subst.
+    - eapply unanchored_tree_determ in Htree as <-; eauto.
+    - inversion Htree; subst; simpl; only 1: discriminate.
+      unfold advance_input'. simpl.
+      injection H as <-.
+      rewrite Hnone, IHHpref; eauto; only 2: ss_solve.
+      intros. eapply Hnone; eauto. ss_solve.
   Qed.
 
 End LazyPrefix.
