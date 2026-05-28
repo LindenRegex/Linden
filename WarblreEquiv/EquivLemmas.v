@@ -1672,6 +1672,9 @@ Section EquivLemmas.
             (Coercions.CaptureRange_or_undefined
                (capture_range (MatchState.endIndex ms) (MatchState.endIndex ms')))
         else
+         if negb (dir ==? backward)%wt
+         then Error Errors.MatchError.AssertionFailed
+         else
          if negb (MatchState.endIndex ms' <=? MatchState.endIndex ms)%Z
          then Error Errors.MatchError.AssertionFailed
          else
