@@ -60,3 +60,32 @@ Proof.
   - discriminate.
   - now inversion 1.
 Qed.
+
+Lemma app_neq_nil:
+  forall A (l1 l2: list A),
+    l1 ++ l2 <> [] <-> l1 <> [] \/ l2 <> [].
+Proof.
+  intros A l1 l2.
+  split; intro H.
+  - destruct l1, l2; rewrite ?app_nil_r in *; eauto.
+    left. easy.
+  - destruct H.
+    + now destruct l1.
+    + destruct l2; [easy|].
+      now destruct l1.
+Qed.
+
+Lemma hd_error_none_nil {A}:
+  forall l: list A, hd_error l = None <-> l = [].
+Proof. now destruct l. Qed.
+
+Lemma hd_error_app:
+  forall A (l1 l2:list A),
+    hd_error (l1 ++ l2) =
+      match (hd_error l1) with
+      | Some h => Some h
+      | None => hd_error l2
+      end.
+Proof.
+  intros A l1 l2. induction l1; simpl; auto.
+Qed.

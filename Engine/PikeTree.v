@@ -93,7 +93,7 @@ Section PikeTree.
   Definition initial_future_actions_unanchored (r: regex) (inp: input) :=
     [Areg (Regex.Character CdAll); Acheck inp; Areg dot_star; Areg r].
   Definition future_tree_shape (r: regex) (inp: input) (future: tree): Prop :=
-    bool_tree rer (initial_future_actions_unanchored r inp) inp CannotExit future.
+    bool_tree rer (initial_future_actions_unanchored r inp) inp CannotExit forward future.
   Definition initial_future_unanchored (r: regex) (inp: input) (future: option tree): Prop :=
     exists tree, future_tree_shape r inp tree /\ may_erase tree future.
 
@@ -387,8 +387,8 @@ Section PikeTree.
     forall t r inp tree future,
       pike_regex r ->
       initial_future_unanchored r inp future ->
-      bool_tree rer [Areg r] inp CanExit t ->
-      bool_tree rer [Areg (lazy_prefix r)] inp CanExit tree ->
+      bool_tree rer [Areg r] inp CanExit forward t ->
+      bool_tree rer [Areg (lazy_prefix r)] inp CanExit forward tree ->
       piketreeinv (pike_tree_initial_state_unanchored t future inp) (first_leaf tree inp).
   Proof.
     unfold initial_future_unanchored, future_tree_shape.
@@ -533,7 +533,7 @@ Section PikeTree.
     forall r inp future nextinp acc t,
       future_tree_shape r inp future ->
       tree_acceleration inp future nextinp acc t ->
-      bool_tree rer [Areg r] nextinp CanExit t /\ future_tree_shape r nextinp acc.
+      bool_tree rer [Areg r] nextinp CanExit forward t /\ future_tree_shape r nextinp acc.
   Proof.
     unfold future_tree_shape, initial_future_actions_unanchored.
     intros r inp future nextinp acc t FUTURE ACC.

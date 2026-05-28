@@ -27,7 +27,7 @@ Section MemoEquiv.
   Inductive tree_config (code:code) : (tree * group_map * input) -> config -> Prop :=
   | tc_eq:
     forall inp tree gm pc b actions
-      (TREE: bool_tree rer actions inp b tree)
+      (TREE: bool_tree rer actions inp b forward tree)
       (CONT: actions_rep actions code pc)
       (SUBSET: pike_actions actions),
       tree_config code (tree, gm, inp) (pc, gm, b, inp)
@@ -93,7 +93,7 @@ Section MemoEquiv.
   Lemma initial_tree_config:
     forall r code tree inp
       (COMPILE: compilation r = code)
-      (TREE: bool_tree rer [Areg r] inp CanExit tree)
+      (TREE: bool_tree rer [Areg r] inp CanExit forward tree)
       (SUBSET: pike_regex r),
       tree_config code (tree, GroupMap.empty,inp) (0, GroupMap.empty, CanExit,inp).
   Proof.
@@ -152,7 +152,7 @@ Section MemoEquiv.
     specialize (INCL pc b inp SEEN) as [[t [gm [IN EQ]]] | [ST [cur [H _]]]]; eauto.
     inversion H.
   Qed.
-  
+
   Lemma add_inclusion:
     forall treeseen memoset code inp tree pc gm b nextcurrent nextpc
       (INCL: seen_inclusion code treeseen memoset (Some (tree,gm,inp)) (Some pc))
@@ -163,13 +163,13 @@ Section MemoEquiv.
     unfold seen_inclusion in *.
     intros pc0 b0 inp0 SEEN. apply is_memo_add in SEEN. destruct SEEN as [EQ|SEEN].
     - inversion EQ. subst. left. exists tree. exists gm. split; auto. apply in_add. left. auto.
-    - specialize (INCL pc0 b0 inp0 SEEN).      
+    - specialize (INCL pc0 b0 inp0 SEEN).
       destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [cur [Hcur [ts [gms [GEQ [EQ TTS]]]]]]]].
       + left. exists ts. exists gms. split; auto. apply in_add. right; auto.
       + left. exists ts. exists gms. split; auto.
         apply in_add. left; auto. inversion EQ. auto.
   Qed.
-  
+
   Lemma skip_inclusion:
     forall code inp treeseen memoset tree gm currentpc
       (INCL: seen_inclusion code treeseen memoset (Some (tree, gm, inp)) currentpc)
@@ -206,7 +206,7 @@ Section MemoEquiv.
     - right. split; auto. exists nextpc. split; auto. exists ts. exists gms. split; auto. inversion Hcur. lia.
   Qed.
 
-  
+
   Definition head_pc (stk:list config) : option label :=
     match stk with
     | [] => None
@@ -234,12 +234,12 @@ Section MemoEquiv.
   Proof.
     intros c. unfold seen_inclusion. intros pc b inp SEEN.
     rewrite initial_empty in SEEN. inversion SEEN.
-  Qed.  
+  Qed.
 
   (* the initial states of both smallstep semantics are related with the invariant *)
   Lemma initial_memo_inv_inclusion:
     forall r inp tree code ts ms
-      (TREE: bool_tree rer [Areg r] inp CanExit tree)
+      (TREE: bool_tree rer [Areg r] inp CanExit forward tree)
       (COMPILE: compilation r = code)
       (SUBSET: pike_regex r)
       (INCL: seen_inclusion code ts ms None None),
@@ -263,7 +263,7 @@ Section MemoEquiv.
 
   Lemma initial_memo_inv:
     forall r inp tree code
-      (TREE: bool_tree rer [Areg r] inp CanExit tree)
+      (TREE: bool_tree rer [Areg r] inp CanExit forward tree)
       (COMPILE: compilation r = code)
       (SUBSET: pike_regex r),
       memo_inv code (initial_tree_state tree inp initial_seentrees) (MemoBT.initial_state inp initial_memoset).
@@ -298,13 +298,14 @@ Section MemoEquiv.
     unfold exec_tree in TREESTEP. destruct t; inversion TREESTEP; subst. clear TREESTEP.
     inversion TC; subst; try no_stutter.
     remember Match as TMATCH.
+    remember forward as dir.
     (* here we have to proceed by induction because there are many ways to get a Match tree *)
     (* it could be epsilon, it could be epsilon followed by epsilon etc *)
     induction TREE; intros; subst; try inversion HeqTMATCH.
     - simpl. invert_rep. rewrite ACCEPT. auto.
     - repeat invert_rep. apply IHTREE; auto. pike_subset.
-    - repeat invert_rep. apply IHTREE; auto.
-      repeat (econstructor; eauto). pike_subset.
+    - repeat invert_rep. eapply IHTREE; eauto; pike_subset.
+      repeat (econstructor; eauto).
     - repeat invert_rep. apply IHTREE; auto. pike_subset.
     - destruct greedy; inversion CHOICE.
   Qed.
@@ -320,6 +321,7 @@ Section MemoEquiv.
     inversion TC; subst; try no_stutter.
     2: { simpl in TREESTEP. inversion TREESTEP. }
     remember Mismatch as TMIS.
+    remember forward as dir.
     induction TREE; intros; subst; try inversion HeqMIS; subst;
       simpl in TREESTEP; try solve[inversion TREESTEP].
     - repeat invert_rep. simpl. rewrite END. auto.
@@ -328,6 +330,8 @@ Section MemoEquiv.
     - repeat invert_rep. eapply IHTREE; repeat (econstructor; eauto); pike_subset.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     - destruct greedy; inversion TREESTEP.
+    - pike_subset.
+    - pike_subset.
     - repeat invert_rep. simpl. rewrite CHECK, ANCHOR. auto.
   Qed.
 
@@ -344,6 +348,7 @@ Section MemoEquiv.
     intros t pc gm b inp code char TC NOSTUTTER.
     inversion TC; subst; try invert_rep.
     remember (Read char t) as TREAD.
+    remember forward as dir.
     induction TREE; intros; subst; try inversion HeqTREAD; subst.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     - repeat invert_rep. exists nextinp.
@@ -369,6 +374,7 @@ Section MemoEquiv.
     intros t pc gm b inp code gid TC NOSTUTTER.
     inversion TC; subst; try invert_rep.
     remember (GroupAction (Open gid) t) as TOPEN.
+    remember forward as dir.
     induction TREE; intros; subst; try inversion HeqTOPEN; subst.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
@@ -392,6 +398,7 @@ Section MemoEquiv.
     intros t pc gm b inp code gid TC NOSTUTTER.
     inversion TC; subst; try no_stutter.
     remember (GroupAction (Close gid) t) as TCLOSE.
+    remember forward as dir.
     induction TREE; intros; subst; try inversion HeqTCLOSE; subst.
     - repeat invert_rep. simpl. rewrite CLOSE. split; auto.
       econstructor; eauto. 2: pike_subset.
@@ -427,6 +434,7 @@ Section MemoEquiv.
     intros t pc gm b inp code TC NOSTUTTER.
     inversion TC; subst; try no_stutter.
     remember (Progress t) as TPASS.
+    remember forward as dir.
     induction TREE; intros; subst; try inversion HeqTPASS; subst.
     - repeat invert_rep. pike_subset. simpl. exists pcmid.
       rewrite END. split; auto. econstructor; eauto.
@@ -447,6 +455,7 @@ Section MemoEquiv.
     intros t pc gm b inp code a TC NOSTUTTER.
     inversion TC; subst; try no_stutter.
     remember (AnchorPass a t) as TANCHOR.
+    remember forward as dir.
     induction TREE; intros; subst; try inversion HeqTANCHOR; subst.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
@@ -473,6 +482,7 @@ Section MemoEquiv.
     unfold exec_tree in TREESTEP. inversion TREESTEP. subst. clear TREESTEP.
     inversion TC; subst; try no_stutter.
     remember (Choice tree1 tree2) as TCHOICE.
+    remember forward as dir.
     induction TREE; intros; subst; try inversion HeqTCHOICE; subst.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     - repeat invert_rep. exists [(S pc,gm,b,inp);(S end1,gm,b,inp)]. split.
@@ -621,7 +631,8 @@ Section MemoEquiv.
          simpl. rewrite BEGIN. auto. }
     (* at a jmp instruction *)
     generalize dependent pc.
-    induction TREE; intros.
+    remember forward as dir.
+    induction TREE; intros; subst.
     - invert_rep. stutter.
       exists pcstart. exists b. split; try split; try lia.
       + simpl. rewrite JMP. auto.
@@ -705,6 +716,9 @@ Section MemoEquiv.
       exists pcstart. exists b. split; try split; try lia.
       * simpl. rewrite JMP. auto.
       * apply tc_eq with (actions:=Areg (Group gid r1):: cont); try constructor; auto; pike_subset.
+    (* lookarounds *)
+    - pike_subset.
+    - pike_subset.
     - invert_rep.
       { invert_rep. invert_rep; try in_subset; try stutter. }
       exists pcstart. exists b. split; try split; try lia.

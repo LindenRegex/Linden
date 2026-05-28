@@ -152,12 +152,13 @@ Theorem actions_tree_rep:
   forall actions code pc inp b t
     (SUBSET: pike_actions actions)
     (ACT: actions_rep actions code pc)
-    (TREE: bool_tree rer actions inp b t),
+    (TREE: bool_tree rer actions inp b forward t),
     tree_rep t code pc inp b.
 Proof.
   intros actions code pc inp b t SUBSET ACT TREE.
   generalize dependent code. generalize dependent pc.
-  induction TREE; intros.
+  remember forward as dir.
+  induction TREE; intros; subst.
   (* Match *)
   - remember [] as emp. induction ACT; inversion Heqemp.
     + constructor. auto.
@@ -209,7 +210,7 @@ Proof.
     invert_rep. inversion NFA; subst.
     2: { in_subset. }
     eapply tr_choice; eauto.
-    + eapply IHTREE1. pike_subset.
+    + eapply IHTREE1; eauto. pike_subset.
       eapply cons_bc with (pcmid:=end1); try constructor; eauto.
       eapply jump_bc; eauto.
     + eapply IHTREE2; eauto. pike_subset.
@@ -289,6 +290,9 @@ Proof.
     eapply tr_open; eauto.
     eapply IHTREE; eauto. pike_subset.
     repeat (econstructor; eauto).
+  (* lookarounds *)
+  - pike_subset.
+  - pike_subset.
   (* anchor *)
   - remember (Areg (Anchor a) :: cont) as anchorcont.
     induction ACT; inversion Heqanchorcont; subst;
@@ -330,8 +334,8 @@ Lemma actions_rep_unicity:
     pike_actions a2 ->
     actions_rep a1 code pc ->
     actions_rep a2 code pc ->
-    bool_tree rer a1 inp b t1 ->
-    bool_tree rer a2 inp b t2 ->
+    bool_tree rer a1 inp b forward t1 ->
+    bool_tree rer a2 inp b forward t2 ->
     t1 = t2.
 Proof.
   intros. eapply actions_tree_rep in H1; eauto.

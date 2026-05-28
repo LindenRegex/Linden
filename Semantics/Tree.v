@@ -2,6 +2,7 @@ From Stdlib Require Import List.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups Parameters LWParameters.
+From Linden Require Import ListLemmas.
 From Stdlib Require Import PeanoNat.
 From Warblre Require Import Typeclasses Parameters Base.
 
@@ -217,18 +218,6 @@ Section Tree.
     forall gm idx dir, tree_res t gm idx dir = hd_error (tree_leaves t gm idx dir).
 
 
-  (* intermediate lemma about hd_error *)
-  Lemma hd_error_app:
-    forall A (l1 l2:list A),
-      hd_error (l1 ++ l2) =
-        match (hd_error l1) with
-        | Some h => Some h
-        | None => hd_error l2
-        end.
-  Proof.
-    intros A l1 l2. induction l1; simpl; auto.
-  Qed.
-
   (* Intermediate lemma for positive lookarounds *)
   Lemma first_tree_leaf_poslk:
     forall lk tlk t1,
@@ -318,22 +307,48 @@ Section Tree.
       + eapply leaves_indep_neglk; eauto.
   Qed.
 
+  Lemma leaves_indep_nonempty:
+    forall t gm1 gm2 inp1 inp2 dir1 dir2,
+      tree_leaves t gm1 inp1 dir1 <> [] -> tree_leaves t gm2 inp2 dir2 <> [].
+  Proof.
+    induction t; simpl; intros;
+      try easy;
+      try eauto using IHt.
+    - rewrite app_neq_nil in *.
+      destruct H; eauto.
+    - destruct positivity.
+      + destruct (tree_leaves t1 gm1) eqn:Hleaves1; [easy|destruct l].
+        assert (Hleaves1': tree_leaves t1 gm1 inp1 (lk_dir lk) <> []) by now rewrite Hleaves1.
+        eapply IHt1 with (gm2:=gm2) (inp2:=inp2) (dir2 := lk_dir lk) in Hleaves1'.
+        destruct (tree_leaves t1 gm2) eqn:Hleaves2; [easy|destruct l].
+        eauto.
+      + destruct (tree_leaves t1 gm1) eqn:Hleaves1; [|easy].
+        rewrite leaves_indep with (1:=Hleaves1).
+        eauto.
+  Qed.
+
 
   (* Corollary: argument irrelevance in terms of tree_res *)
-  (* A lemma about hd_error *)
-  Lemma hd_error_none_nil {A}:
-    forall l: list A, hd_error l = None <-> l = [].
-  Proof.
-    intro l. split; intro H.
-    - destruct l. + reflexivity. + discriminate.
-    - subst l. reflexivity.
-  Qed.
 
   Lemma res_indep:
     forall t gm1 gm2 inp1 inp2 dir1 dir2,
       tree_res t gm1 inp1 dir1 = None -> tree_res t gm2 inp2 dir2 = None.
   Proof.
     intros. rewrite first_tree_leaf, hd_error_none_nil in *. eauto using leaves_indep.
+  Qed.
+
+
+  Lemma res_indep_some:
+    forall t gm1 gm2 inp1 inp2 dir1 dir2 leaf1,
+      tree_res t gm1 inp1 dir1 = Some leaf1 ->
+      exists leaf2, tree_res t gm2 inp2 dir2 = Some leaf2.
+  Proof.
+    intros.
+    rewrite first_tree_leaf in H.
+    assert (H1: tree_leaves t gm1 inp1 dir1 <> []) by (destruct tree_leaves; easy).
+    eapply leaves_indep_nonempty with (gm2:=gm2) (inp2:=inp2) (dir2:=dir2) in H1.
+    destruct (tree_leaves t gm2) eqn:H2; [easy|].
+    exists l. now rewrite first_tree_leaf, H2.
   Qed.
 
   Lemma leaf_eq_dec (l1 l2: leaf): {l1 = l2} + {l1 <> l2}.
