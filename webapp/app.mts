@@ -131,6 +131,7 @@ class RegexConsole {
     if (flags !== null)
       for (const box of this.regexFlags)
         box.checked = flags.includes(box.dataset.str!);
+    this.syncUI();
   }
 
   /** Write inputs to `#…` part of the URL. */
@@ -360,9 +361,12 @@ class App {
   private readonly display = new Display();
   private readonly console = new RegexConsole(() => this.recomputeScheduler.schedule());
 
+  constructor() {
+    window.addEventListener("hashchange", () => this.console.readFromUrlHash());
+  }
+
   start(): void {
     this.console.readFromUrlHash();
-    this.console.syncUI();
     this.recomputeScheduler.force();
   }
 
