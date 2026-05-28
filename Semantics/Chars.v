@@ -317,6 +317,19 @@ Section Chars.
     intros i dir nexti H. unfold advance_input'. rewrite H. reflexivity.
   Qed.
 
+  Lemma advance_input'_undo:
+    forall inp inp' dir,
+      advance_input inp dir = Some inp' ->
+      advance_input' inp' (direction_reverse dir) = inp.
+  Proof.
+    unfold advance_input'.
+    intros [next pref] inp' [] H.
+    - destruct next; [discriminate|now injection H as <-].
+    - destruct pref; [discriminate|now injection H as <-].
+  Qed.
+
+
+
   Lemma advance_input_not_self:
     forall inp dir,
       ~(advance_input inp dir = Some inp).
@@ -385,6 +398,31 @@ Section Chars.
       + destruct (char_match t cd); auto. inversion 1.
       + destruct (char_match t cd); auto. inversion 1.
   Qed.
+
+  (* if we cannot read forward, we also cannot backward on the reverse input *)
+  Lemma read_char_reverse_none:
+    forall cd inp dir,
+      read_char cd inp dir = None ->
+      read_char cd (input_reverse inp) (direction_reverse dir) = None.
+  Proof.
+    intros cd [next pref] [] Hread.
+    - destruct next as [|c' next]; simpl in *; now only 2: destruct char_match.
+    - destruct pref as [|c' pref]; simpl in *; now only 2: destruct char_match.
+  Qed.
+
+  (* if we can read forward, we can also read backward on the reverse input *)
+  Lemma read_char_reverse_some:
+    forall cd inp dir c nextinp,
+      read_char cd inp dir = Some (c, nextinp) ->
+      read_char cd (input_reverse inp) (direction_reverse dir) = Some (c, input_reverse nextinp).
+  Proof.
+    intros cd [next pref] [] c nextinp Hread.
+    - destruct next as [|c' next]; simpl in *; destruct char_match; try discriminate.
+      now injection Hread as <- <-.
+    - destruct pref as [|c' pref]; simpl in *; destruct char_match; try discriminate.
+      now injection Hread as <- <-.
+  Qed.
+
 
   Lemma advance_input_n_0:
     forall inp dir, advance_input_n inp 0 dir = inp.

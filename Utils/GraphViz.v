@@ -218,9 +218,9 @@ Section Playground.
 
   Definition r :=
     lazy_prefix (Disjunction
-      (Sequence a_char (Sequence (Lookaround LookAhead b_char) c_char))
-      (Sequence (Lookaround NegLookBehind (Sequence x_char y_char)) (Sequence b_char b_char))).
-  Definition i := Input [$"x"; $"y"; $"b"; $"b"; $"c"] [$"p"].
+      (Sequence a_char (Sequence (Lookaround NegLookAhead c_char) c_char))
+      (Sequence (Lookaround LookBehind (Sequence x_char y_char)) (Sequence b_char b_char))).
+  Definition i := Input [$"c"] (rev [$"x"; $"y"; $"b"; $"b"] ++ [$"p"]).
 
   Definition rer := reg_exp_record
     (* IgnoreCase *)
@@ -244,6 +244,6 @@ Section Playground.
     Pass this file to `viz.sh` to show an image of your tree.
   *)
 
-  (* Redirect "tree.dot" Compute actions_to_dot rer [Areg r] i forward. *)
+  (* Redirect "tree.dot" Compute actions_to_dot rer [Areg r] i backward. *)
 
 End Playground.

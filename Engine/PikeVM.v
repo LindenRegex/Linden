@@ -37,7 +37,7 @@ to the next position where the prefix matches.
 From Stdlib Require Import List Lia FunctionalExtensionality.
 Import ListNotations.
 
-From Linden Require Import Regex Chars Groups FunctionalSemantics.
+From Linden Require Import Regex Chars Groups FunctionalSemantics Reverse.
 From Linden Require Import Tree Semantics NFA.
 From Linden Require Import BooleanSemantics PikeSubset.
 From Linden Require Import Parameters SeenSets Prefix.
@@ -98,15 +98,6 @@ Inductive epsilon_result : Type :=
 | EpsBlocked: thread -> epsilon_result.
 
 Definition EpsDead : epsilon_result := EpsActive [].
-
-(* flips begin and end input anchors *)
-Definition flip_anchor (a:anchor) : anchor :=
-  match a with
-  | BeginInput => EndInput
-  | EndInput => BeginInput
-  | WordBoundary => WordBoundary
-  | NonWordBoundary => NonWordBoundary
-  end.
 
 (* get the anchor to check depending on the direction *)
 Definition anchor_dir (a:anchor) (dir:Direction): anchor :=
@@ -569,13 +560,6 @@ Lemma check_read_reverse :
     check_read rer cd inp dir = check_read rer cd (input_reverse inp) (direction_reverse dir).
 Proof.
   intros ? [next pref]. now destruct dir.
-Qed.
-
-Lemma anchor_satisfied_reverse :
-  forall a inp,
-    anchor_satisfied rer a inp = anchor_satisfied rer (flip_anchor a) (input_reverse inp).
-Proof.
-  intros a [next pref]. destruct a, next, pref; simpl; reflexivity || now rewrite Bool.xorb_comm.
 Qed.
 
 Lemma idx_dir_reverse : forall inp dir,

@@ -2,9 +2,9 @@ From Stdlib Require Import List Lia.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups StrictSuffix.
-From Linden Require Import Tree.
+From Linden Require Import Tree FunctionalUtils Reverse LazyPrefix.
 From Linden Require Import Semantics PikeSubset BooleanSemantics.
-From Linden Require Import Parameters.
+From Linden Require Import Parameters ListLemmas.
 From Warblre Require Import Base RegExpRecord Numeric.
 
 Section NFA.
@@ -766,6 +766,152 @@ Section NFA.
     destruct compile eqn:Hcompile, p.
     eapply nfa_oracle_get_correct'; eauto; simpl; get_pc.
   Qed.
+
+  (** * Oracle from leaves *)
+  (* We define a specific lookaround oracle that answers queries based on a list of positions *)
+  (* where that lookaround matches. For lookaheads, the leaves should be the starting positions *)
+  (* and for lookbehinds, the end positions. The unanchored tree is able to produce these leaves. *)
+
+  (* an oracle based on leaves *)
+  Definition leaves_nfa_oracle (lk: lookaround) (leaves: list leaf) : nfa_oracle :=
+    fun inp =>
+      let input := match lk_dir lk with
+                   | forward => input_reverse inp
+                   | backward => inp
+                   end in
+      if in_dec input_eq_dec input (List.map fst leaves) then
+        positivity lk
+      else
+        negb (positivity lk).
+
+  (* description how the leaves were collected *)
+  Definition nfa_oracle_leaves (dir: Direction) (r: regex) (inp: input) (leaves: list leaf) : Prop :=
+    match dir with
+    | forward => exists t,
+        let input := input_reverse (input_rewind inp forward) in
+        bool_tree rer [Areg (lazy_prefix (regex_reverse r))] input CanExit forward t /\
+        list_ext (List.map fst leaves) (List.map fst (tree_leaves t GroupMap.empty input forward))
+    | backward => exists t,
+        let input := input_rewind inp backward in
+        bool_tree rer [Areg (lazy_prefix r)] input CanExit forward t /\
+        list_ext (List.map fst leaves) (List.map fst (tree_leaves t GroupMap.empty input forward))
+    end.
+
+  Lemma input_rewind_related:
+    forall inp inp' inp'',
+      inp'' = inp \/ strict_suffix inp'' inp forward ->
+      inp'' = inp' \/ strict_suffix inp'' inp' forward ->
+      inp' = input_rewind inp backward \/ strict_suffix inp' (input_rewind inp backward) forward.
+  Proof.
+    intros inp inp' inp'' Hss1 Hss2.
+    remember (input_rewind inp backward) as inp0 eqn:Hinp0.
+    symmetry in Hinp0.
+    rewrite ss_flip_iff. simpl.
+    destruct Hss1 as [Hss1|Hss1], Hss2 as [Hss2|Hss2];
+      try eapply input_rewind_suffix_eq with (dir':=backward) in Hss1;
+      try eapply input_rewind_suffix_eq with (dir':=backward) in Hss2.
+    + ss_solve.
+    + subst inp.
+      rewrite <-Hss2 in Hinp0.
+      ss_solve.
+    + subst inp'.
+      rewrite Hss1 in Hinp0.
+      ss_solve.
+    + rewrite Hss1, <-Hss2 in Hinp0.
+      ss_solve.
+  Qed.
+
+  (* the leaves-based oracle is correct for lookaheads *)
+  Lemma leaves_nfa_oracle_correct_forward:
+    forall r inp inp' leaves t' b pos,
+      pike_regex r ->
+      inp' = inp \/ strict_suffix inp' inp forward ->
+      nfa_oracle_leaves forward r inp leaves ->
+      bool_tree rer [Areg r] inp' b forward t' ->
+      (if in_dec input_eq_dec (input_reverse inp') (map fst leaves) then pos else negb pos) =
+        (if tree_res t' GroupMap.empty inp' forward then pos else negb pos).
+  Proof.
+    unfold nfa_oracle_leaves, list_ext.
+    intros r inp inp' leabes t' b pos Hsubset Hss [t [Htree Hleaves]] Htree'.
+    eapply bool_to_istree_regex with (gm:=GroupMap.empty) in Htree, Htree'; pike_subset; eauto using pike_regex_reverse.
+    destruct tree_res as [[inp'']|] eqn:Hres, in_dec as [Hin|Hnotin]; try reflexivity.
+    - exfalso. apply Hnotin. clear Hnotin.
+      pose proof is_tree_productivity rer [Areg (regex_reverse r)] (input_reverse inp'') GroupMap.empty forward as [t'' Htree''].
+      apply first_tree_in in Hres.
+      eapply tree_leaf_regex_reverse in Htree' as [gm2 Hleaves']; eauto using pike_regex_no_backreferences.
+      rewrite Hleaves, in_pair_exists_r.
+      exists gm2.
+      rewrite <-(lazy_prefix_exists_position rer (regex_reverse r)); eauto.
+      exists (input_reverse inp''). exists t''.
+      repeat split; eauto.
+      eapply tree_leaves_suffix in Hres.
+      assert (Hsym: inp'' = input_rewind inp forward <-> input_rewind inp forward = inp'') by (split; now intros <-).
+      rewrite input_reverse_inj, <-input_reverse_suffix, Hsym.
+      eapply input_rewind_suffix.
+      destruct Hss, Hres; subst; reflexivity || (eapply input_rewind_suffix_eq with (dir:=backward); ss_solve).
+    - exfalso.
+      rewrite Hleaves, in_pair_exists_r in Hin.
+      destruct Hin as [gm Hin].
+      rewrite <-(lazy_prefix_exists_position rer (regex_reverse r)) in Hin; eauto.
+      destruct Hin as (inp'' & tree'' & Hss' & Htree'' & Hin).
+      pose proof input_reverse_surj inp' as [inp''' <-].
+      rewrite <-regex_reverse_involutive with (r:=r) in Htree'.
+      rewrite input_reverse_involutive with (i:=inp''') in Hin.
+      eapply tree_leaf_regex_reverse in Htree'' as [gm2 Hleaves']; eauto; only 2: rewrite <-has_backreferneces_regex_reverse; eauto using pike_regex_no_backreferences.
+      rewrite first_tree_leaf in Hres.
+      now destruct (tree_leaves t').
+  Qed.
+
+  (* the leaves-based oracle is correct for lookbehinds *)
+  Lemma leaves_nfa_oracle_correct_backward:
+    forall r inp inp' leaves t' b pos,
+      pike_regex r ->
+      inp' = inp \/ strict_suffix inp' inp forward ->
+      nfa_oracle_leaves backward r inp leaves ->
+      bool_tree rer [Areg r] inp' b backward t' ->
+      (if in_dec input_eq_dec inp' (map fst leaves) then pos else negb pos) =
+        (if tree_res t' GroupMap.empty inp' backward then pos else negb pos).
+  Proof.
+    unfold nfa_oracle_leaves, list_ext.
+    intros r inp inp' leabes t' b pos Hsubset Hss [t [Htree Hleaves]] Htree'.
+    eapply bool_to_istree_regex with (gm:=GroupMap.empty) in Htree, Htree'; pike_subset.
+    destruct tree_res as [[inp'']|] eqn:Hres, in_dec as [Hin|Hnotin]; try reflexivity.
+    - exfalso. apply Hnotin. clear Hnotin.
+      pose proof is_tree_productivity rer [Areg r] inp'' GroupMap.empty forward as [t'' Htree''].
+      apply first_tree_in in Hres.
+      eapply tree_leaf_dir_reverse_regex in Htree' as [gm2 Hleaves']; eauto; only 2: apply pike_regex_no_backreferences; pike_subset.
+      rewrite Hleaves, in_pair_exists_r.
+      exists gm2.
+      rewrite <-(lazy_prefix_exists_position rer r); eauto.
+      exists inp''. exists t''.
+      repeat split; eauto.
+      eapply tree_leaves_suffix in Hleaves'.
+      eapply input_rewind_related; eauto.
+    - exfalso.
+      rewrite Hleaves, in_pair_exists_r in Hin.
+      destruct Hin as [gm Hin].
+      rewrite <-(lazy_prefix_exists_position rer r) in Hin; eauto.
+      destruct Hin as (inp'' & tree'' & Hss' & Htree'' & Hin).
+      eapply tree_leaf_dir_reverse_regex in Htree'' as [gm2 Hleaves']; eauto; only 2: apply pike_regex_no_backreferences; pike_subset.
+      rewrite first_tree_leaf in Hres.
+      now destruct (tree_leaves t').
+  Qed.
+
+
+  (* the leaves-based oracle is correct *)
+  Theorem leaves_nfa_oracle_correct:
+    forall lk r inp leaves,
+      pike_regex r ->
+      nfa_oracle_leaves (lk_dir lk) r inp leaves ->
+      nfa_oracle_correct (leaves_nfa_oracle lk leaves) inp lk r.
+  Proof.
+    destruct lk; intros r inp leaves Hsubset Holeaves inp' b t' Hss Htree'; simpl in *.
+    - eapply leaves_nfa_oracle_correct_forward; simpl; eauto.
+    - eapply leaves_nfa_oracle_correct_backward; simpl; eauto.
+    - eapply leaves_nfa_oracle_correct_forward; simpl; eauto.
+    - eapply leaves_nfa_oracle_correct_backward; simpl; eauto.
+  Qed.
+
 
   (** * Lifting the representation predicate to continuations  *)
   (* This is useful to relate the continuations used in the tree semantics to the code produced by the NFA compiler *)

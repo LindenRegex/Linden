@@ -113,6 +113,33 @@ Definition pike_vm_match_unanchored {strs:StrSearch} (r:regex) (inp:input) (dir:
   let pvsinit := pike_vm_initial_state_unanchored (extract_literal rer r) inp dir occ in
   getres (pike_vm_loop code dir (nfa_oracles_dir (nfa_oracles_create r) dir) pvsinit fuel).
 
+Fixpoint collect_lookarounds (r:regex) : list (lookaround * regex) :=
+  match r with
+  | Lookaround lk r' => (lk, r') :: collect_lookarounds r'
+  | Disjunction r1 r2 | Sequence r1 r2 => collect_lookarounds r1 ++ collect_lookarounds r2
+  | Quantified _ _ _ r' | Group _ r' => collect_lookarounds r'
+  | Epsilon | Regex.Character _ | Backreference _ | Anchor _ => []
+  end.
+
+(* Fixpoint pike_match {strs:StrSearch} (r:regex) (inp:input) (inp':input) (dir:Direction) (occ:occurrence): matchres :=
+  let lookarounds := collect_lookarounds r in
+  let leaves := map (fun '(lk, r') =>
+      let inp' := match lk_dir lk with
+                  | forward => input_reverse (input_rewind inp forward)
+                  | backward => input_rewind inp backward
+                  end in
+      let r'' := match lk_dir lk with
+              | forward => r'
+              | backward => reverse_regex r'
+              end in
+  pike_match r' ) lookarounds in
+  let code := translate_code (compilation r) in
+  let fuel := vm_fuel r inp dir in
+  let pvsinit := pike_vm_initial_state_unanchored (extract_literal rer r) inp dir occ in
+  getres (pike_vm_loop code dir (nfa_oracles_dir (nfa_oracles_create r) dir) pvsinit fuel).
+
+  OutOfFuel. *)
+
 
 (** * Smallstep correspondence  *)
 

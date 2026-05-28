@@ -54,6 +54,16 @@ Proof.
   now replace (Z.to_nat endInd1) with (length pref) by lia.
 Qed.
 
+Lemma concat_nil_rev {A}:
+  forall (l: list (list A)),
+    concat l = [] -> concat (rev l) = [].
+Proof.
+  induction l; simpl; intros H.
+  - easy.
+  - apply app_eq_nil in H as [-> H2].
+    now rewrite concat_app, IHl.
+Qed.
+
 Lemma cons_different {A}: forall (x: A) (l: list A), l <> x::l.
 Proof.
   induction l.

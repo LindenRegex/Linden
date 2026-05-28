@@ -218,4 +218,21 @@ Proof.
     simpl. constructor.
 Qed.
 
+(* if we have a leaf in the continuation of a tree, then that leaf is in the concatenated tree *)
+Lemma tree_leaves_cont :
+  forall act1 act2 inp gm dir t t1 t2 leaf1 leaf2,
+    is_tree rer (act1 ++ act2) inp gm dir t ->
+    is_tree rer act1 inp gm dir t1 ->
+    In leaf1 (tree_leaves t1 gm inp dir) ->
+    is_tree rer act2 (fst leaf1) (snd leaf1) dir t2 ->
+    In leaf2 (tree_leaves t2 (snd leaf1) (fst leaf1) dir) ->
+    In leaf2 (tree_leaves t gm inp dir).
+Proof.
+  intros * Htree Htree1 Hin1 Htree2 Hin2.
+  eapply leaves_concat in Htree1 as Hflat; eauto.
+  eapply FlatMap_in with (2:=Hflat) in Hin1; eauto using act_from_leaf_determ, afl.
+  rewrite Forall_forall in Hin1.
+  eauto.
+Qed.
+
 End Leaves.
