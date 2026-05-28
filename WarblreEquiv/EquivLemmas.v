@@ -2,7 +2,7 @@ From Linden Require Import Regex GroupMapMS LWParameters Groups Tree Chars Seman
   MSInput EquivDef Utils RegexpTranslation FunctionalSemantics WarblreLemmas
   GroupMapLemmas Tactics CharDescrCharSet LKFactorization StrictSuffix
   Parameters.
-From Warblre Require Import Parameters List Notation Result Typeclasses Base Errors RegExpRecord StaticSemantics Semantics Base.
+From Warblre Require Import Parameters List Notation Result Typeclasses Base Notations Errors RegExpRecord StaticSemantics Semantics Base.
 From Stdlib Require Import List ZArith Lia DecidableClass ClassicalFacts.
 Import ListNotations.
 Import Notation.
