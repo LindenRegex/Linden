@@ -36,6 +36,7 @@ Proof.
       * right. intros H. now inversion H.
 Defined.
 
+Create HintDb prefix.
 Hint Constructors starts_with : prefix.
 
 Lemma starts_with_cons_iff: forall h1 t1 h2 t2,
@@ -391,8 +392,8 @@ Variant literal : Type :=
 (* this indicates a match cannot exist, as opposed to Prefix [] which means we do not know anything about the match *)
 | Impossible.
 
-Notation Nothing := (Exact []).
-Notation Unknown := (Prefix []).
+Abbreviation Nothing := (Exact []).
+Abbreviation Unknown := (Prefix []).
 
 Definition literal_eq_dec: forall (l1 l2: literal), { l1 = l2 } + { l1 <> l2 }.
 Proof. decide equality; apply string_eq_dec. Defined.
@@ -585,6 +586,7 @@ Fixpoint extract_actions_literal (acts : list action) : literal :=
   | a :: rest => chain_literals (extract_action_literal a) (extract_actions_literal rest)
   end.
 
+Create Rewrite HintDb prefix.
 Hint Unfold
   prefix
   chain_literals

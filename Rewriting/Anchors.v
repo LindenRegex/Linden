@@ -6,18 +6,18 @@ Section Anchors.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
 
-  Notation ascii_word_canon :=
+  Abbreviation ascii_word_canon :=
     (forall c,
         In c Character.ascii_word_characters ->
         In (Character.canonicalize rer c) Character.ascii_word_characters).
 
-  Notation ascii_word_inall :=
+  Abbreviation ascii_word_inall :=
     (forall c, In c Character.ascii_word_characters -> In c Character.all).
 
-  Notation canonicalize_nonall_stable :=
+  Abbreviation canonicalize_nonall_stable :=
     (forall c, In (Character.canonicalize rer c) Character.all <-> In c Character.all).
 
-  Notation line_terminators_canon :=
+  Abbreviation line_terminators_canon :=
     (forall c,
         In c Character.line_terminators <->
           In (Character.canonicalize rer c) Character.line_terminators).
