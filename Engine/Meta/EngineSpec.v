@@ -74,7 +74,7 @@ Defined.
 (* we show that the PikeVM fits the scheme of an anchored engine *)
 #[export] #[refine]
 Instance PikeVMAnchoredEngine: AnchoredEngine rer := {
-  exec r inp := match pike_vm_match rer r inp with
+  exec r inp := match pike_vm_match rer r inp forward with
                 | FunctionalPikeVM.OutOfFuel => None
                 | FunctionalPikeVM.Finished res => res
                 end;
@@ -83,7 +83,7 @@ Instance PikeVMAnchoredEngine: AnchoredEngine rer := {
   (* exec_correct *)
   intros r inp tree Hsubset Htree.
   rewrite is_pike_regex_correct in Hsubset.
-  pose proof (pike_vm_match_terminates rer r inp Hsubset) as [res Hmatch].
+  pose proof (pike_vm_match_terminates rer r inp forward Hsubset) as [res Hmatch].
   rewrite Hmatch.
   symmetry. eauto using pike_vm_match_correct, pike_vm_correct.
 Defined.
@@ -91,7 +91,7 @@ Defined.
 (* we show that the PikeVM fits the scheme of an unanchored engine *)
 #[export] #[refine]
 Instance PikeVMUnanchoredEngine {strs:StrSearch}: UnanchoredEngine rer := {
-  un_exec r inp := match pike_vm_match_unanchored rer r inp with
+  un_exec r inp := match pike_vm_match_unanchored rer r inp forward with
                 | FunctionalPikeVM.OutOfFuel => None
                 | FunctionalPikeVM.Finished res => res
                 end;
@@ -100,7 +100,7 @@ Instance PikeVMUnanchoredEngine {strs:StrSearch}: UnanchoredEngine rer := {
   (* un_exec_correct *)
   intros r inp tree Hsubset Htree.
   rewrite is_pike_regex_correct in Hsubset.
-  pose proof (pike_vm_match_terminates_unanchored rer r inp Hsubset) as [res Hmatch].
+  pose proof (pike_vm_match_terminates_unanchored rer r inp forward Hsubset) as [res Hmatch].
   rewrite Hmatch.
   symmetry. eauto using pike_vm_match_correct_unanchored, pike_vm_correct_unanchored.
 Defined.
