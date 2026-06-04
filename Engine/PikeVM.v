@@ -334,7 +334,7 @@ Definition pvs_reverse (pvs: pike_vm_state) : pike_vm_state :=
   | PVS_final best => PVS_final (leaf_reverse best)
   end.
 
-Notation involutive f := (forall x, f (f x) = x).
+Abbreviation involutive f := (forall x, f (f x) = x).
 
 Lemma map_map_involutive {A}: forall (f : A -> A) l,
   involutive f ->
@@ -430,6 +430,7 @@ Proof.
   now destruct dir, inp as [[|c next] [|c' pref]].
 Qed.
 
+Create Rewrite HintDb invo.
 Hint Rewrite
 	flip_anchor_involutive
 	direction_reverse_involutive
