@@ -57,6 +57,8 @@ Section Anchors.
           (Disjunction
              (Lookaround NegLookBehind (Character CdWordChar))
              (Lookaround LookAhead (Character CdWordChar)))
+    (* LATER: we should be able to desugar buffer boundaries too *)
+    | BeginBuffer | EndBuffer | TerminatedBuffer => Anchor a
     end.
 
   Lemma char_match_cdlist c cs:
