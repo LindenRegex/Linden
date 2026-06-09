@@ -26,8 +26,8 @@ Ltac boolprop := repeat match goal with
   | [ |- context[negb ?b1 = ?b2] ] => rewrite negb_true_iff || rewrite negb_false_iff
 
   (* split goals *)
-  | [ H: (?p1 /\ ?p2) |- _ ] => destruct H
-  | [ H: (?p1 \/ ?p2) |- _ ] => destruct H
+  | [ H: (?p1 /\ ?p2) |- _ ] => destruct H as [?H ?H]
+  | [ H: (?p1 \/ ?p2) |- _ ] => destruct H as [H|H]
 end.
 
 (* splits an if statement *)

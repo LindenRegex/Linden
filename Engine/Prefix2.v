@@ -36,7 +36,6 @@ Proof.
       * right. intros H. now inversion H.
 Defined.
 
-Create HintDb prefix.
 Hint Constructors starts_with : prefix.
 
 Lemma starts_with_cons_iff: forall h1 t1 h2 t2,
@@ -392,8 +391,8 @@ Variant literal : Type :=
 (* this indicates a match cannot exist, as opposed to Prefix [] which means we do not know anything about the match *)
 | Impossible.
 
-Abbreviation Nothing := (Exact []).
-Abbreviation Unknown := (Prefix []).
+Notation Nothing := (Exact []).
+Notation Unknown := (Prefix []).
 
 Definition literal_eq_dec: forall (l1 l2: literal), { l1 = l2 } + { l1 <> l2 }.
 Proof. decide equality; apply string_eq_dec. Defined.
@@ -458,81 +457,21 @@ Proof.
   intros p [=]; eauto.
 Qed.
 
-(* the flattening of a product of two lists of literals with respect to chaining *)
-(* for example, chain_literals_flat_prod [l1; l2] [l3; l4] =
-      chain_literals l1 l3 ++ chain_literals l1 l4 ++ chain_literals l2 l3 ++ chain_literals l2 l4 *)
-Fixpoint chain_literals_flat_prod (ll1 ll2 : list literal) : list literal :=
+Fixpoint chain_literals_flat_map (ll1 ll2 : list literal) : list literal :=
   match ll1 with
   | [] => []
-  | l1 :: ll1' => map (fun l2 => chain_literals l1 l2) ll2 ++ chain_literals_flat_prod ll1' ll2
+  | l1 :: ll1' => map (fun l2 => chain_literals l1 l2) ll2 ++ chain_literals_flat_map ll1' ll2
   end.
 
-(* a product with an empty list is the empty list *)
-(* the other direction is true by reductions *)
-Lemma chain_literals_flat_prod_nil_r:
+Lemma chain_literals_flat_map_nil_r:
   forall ll1,
-    chain_literals_flat_prod ll1 [] = [].
+    chain_literals_flat_map ll1 [] = [].
 Proof. induction ll1; auto. Qed.
-
-(* Lemma chain_literals_flat_prod_eq_nil:
-  forall ll1 ll2,
-    chain_literals_flat_prod ll1 ll2 = [] <-> ll1 = [] \/ ll2 = [].
-Proof.
-  induction ll1; split; simpl; eauto.
-  - intros [->%map_eq_nil _]%app_eq_nil.
-    auto.
-  - intros [[=]| ->].
-    apply chain_literals_flat_prod_nil_r.
-Qed. *)
-
-Lemma chain_literals_flat_prod_all_impossible':
-  forall l rest,
-    l <> Impossible ->
-    forallb (fun l : literal => (l ==? Impossible)%wt)
-      (chain_literals_flat_prod [l] rest) = true ->
-    forallb (fun l : literal => (l ==? Impossible)%wt) rest = true.
-Proof.
-  induction rest; simpl in *; intros Hneq H.
-  1: reflexivity.
-  rewrite app_nil_r in *.
-  boolprop. eqdec.
-  - split; eauto.
-  - rewrite chain_literals_impossible in H. now destruct H.
-Qed.
-
-Lemma chain_literals_flat_prod_all_impossible:
-  forall ll1 ll2,
-    forallb (fun l : literal => (l ==? Impossible)%wt)
-      (chain_literals_flat_prod ll1 ll2) = true <->
-    forallb (fun l : literal => (l ==? Impossible)%wt) ll1 = true \/
-    forallb (fun l : literal => (l ==? Impossible)%wt) ll2 = true.
-Proof.
-  split.
-  {
-    induction ll1; simpl in *; intros * H.
-    1: auto.
-    rewrite forallb_app in H.
-    boolprop. specialize (IHll1 H0) as [IH|IH]; eqdec; eauto.
-    right. eapply chain_literals_flat_prod_all_impossible'; eauto.
-    simpl; now rewrite app_nil_r.
-  }
-  {
-    induction ll1; simpl in *; intros * H.
-    1: auto.
-    rewrite forallb_app. boolprop; eqdec.
-    - specialize (IHll1 (or_introl H0)).
-      split; simpl; eauto.
-      admit.
-    - specialize (IHll1 (or_intror H)).
-      split; simpl; eauto.
-      admit.
-  }
-Admitted.
 
 Fixpoint repeat_literals (l: list literal) (base: literal) (n: nat) : list literal :=
   match n with
   | 0 => [base]
-  | S n' => chain_literals_flat_prod l (repeat_literals l base n')
+  | S n' => chain_literals_flat_map l (repeat_literals l base n')
   end.
 
 (* the longest string that is a prefix of both strings *)
@@ -616,13 +555,7 @@ Proof.
   - now case_if.
 Qed.
 
-(** * Extraction *)
-(* We define the most general extraction model which extracts a list of literals forming a disjunction. *)
-(* For instance, for the  regex /abc+|abf/ we extract two potential literals: Prefix "abc" and Exact "abf". *)
-(* But if we want to have only a single literal, the best we can come up with is Prefix "ab". *)
-
-(* extracting all literals from a character descriptor *)
-(* FIXME: enable CharSet.elements when I find Warblre lemmas about it *)
+(* extracting all literals from a character description *)
 Fixpoint extract_literals_char (cd: char_descr) : list literal :=
   match cd with
   | CdEmpty => [Impossible]
@@ -638,6 +571,16 @@ Fixpoint extract_literals_char (cd: char_descr) : list literal :=
   | CdNonWordChar | CdUnicodeProp _ | CdNonUnicodeProp _ | CdInv _ => [Unknown]
   end.
 
+(* extracting literals from a character description *)
+Fixpoint extract_literal_char (cd: char_descr) : literal :=
+  match cd with
+  | CdEmpty => Impossible
+  | CdSingle c => Exact [c]
+  | CdRange l h => if l == h then Exact [l] else Unknown
+  | CdUnion cd1 cd2 => merge_literals (extract_literal_char cd1) (extract_literal_char cd2)
+  | CdDot | CdAll | CdDigits | CdNonDigits | CdWhitespace | CdNonWhitespace | CdWordChar
+  | CdNonWordChar | CdUnicodeProp _ | CdNonUnicodeProp _ | CdInv _ => Unknown
+  end.
 
 (* extracting literals from a regex *)
 (*
@@ -654,7 +597,7 @@ Fixpoint extract_literals (r: regex) : list literal :=
   | Epsilon => [Nothing]
   | Regex.Character cd => extract_literals_char cd
   | Disjunction r1 r2 => extract_literals r1 ++ extract_literals r2
-  | Sequence r1 r2 => chain_literals_flat_prod (extract_literals r1) (extract_literals r2)
+  | Sequence r1 r2 => chain_literals_flat_map (extract_literals r1) (extract_literals r2)
   | Quantified _ min (NoI.N 0) r1 => repeat_literals (extract_literals r1) Nothing min
   | Quantified _ min _ r1 => repeat_literals (extract_literals r1) Unknown min
   | Lookaround _ _ => [Nothing]
@@ -663,62 +606,6 @@ Fixpoint extract_literals (r: regex) : list literal :=
   | Backreference _ => [Unknown]
   end.
 
-
-(* a list of literals represent a regex that can't have any matches if all elements are `Impossible` (that includes the empty list) *)
-Definition is_impossible ll := forallb (fun l => l == Impossible) ll = true.
-(* a list of literals represent a regex that has an exact match if the list is not empty and all elements are the same `Exact` *)
-Definition is_exact ll s := (ll <> [] /\ forallb (fun l => l == Exact s) ll = true).
-
-(* we define a class of literal extractors for which we will prove theorems about *)
-Class LiteralExtraction := {
-  (* extractors *)
-  extract_from_cd: char_descr -> list literal;
-  extract_from_regex: regex -> list literal;
-  (* spec *)
-  (* extracting an impossible literal must imply that the model also finds impossible *)
-  extract_from_cd_impossible: forall cd, is_impossible (extract_from_cd cd) -> is_impossible (extract_literals_char cd);
-  extract_from_regex_impossible: forall r, is_impossible (extract_from_regex r) -> is_impossible (extract_literals r);
-  (* extracting an exact literal must imply that the model also finds exact *)
-  extract_from_cd_exact: forall cd s, is_exact (extract_from_cd cd) s -> is_exact (extract_literals_char cd) s;
-  extract_from_regex_exact: forall r s, is_exact (extract_from_regex r) s -> is_exact (extract_literals r) s;
-  (* any literal we extract must correspond to a literal in the model *)
-  literals_correct_cd: forall cd l, In l (extract_from_cd cd) ->
-    exists l',
-      In l' (extract_literals_char cd) /\ starts_with (prefix l) (prefix l');
-  literals_correct_regex: forall r l, In l (extract_from_regex r) ->
-    exists l',
-      In l' (extract_literals r) /\ starts_with (prefix l) (prefix l');
-}.
-
-(* of course, the model extractors are an instance *)
-#[refine]
-Instance ModelLiteralExtraction: LiteralExtraction := {
-  extract_from_cd := extract_literals_char;
-  extract_from_regex := extract_literals;
-  extract_from_cd_impossible := ltac:(easy);
-  extract_from_regex_impossible := ltac:(easy);
-  extract_from_cd_exact := ltac:(easy);
-  extract_from_regex_exact := ltac:(easy);
-}.
-  - intros. now exists l.
-  - intros. now exists l.
-Defined.
-
-(** Single literal extraction *)
-(* We show a second instance of literal extraction which only extracts a single literal *)
-(* It essentially returns the result of merging all literals from the model extractors. *)
-(* extracting a literal from a character descriptor *)
-Fixpoint extract_literal_char (cd: char_descr) : literal :=
-  match cd with
-  | CdEmpty => Impossible
-  | CdSingle c => Exact [c]
-  | CdRange l h => if l == h then Exact [l] else Unknown
-  | CdUnion cd1 cd2 => merge_literals (extract_literal_char cd1) (extract_literal_char cd2)
-  | CdDot | CdAll | CdDigits | CdNonDigits | CdWhitespace | CdNonWhitespace | CdWordChar
-  | CdNonWordChar | CdUnicodeProp _ | CdNonUnicodeProp _ | CdInv _ => Unknown
-  end.
-
-(* extracting a literal from a regex *)
 Fixpoint extract_literal (r: regex) : literal :=
   if RegExpRecord.ignoreCase rer then Unknown else
   match r with
@@ -734,22 +621,10 @@ Fixpoint extract_literal (r: regex) : literal :=
   | Backreference _ => Unknown
   end.
 
-#[refine]
-Instance SingleLiteralExtraction: LiteralExtraction := {
-  extract_from_cd cd := [extract_literal_char cd];
-  extract_from_regex r := [extract_literal r];
-}.
-  - unfold is_impossible. induction cd; simpl; eauto.
-    intros H. simpl in *. boolprop. eqdec.
-    all: admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-Admitted.
-
 Ltac destruct_i := destruct RegExpRecord.ignoreCase eqn:no_i_flag.
+
+Definition is_impossible ll := (ll = [] \/ forallb (fun l => l == Impossible) ll = true).
+Definition is_exact ll := (ll <> [] /\ forallb (fun l => match l with | Exact _ => true | _ => false end) ll = true).
 
 Theorem extract_literal_char_impossible:
   forall r,
@@ -761,7 +636,7 @@ Proof.
   - eauto.
   - now eqdec.
   - rewrite merge_literals_impossible in H.
-    specialize (IHr1 (proj1 H)). specialize (IHr2 (proj2 H)).
+    specialize (IHr1 (proj1 H)) as [->|H1]; specialize (IHr2 (proj2 H)) as [->|H2]; rewrite ?app_nil_r; eauto.
     rewrite forallb_app. boolprop. eauto.
 Qed.
 
@@ -774,13 +649,12 @@ Proof.
   induction r; simpl; intro H; destruct_i; try discriminate.
   - now apply extract_literal_char_impossible.
   - rewrite merge_literals_impossible in H.
-    specialize (IHr1 (proj1 H)). specialize (IHr2 (proj2 H)).
-    rewrite ?app_nil_r; eauto.
+    specialize (IHr1 (proj1 H)) as [->|H1]; specialize (IHr2 (proj2 H)) as [->|H2]; rewrite ?app_nil_r; eauto.
     rewrite forallb_app. boolprop. eauto.
   - rewrite chain_literals_impossible in H. destruct H.
-    + specialize (IHr1 H). only 1: auto.
+    + specialize (IHr1 H) as [->|H1]; only 1: auto.
       admit.
-    + specialize (IHr2 H).
+    + specialize (IHr2 H) as [->|H2]; only 1: rewrite chain_literals_flat_map_nil_r; auto.
       admit.
   - destruct delta as [[]|].
     + admit.
@@ -788,7 +662,6 @@ Proof.
     + admit.
   - now apply IHr.
 Admitted.
-
 
 Definition extract_action_literal (a : action) : literal :=
   match a with
@@ -803,25 +676,10 @@ Fixpoint extract_actions_literal (acts : list action) : literal :=
   | a :: rest => chain_literals (extract_action_literal a) (extract_actions_literal rest)
   end.
 
-Create Rewrite HintDb prefix.
-Hint Unfold
-  prefix
-  chain_literals
-  merge_literals
-  common_prefix
-  merge_literals
-  extract_action_literal
-  extract_actions_literal : prefix.
-Hint Resolve
-  starts_with_common_prefix : prefix.
-Hint Rewrite
-  common_prefix_comm
-  merge_literals_comm : prefix.
-
 Fixpoint extract_actions_literals (acts : list action) : list literal :=
   match acts with
   | [] => [Nothing]
-  | Areg r :: rest => chain_literals_flat_prod (extract_literals r) (extract_actions_literals rest)
+  | Areg r :: rest => chain_literals_flat_map (extract_literals r) (extract_actions_literals rest)
   | Acheck _ :: rest => extract_actions_literals rest
   | Aclose _ :: rest => extract_actions_literals rest
   end.
@@ -867,12 +725,16 @@ Lemma extract_literal_char_impossible_no_match:
 Proof.
   unfold is_impossible.
   induction cd;
-    simpl; intros c' Himp;
+    simpl; intros c' [Hempty|Himp];
     (* the cd does not produce Impossible *)
     try discriminate.
   (* CdRange *)
   - now eqdec.
-  (* CdUnion *)
+  (* CdUnion (empty) *)
+  - apply app_eq_nil in Hempty as [H1 H2].
+    boolprop.
+    intros [H|H]; contradict H; eauto.
+  (* CdUnion (All) *)
   - rewrite forallb_app in Himp.
     boolprop.
     intros [H|H]; contradict H; eauto.
@@ -890,67 +752,77 @@ Proof.
   generalize dependent gm.
   induction Htree; simpl; intros * Hextract; subst;
     (* the result is that of the rest of the actions *)
-    try solve[simpl in *; destruct RegExpRecord.ignoreCase, (extract_actions_literal cont); eauto; easy];
-    try solve[apply (IHHtree eq_refl); destruct_i; eapply chain_literals_flat_prod_all_impossible' in Hextract; try right; easy].
-  (* tree_match *)
-  - discriminate.
+    try solve[simpl in *; destruct RegExpRecord.ignoreCase, (extract_actions_literal cont); eauto; easy].
+  (* tree_done *)
+  - now destruct Hextract.
   (* tree_char *)
   - (* there is a character to read *)
-    unfold read_char in READ. destruct inp as [[|c' next] pref]; only 1: discriminate.
+    unfold read_char in READ. destruct inp, next; [discriminate|].
     (* the character matches *)
     destruct char_match eqn:Hmatch; [|discriminate]. injection READ as <-. subst.
-    apply (IHHtree eq_refl).
-    eapply chain_literals_flat_prod_all_impossible in Hextract as [Hext|]; only 2: assumption.
-    destruct_i; only 1: easy.
-    exfalso.
-    eapply extract_literal_char_impossible_no_match; eauto.
+    apply chain_literals_impossible in Hextract as [Hcd | Hcont].
+    + exfalso. simpl in Hcd.
+      destruct_i; [discriminate|]. apply (extract_literal_char_impossible_no_match _ _ Hcd Hmatch).
+    + simpl. unfold advance_input'. eauto.
   (* tree_disj *)
-  - unfold seqop.
-    simpl in IHHtree1, IHHtree2.
-    specialize (IHHtree1 eq_refl gm0). specialize (IHHtree2 eq_refl gm0).
-    rewrite chain_literals_flat_prod_all_impossible in *.
-    boolprop.
-    + destruct_i; only 1: easy.
-      rewrite forallb_app in Hextract. boolprop.
+  - simpl in Hextract. simpl. unfold seqop.
+    simpl in IHHtree1, IHHtree2. rewrite chain_literals_impossible in IHHtree1, IHHtree2.
+    apply chain_literals_impossible in Hextract as [Hmerge | Hcont].
+    + destruct_i; [discriminate|].
+      apply merge_literals_impossible in Hmerge as [Hex1 Hex2].
       erewrite IHHtree1, IHHtree2; auto.
     + erewrite IHHtree1, IHHtree2; auto.
   (* tree_sequence *)
-  - simpl in IHHtree.
-    apply (IHHtree eq_refl).
-    rewrite !chain_literals_flat_prod_all_impossible in *.
-    boolprop; only 2: eauto.
-    destruct_i; only 1: easy.
-    apply chain_literals_flat_prod_all_impossible in Hextract as []; eauto.
+  - simpl in Hextract, IHHtree.
+    destruct_i.
+    + destruct extract_actions_literal; try easy.
+      repeat rewrite chain_literals_impossible in IHHtree.
+      eapply IHHtree; eauto.
+    + rewrite chain_literals_assoc in IHHtree.
+      eapply IHHtree; eauto.
   (* tree_quant_forced *)
-  - simpl in IHHtree.
-    apply (IHHtree eq_refl).
-    destruct_i; destruct plus as [[|n]|];
-      rewrite !chain_literals_flat_prod_all_impossible in *;
-      boolprop; eauto.
+  - simpl in Hextract |- *. destruct_i.
+    + simpl in IHHtree. rewrite no_i_flag in IHHtree.
+      repeat rewrite chain_literals_impossible in IHHtree, Hextract.
+      destruct Hextract; [discriminate|rewrite H in IHHtree].
+      eapply IHHtree; auto.
+    + apply chain_literals_impossible in Hextract as [Hrep | Hcont].
+      * destruct plus; [destruct n|];
+          apply chain_literals_impossible in Hrep as [? | ?];
+          eapply IHHtree; auto;
+          simpl; rewrite no_i_flag;
+          do 2 rewrite chain_literals_impossible; auto.
+      * eapply IHHtree; auto.
+        simpl; do 2 rewrite chain_literals_impossible; auto.
   (* tree_quant_free *)
-  - simpl in IHHtree1, IHHtree2.
+  - assert (Hex: extract_actions_literal cont = Impossible). {
+      simpl in Hextract. destruct RegExpRecord.ignoreCase, plus; now destruct extract_actions_literal.
+    }
     unfold greedy_choice.
-    destruct greedy; simpl; unfold seqop;
-      rewrite IHHtree1, IHHtree2; try reflexivity;
-      destruct_i; destruct plus as [[|n]|];
-      rewrite !chain_literals_flat_prod_all_impossible in *;
-      boolprop;
-      assumption || discriminate || eauto.
+    destruct greedy.
+    + simpl. unfold seqop.
+      rewrite IHHtree1, IHHtree2; auto.
+      simpl. rewrite Hex. destruct plus; [destruct n|]; destruct (extract_literal r1); destruct_i; reflexivity.
+    + simpl. unfold seqop.
+      rewrite IHHtree1, IHHtree2; auto.
+      simpl. rewrite Hex. destruct plus; [destruct n|]; destruct (extract_literal r1); destruct_i; reflexivity.
   (* tree_group *)
-  - simpl in IHHtree.
+  - simpl in *.
+    destruct RegExpRecord.ignoreCase, (extract_actions_literal cont); eauto; try easy.
+    rewrite chain_literals_impossible in IHHtree.
     eapply IHHtree; eauto.
-    rewrite chain_literals_flat_prod_all_impossible in *.
-    boolprop; only 2: eauto.
-    destruct_i; [easy|eauto].
   (* tree_lk *)
-  - rewrite chain_literals_flat_prod_all_impossible in Hextract.
-    boolprop.
-    1: now destruct_i.
-    destruct positivity, tree_res; try destruct l; eauto.
+  - simpl in Hextract |- *.
+    replace (extract_actions_literal cont) with Impossible in * by (destruct_i; now destruct extract_actions_literal).
+    rewrite IHHtree2 by auto.
+    destruct positivity.
+    + destruct tree_res; eauto.
+      destruct l. eauto.
+    + now destruct tree_res.
   (* tree_backref *)
-  - rewrite chain_literals_flat_prod_all_impossible in Hextract.
-    boolprop.
-    1: now destruct_i.
+  - simpl in Hextract |- *.
+    replace (if RegExpRecord.ignoreCase rer then Unknown else Unknown) with Unknown in Hextract by now destruct_i.
+    destruct extract_actions_literal; try easy.
     erewrite <-read_backref_success_advance; eauto.
 Qed.
 
