@@ -109,3 +109,41 @@ Proof.
 Qed.
 
 End TreeExample.
+
+Section FailRegex.
+  Context (rer: RegExpRecord).
+  (* a regex that always fails to match *)
+  (* (?=-)(?!-) : positive lookahead of hyphen followed by a negative lookahead of an hyphen *)
+  
+  Definition hyphen : regex := Regex.Character (CdSingle Characters.HYPHEN_MINUS).
+  
+  Definition fail_regex : regex := Sequence (Lookaround LookAhead hyphen) (Lookaround NegLookAhead hyphen).
+
+  Lemma fail_regex_fail:
+    forall inp gm dir t,
+      is_tree rer [Areg fail_regex] inp gm dir t ->
+      tree_leaves t gm inp dir = [].
+  Proof.
+    intros inp gm dir t TREE.
+    unfold fail_regex in TREE. inversion TREE; subst.
+    rewrite app_nil_r in CONT. destruct dir; simpl in *.
+    - (* forward *)
+      inversion CONT; subst; simpl in *. 2: reflexivity.
+      inversion TREELK; subst; simpl; auto.
+      inversion TREECONT0; subst.
+      inversion TREECONT; subst; simpl; auto.
+      inversion TREELK0; subst;
+        simpl in READ0; rewrite READ0 in READ; inversion READ. subst.
+      inversion TREECONT2. subst. simpl. auto.
+    - (* backward *)
+      inversion CONT; subst; simpl in *. 2: reflexivity.
+      inversion TREELK; subst; simpl; auto.
+      (* reading should have failed *)
+      { inversion TREECONT0. subst. cbn in RES_LK. inversion RES_LK. }
+      inversion TREECONT; subst; simpl; auto.
+      inversion TREELK0; subst;
+        simpl in READ0; rewrite READ0 in READ; inversion READ.
+      simpl. auto.
+  Qed.
+
+End FailRegex.
