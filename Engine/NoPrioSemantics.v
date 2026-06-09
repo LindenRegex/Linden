@@ -8,6 +8,7 @@ From Linden Require Import StrictSuffix.
 From Linden Require Import FunctionalSemantics.
 From Linden Require Import ComputeIsTree.
 From Linden Require Import Parameters.
+From Linden Require Import FlatMap Equivalence FunctionalUtils.
 
 
 (* A rephrasing of the semantics, where priority does not matter *)
@@ -55,6 +56,9 @@ Section NoPrioSemantics.
       (PROGRESS: strict_suffix inp1 inp0 forward)
       (LOOP: noprio inp1 gm1 (Quantified greedy 0 delta r) inp2 gm2),
       noprio inp0 gm0 (Quantified greedy 0 (NoI.N 1 + delta)%NoI r) inp2 gm2
+  | np_quant_skip:
+    forall inp gm r greedy delta,
+      noprio inp gm (Quantified greedy 0 (NoI.N 1 + delta)%NoI r) inp gm
   | np_group:
     forall inp gm r gid nextinp nextgm
       (GROUP: noprio inp (GroupMap.open (idx inp) gid gm) r nextinp nextgm),
@@ -69,7 +73,134 @@ Section NoPrioSemantics.
   
 
   (** * NoPrio Tree Equivalence  *)
-  
-  (* TODO *)
 
+  Lemma two_app:
+    forall A (a1 a2:A), [a1; a2] = [a1] ++ [a2].
+  Proof. auto. Qed.
+
+  Lemma three_app:
+    forall A (a1 a2 a3:A), [a1; a2; a3] = [a1] ++ [a2] ++ [a3].
+  Proof. auto. Qed.
+
+  (* If we can find a leaf in the tree of the first list of actions,
+   then a leaf in the tree of the second list,
+   then that final leaf is a leaf of the tree of the concatenation *)
+  Lemma in_leaves_app:
+    forall inp0 gm0 inp1 gm1 inp2 gm2 a1 a2 t1 t2 t12
+      (TREE12: is_tree rer (a1 ++ a2) inp0 gm0 forward t12)
+      (TREE1: is_tree rer a1 inp0 gm0 forward t1)
+      (TREE2: is_tree rer a2 inp1 gm1 forward t2)
+      (IN1: In (inp1,gm1) (tree_leaves t1 gm0 inp0 forward))
+      (IN2: In (inp2, gm2) (tree_leaves t2 gm1 inp1 forward)),
+      In (inp2, gm2) (tree_leaves t12 gm0 inp0 forward).
+  Proof.
+    intros inp0 gm0 inp1 gm1 inp2 gm2 a1 a2 t1 t2 t12 TREE12 TREE1 TREE2 IN1 IN2.
+    specialize (leaves_concat _ _ _ _ _ _ _ _ TREE12 TREE1) as FM.
+    assert (ACT: act_from_leaf rer a2 forward (inp1, gm1) (tree_leaves t2 gm1 inp1 forward)).
+    { constructor. simpl. auto. }
+    specialize (FlatMap_in _ _ _ _ _ (act_from_leaf_determ _ _ _) FM IN1 ACT) as FM_IN.
+    rewrite Forall_forall in FM_IN.
+    apply FM_IN. auto.
+  Qed.
+
+  Lemma in_leaves_app3:
+    forall inp0 gm0 inp1 gm1 inp2 gm2 inp3 gm3 a1 a2 a3 t1 t2 t3 t123
+      (TREE123: is_tree rer (a1 ++ a2 ++ a3) inp0 gm0 forward t123)
+      (TREE1: is_tree rer a1 inp0 gm0 forward t1)
+      (TREE2: is_tree rer a2 inp1 gm1 forward t2)
+      (TREE3: is_tree rer a3 inp2 gm2 forward t3)
+      (IN1: In (inp1,gm1) (tree_leaves t1 gm0 inp0 forward))
+      (IN2: In (inp2, gm2) (tree_leaves t2 gm1 inp1 forward))
+      (IN3: In (inp3, gm3) (tree_leaves t3 gm2 inp2 forward)),
+      In (inp3, gm3) (tree_leaves t123 gm0 inp0 forward).
+  Proof.
+    intros inp0 gm0 inp1 gm1 inp2 gm2 inp3 gm3 a1 a2 a3 t1 t2 t3 t123 TREE123 TREE1 TREE2 TREE3 IN1 IN2 IN3.
+    specialize (is_tree_productivity rer (a2 ++ a3) inp1 gm1 forward) as [t23 TREE23].
+    assert (IN23: In (inp3, gm3) (tree_leaves t23 gm1 inp1 forward)).
+    { apply (in_leaves_app _ _ _ _ _ _ _ _ _ _ _ TREE23 TREE2 TREE3 IN2 IN3). }
+    apply (in_leaves_app _ _ _ _ _ _ _ _ _ _ _ TREE123 TREE1 TREE23 IN1 IN23).
+  Qed.
+
+  (* all leaves obtained from noprio are leaves of the backtracking tree *)
+  Theorem noprio_is_leaf:
+    forall r inp gm t leafinp leafgm
+      (TREE: is_tree rer [Areg r] inp gm forward t),
+      noprio inp gm r leafinp leafgm -> 
+      In (leafinp, leafgm) (tree_leaves t gm inp forward).
+  Proof.
+    intros r inp gm t leafinp leafgm TREE NP. 
+    generalize dependent t.
+    induction NP; intros.
+    - inversion TREE; subst. inversion ISTREE; subst.
+      simpl. auto.
+    - inversion TREE; subst;
+        rewrite READ0 in READ; inversion READ; subst.
+      inversion TREECONT; subst. simpl.
+      apply read_char_success_advance in READ0.
+      unfold advance_input'. rewrite READ0. auto.
+    - inversion TREE; subst. apply IHNP in ISTREE1.
+      simpl. apply in_or_app. auto.
+    - inversion TREE; subst. apply IHNP in ISTREE2.
+      simpl. apply in_or_app. auto.
+    - inversion TREE; subst.
+      simpl in CONT. rewrite two_app in CONT.
+      specialize (is_tree_productivity rer [Areg r1] inp0 gm0 forward) as [t1 HT1].
+      specialize (is_tree_productivity rer [Areg r2] inp1 gm1 forward) as [t2 HT2].
+      eapply in_leaves_app; eauto.
+    - inversion TREE; subst.
+      rewrite two_app in ISTREE1.
+      specialize (is_tree_productivity rer [Areg r] inp0 (GroupMap.reset (def_groups r) gm0) forward) as [t1 HT1].
+      specialize (is_tree_productivity rer [Areg (Quantified greedy min delta r)] inp1 gm1 forward) as [t2 HT2].
+      assert (IN1: In (inp1, gm1) (tree_leaves t1 (GroupMap.reset (def_groups r) gm0) inp0 forward)).
+      { apply IHNP1. auto. }
+      assert (IN2: In (inp2, gm2) (tree_leaves t2 gm1 inp1 forward)).
+      { apply IHNP2. auto. }
+      eapply (in_leaves_app _ _ _ _ inp2 gm2 _ _ _ _ _ ISTREE1 HT1 HT2 IN1 IN2); eauto.
+    - inversion TREE; subst.
+      + inversion SKIP; subst. simpl. auto.
+      + destruct plus; inversion H1.
+    - inversion TREE; subst.
+      { destruct delta; inversion H1. }
+      assert (DP: plus = delta).
+      { destruct plus; destruct delta; auto; inversion H1; auto. }
+      subst. clear H1. clear SKIP.
+      specialize (is_tree_productivity rer [Areg r] inp0 (GroupMap.reset (def_groups r) gm0) forward) as [t1 HT1].
+      specialize (is_tree_productivity rer [Acheck inp0] inp1 gm1 forward) as [t2 HT2].
+      specialize (is_tree_productivity rer [Areg (Quantified greedy 0 delta r)] inp1 gm1 forward) as [t3 HT3].
+      assert (IN1: In (inp1, gm1) (tree_leaves t1 (GroupMap.reset (def_groups r) gm0) inp0 forward)).
+      { apply IHNP1. auto. }
+      assert (IN2: In (inp1, gm1) (tree_leaves t2 gm1 inp1 forward)).
+      { inversion HT2; subst.
+        - inversion TREECONT; subst. simpl. auto.
+        - apply CHECKFAIL in PROGRESS. inversion PROGRESS. (* we know progress happened *)
+      }
+      assert (IN3: In (inp2, gm2) (tree_leaves t3 gm1 inp1 forward)).
+      { apply IHNP2. auto. }
+      rewrite three_app in ISTREE1.
+      destruct greedy; simpl.
+      + apply in_or_app. left.
+        eapply (in_leaves_app3 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ISTREE1 HT1 HT2 HT3 IN1 IN2 IN3). 
+      + apply in_or_app. right.
+        eapply (in_leaves_app3 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ISTREE1 HT1 HT2 HT3 IN1 IN2 IN3). 
+    - inversion TREE; subst.
+      { destruct delta; inversion H1. }
+      inversion SKIP. subst.
+      destruct greedy; simpl; auto.
+      apply in_or_app; simpl; auto.      
+    - inversion TREE; subst.
+      rewrite two_app in TREECONT.
+      specialize (is_tree_productivity rer [Areg r] inp (GroupMap.open (idx inp) gid gm) forward) as [t1 HT1].
+      specialize (is_tree_productivity rer [Aclose gid] nextinp nextgm forward) as [t2 HT2].
+      assert (IN1: In (nextinp, nextgm) (tree_leaves t1 (GroupMap.open (idx inp) gid gm) inp forward)).
+      { apply IHNP. auto. }
+      assert (IN2: In (nextinp, GroupMap.close (idx nextinp) gid nextgm) (tree_leaves t2 nextgm nextinp forward)).
+      { inversion HT2. subst. inversion TREECONT0. subst. simpl. auto. }
+      eapply (in_leaves_app _ _ _ _ nextinp (GroupMap.close (idx nextinp) gid nextgm) _ _ _ _ _ TREECONT HT1 HT2 IN1 IN2); eauto.
+    - inversion TREE; subst;
+        rewrite ANCHOR0 in ANCHOR; inversion ANCHOR.
+      inversion TREECONT; subst. simpl. auto.
+  Qed.
+
+  (* LATER: other direction *)
+  
 End NoPrioSemantics.
