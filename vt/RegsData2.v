@@ -290,7 +290,7 @@ End Array.
 
 
 (* Regsdata *)
-Module RegsData : CDATA.
+Module RegsData.
   
   (* Definitions *)
   
