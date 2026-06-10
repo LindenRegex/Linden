@@ -201,6 +201,112 @@ Section NoPrioSemantics.
       inversion TREECONT; subst. simpl. auto.
   Qed.
 
-  (* LATER: other direction *)
+  (* Other direction: generalizing the noprio semantics to actions *)
+
+  Inductive noprio_action: input -> group_map -> action -> input -> group_map -> Prop :=
+  | np_regex:
+    forall inp gm r nextinp nextgm
+      (NP: noprio inp gm r nextinp nextgm),
+      noprio_action inp gm (Areg r) nextinp nextgm
+  | np_close:
+    forall inp gm gid,
+      noprio_action inp gm (Aclose gid) inp (GroupMap.close (idx inp) gid gm)
+  | np_check:
+    forall inp gm inpcheck
+      (PROGRESS: strict_suffix inp inpcheck forward),
+      noprio_action inp gm (Acheck inpcheck) inp gm.
+
+  Inductive noprio_list: input -> group_map -> list action -> input -> group_map -> Prop :=
+  | np_nil:
+    forall inp gm,
+      noprio_list inp gm [] inp gm
+  | np_cons:
+    forall inp0 gm0 a inp1 gm1 l inp2 gm2
+      (NP_A: noprio_action inp0 gm0 a inp1 gm1)
+      (NP_L: noprio_list inp1 gm1 l inp2 gm2),
+      noprio_list inp0 gm0 (a::l) inp2 gm2.
+
+  Lemma is_tree_action_noprio:
+    forall inp0 gm0 l t inp1 gm1
+      (SUBSET: pike_actions l)
+      (TREE: is_tree rer l inp0 gm0 forward t)
+      (LEAF: In (inp1, gm1) (tree_leaves t gm0 inp0 forward)),
+      noprio_list inp0 gm0 l inp1 gm1.
+  Proof.
+    intros inp0 gm0 l t inp1 gm1 SUBSET TREE LEAF.
+    remember forward as dir.
+    induction TREE; simpl in LEAF; subst;
+      try solve [inversion LEAF]; pike_subset.
+    - destruct LEAF as [LEAF|LEAF]; inversion LEAF; subst. constructor.
+    - repeat (econstructor; eauto).
+    - repeat (econstructor; eauto). 
+    - repeat (econstructor; eauto).
+    - econstructor; eauto.
+      2: { apply read_char_success_advance in READ as ADV.
+           unfold advance_input' in LEAF. rewrite ADV in LEAF. eauto. }
+      repeat (econstructor; eauto). 
+    - apply in_app_or in LEAF as [LEAF|LEAF].
+      + assert (noprio_list inp gm (Areg r1::cont) inp1 gm1).
+        { apply IHTREE1; auto. pike_subset. }
+        inversion H; subst. inversion NP_A. repeat (econstructor; eauto).
+      + assert (noprio_list inp gm (Areg r2::cont) inp1 gm1).
+        { apply IHTREE2; auto. pike_subset. }
+        inversion H; subst. inversion NP_A. solve[repeat (econstructor; eauto)].
+    - simpl in IHTREE.
+      assert (noprio_list inp gm (Areg r1 :: Areg r2 :: cont) inp1 gm1).
+      { apply IHTREE; auto. pike_subset. }
+      inversion H; inversion NP_L; inversion NP_A; inversion NP_A0; subst.
+      repeat (econstructor; eauto).
+    - specialize (IHTREE H2 (eq_refl _) LEAF).
+      repeat econstructor; eauto.
+    - destruct plus; inversion H3; subst.
+      specialize (IHTREE2 H2 (eq_refl _)).
+      assert (In (inp1,gm1) (tree_leaves titer (GroupMap.reset (def_groups r1) gm) inp forward) \/
+                In (inp1,gm1) (tree_leaves tskip gm inp forward)) as [LEAFSKIP|LEAFITER].
+      { destruct greedy; simpl in LEAF; apply in_app_or in LEAF; auto.
+        destruct LEAF; auto. }
+      (* skip *)
+      2: { econstructor; eauto. econstructor; eauto. apply np_quant_skip. }
+      (* iter *)
+      assert (noprio_list inp (GroupMap.reset (def_groups r1) gm) (Areg r1 :: Acheck inp :: Areg (Quantified greedy 0 +∞ r1) :: cont) inp1 gm1).
+      { apply IHTREE1; auto. pike_subset. }
+      inversion H; inversion NP_L; inversion NP_A; inversion NP_A0; inversion NP_L0; inversion NP_A1; subst.
+      repeat (econstructor; eauto).
+    - destruct plus; inversion H3. subst.
+      specialize (IHTREE2 H2 (eq_refl _)).
+      assert (In (inp1,gm1) (tree_leaves titer (GroupMap.reset (def_groups r1) gm) inp forward) \/
+                In (inp1,gm1) (tree_leaves tskip gm inp forward)) as [LEAFSKIP|LEAFITER].
+      { destruct greedy; simpl in LEAF; apply in_app_or in LEAF; auto.
+        destruct LEAF; auto. }
+      (* skip *)
+      2: { econstructor; eauto. econstructor; eauto. apply np_quant_skip. }
+      (* iter *)
+      assert (noprio_list inp (GroupMap.reset (def_groups r1) gm) (Areg r1 :: Acheck inp :: Areg (Quantified greedy 0 (NoI.N 0) r1) :: cont) inp1 gm1).
+      { apply IHTREE1; auto. pike_subset. }
+      inversion H; inversion NP_L; inversion NP_A; inversion NP_A0; inversion NP_L0; inversion NP_A1; subst.
+      repeat (econstructor; eauto).
+    - destruct plus; inversion H3.
+    - assert (noprio_list inp (GroupMap.open (idx inp) gid gm) (Areg r1 :: Aclose gid :: cont) inp1 gm1).
+      { apply IHTREE; auto. pike_subset. }
+      inversion H; inversion NP_A; inversion NP_L; inversion NP_A0; subst.
+      repeat (econstructor; eauto).
+    - specialize (IHTREE H2 (eq_refl _) LEAF).
+      repeat (econstructor; eauto).
+  Qed.
+
+  (* For the Pike Subset, the NoPrio Semantics exactly coincides with leaves of the Tree Semantics *)
+  Theorem noprio_eq_is_leaf:
+    forall r inp gm t leafinp leafgm
+      (SUBSET: pike_regex r)
+      (TREE: is_tree rer [Areg r] inp gm forward t),
+      noprio inp gm r leafinp leafgm <-> 
+        In (leafinp, leafgm) (tree_leaves t gm inp forward).
+  Proof.
+    intros r inp gm t leafinp leafgm SUBSET TREE. split.
+    - apply noprio_is_leaf. auto.
+    - intros. eapply is_tree_action_noprio in TREE; eauto.
+      2: pike_subset.
+      inversion TREE; inversion NP_A; inversion NP_L; subst. auto.
+  Qed.
   
 End NoPrioSemantics.
