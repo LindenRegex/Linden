@@ -76,7 +76,45 @@ Section NoPrioSemantics.
   (* LATER: there will be an issue if we want to add negative lookarounds: strict positivity *)
   (* We might want to declare an oracle version of this, since this reversal is used in engines when we already know about the values of deeper lookarounds. *)
   
+  (** * Properties  *)
 
+  (* group map irrelevance *)
+  Theorem noprio_gm_irrel:
+    forall dir inp0 gm0 r inp1 gm1 gm0'
+      (NP: noprio dir inp0 gm0 r inp1 gm1),
+    exists gm1', noprio dir inp0 gm0' r inp1 gm1'.
+  Proof.
+    intros dir inp0 gm0 r inp1 gm1 gm0' NP.
+    generalize dependent gm0'.
+    induction NP; intros.
+    - repeat (econstructor; eauto).
+    - repeat (econstructor; eauto).
+    - destruct (IHNP gm0') as [gm1' IH].
+      repeat (econstructor; eauto).
+    - destruct (IHNP gm0') as [gm1' IH].
+      solve[repeat (econstructor; eauto)].
+    - destruct (IHNP1 gm0') as [gm1' IH1].
+      destruct (IHNP2 gm1') as [gm2' IH2].
+      repeat (econstructor; eauto).
+    - destruct (IHNP1 gm0') as [gm1' IH1].
+      destruct (IHNP2 gm1') as [gm2' IH2].
+      repeat (econstructor; eauto).
+    - destruct (IHNP1 (GroupMap.reset gidl gm0')) as [gm1' IH1].
+      destruct (IHNP2 gm1') as [gm2' IH2].
+      repeat (econstructor; eauto).
+    - repeat (econstructor; eauto).
+    - destruct (IHNP1 (GroupMap.reset gidl gm0')) as [gm1' IH1].
+      destruct (IHNP2 gm1') as [gm2' IH2].
+      repeat (econstructor; eauto).
+    - eexists. apply np_quant_skip.
+    - destruct (IHNP (GroupMap.open (idx inp) gid gm0')) as [gm1' IH].
+      repeat (econstructor; eauto).
+    - repeat (econstructor; eauto).
+  Qed.
+
+  (* TODO: can we consider removing gm entirely?
+     We don't have backreferences, and we use it for reversal, the resulting group maps make no sense anyway. *)
+  
   (** * NoPrio Tree Equivalence  *)
 
   Lemma two_app:
@@ -323,5 +361,98 @@ Section NoPrioSemantics.
       2: pike_subset.
       inversion TREE; inversion NP_A; inversion NP_L; subst. auto.
   Qed.
+
+  (** * Reversal Property  *)
+
+  Definition reverse (d:Direction): Direction :=
+    match d with
+    | forward => backward
+    | backward => forward
+    end.
+
+  Lemma read_char_reverse:
+    forall cd inp dir c nextinp,
+      read_char rer cd inp dir = Some (c, nextinp) ->
+      read_char rer cd nextinp (reverse dir) = Some (c, inp).
+  Proof.
+    intros cd [next1 pref1] dir c [next2 pref2] H.
+    destruct dir; simpl; simpl in H.
+    - destruct next1; inversion H.
+      destruct (char_match) eqn:CM; inversion H. subst.
+      rewrite CM. auto.
+    - destruct pref1; inversion H.
+      destruct (char_match) eqn:CM; inversion H. subst.
+      rewrite CM. auto.
+  Qed.
+
+  Theorem noprio_reversal:
+    forall dir r inp1 inp2 gma gmb
+      (NP1: noprio dir inp1 gma r inp2 gmb),
+    forall gmc, exists gmd, noprio (reverse dir) inp2 gmc r inp1 gmd.
+  Proof.
+    intros dir r.
+    induction r; intros.
+    - inversion NP1. subst. repeat (econstructor; eauto).
+    - inversion NP1. subst.
+      apply read_char_reverse in READ as REV.
+      repeat (econstructor; eauto).
+    - inversion NP1; subst.
+      + eapply IHr1 in LEFT as [gmd H]. repeat (econstructor; eauto).
+      + eapply IHr2 in RIGHT as [gmd H]. solve[repeat (econstructor; eauto)].
+    - inversion NP1; subst; simpl in *.
+      + apply IHr2 with (gmc:=gmc) in SEQ2 as [gmd H2].
+        apply IHr1 with (gmc:=gmd) in SEQ1 as H1. destruct H1 as [gme H1].
+        (* ah! why doesn't the intro pattern work here? *)
+        repeat (econstructor; eauto).
+      + apply IHr1 with (gmc:=gmc) in SEQ2 as [gmd H2].
+        apply IHr2 with (gmc:=gmd) in SEQ1 as H1. destruct H1 as [gme H1].
+        repeat (econstructor; eauto).
+    - inversion NP1; subst.
+      +                         (* forced *)
+      (* induction over r fails: r{min} is not a subregex of r{min+1} *)
+        admit.
+      +                         (* done *)
+        repeat (econstructor; eauto).
+      +                         (* free *)
+        admit.
+      +                         (* skip *)
+        exists gmc. apply np_quant_skip.
+    - inversion NP1.
+    - inversion NP1. subst.
+      eapply IHr in GROUP as [gmd H].
+      repeat (econstructor; eauto).
+    - inversion NP1. subst.
+      repeat (econstructor; eauto).
+    - inversion NP1.
+  Abort.
+
+  
+  Theorem noprio_reversal:
+    forall dir r inp1 inp2 gma gmb
+      (NP1: noprio dir inp1 gma r inp2 gmb),
+    forall gmc, exists gmd, noprio (reverse dir) inp2 gmc r inp1 gmd.
+  Proof.
+    intros dir r inp1 inp2 gma gmb NP1 gmc.
+    generalize dependent gmc. induction NP1; intros.
+    - repeat (econstructor; eauto).
+    - apply read_char_reverse in READ as REV.
+      destruct dir; simpl; exists gmc; econstructor; eauto.
+    - destruct (IHNP1 gmc) as [gmd H]. eexists. apply np_disj_left. eauto.
+    - destruct (IHNP1 gmc) as [gmd H]. eexists. apply np_disj_right. eauto.
+    - destruct (IHNP1_2 gmc) as [gmd H2]. destruct (IHNP1_1 gmd) as [gme H1].
+      repeat (econstructor; eauto).
+    - destruct (IHNP1_2 gmc) as [gmd H1]. destruct (IHNP1_1 gmd) as [gme H2].
+      repeat (econstructor; eauto).
+    - admit.
+    (* does not work: in one direction we do r and then r{min}
+       in the other we also do r and then r{min}, but we would like them switched to apply IH.
+       One solution would be to prove that for noprio, r.r{} is equivalent to r{}.r *)
+    - repeat (econstructor; eauto).
+    - admit.
+    - eexists. eapply np_quant_skip.
+    - destruct (IHNP1 (GroupMap.open (idx nextinp) gid gmc)) as [gmd H1].
+      repeat (econstructor; eauto).
+    - repeat (econstructor; eauto).
+  Admitted.
   
 End NoPrioSemantics.
