@@ -42,7 +42,7 @@ From Linden Require Import Tree Semantics NFA.
 From Linden Require Import BooleanSemantics PikeSubset.
 From Linden Require Import Parameters SeenSets Prefix.
 From Linden Require Import VirtualTree RegsData2.
-(*From Linden Require Import PikeVM.*)
+From Linden Require Import PikeVM.
 From Warblre Require Import Base RegExpRecord.
 
 Module Regs := VT(RegsData).
@@ -57,7 +57,7 @@ Section PikeVM.
 (** * Registers *)
 
   Definition regs := Regs.State.
-  Definition regs_id := nat. (* leaf id *)
+  Definition regs_id := nat. (* virtual tree leaf id *)
   Definition gid_to_idx (gid:group_id) : nat := 2 * gid.
 
   (** * PikeVM threads  *)
@@ -73,8 +73,6 @@ Definition advance_thread_vt (t:thread_vt) : thread_vt :=
 (* used after consuming *)
 Definition block_thread_vt (t:thread_vt) : thread_vt :=
   match t with (l,r,b) => (l+1,r,CanExit) end.
-
-Print Regs.insert.
 
 Definition open_thread_vt (t:thread_vt) (gid:group_id) (idx:nat) (r:regs): thread_vt * regs :=
   match t with
@@ -108,6 +106,8 @@ Definition begin_thread_vt (t:thread_vt) : thread_vt :=
 
 (*Definition gm_of (t:thread_vt) : group_map :=
   match t with (pc,gm,b) => gm end.*)
+Definition ri_of (t:thread_vt) : regs_id :=
+  match t with (pc,ri,b) => ri end.
 
 Definition seen_thread_vt (seen:seenpcs) (t:thread_vt) :bool :=
   match t with
@@ -183,11 +183,12 @@ Definition epsilon_step_vt (t:thread_vt) (c:code) (i:input) (r:regs) : epsilon_r
 
 (** * PikeVM Semantics  *)
 
+Definition leaf_vt : Type := input * regs_id.
+
 (* semantic states of the PikeVM algorithm *)
-Inductive pike_vm_state : Type :=
-| PVS (inp:input) (active: list thread) (best: option leaf) (blocked: list thread) (nextprefix: option (nat * literal * StrSearch)) (seen: seenpcs)
-      (regs: RegsType)
-| PVS_final (best: option (input * nat * RegsType)). (* should add regs here too ? *) (* leaf = input + groupmap*)
+Inductive pike_vm_state_vt : Type :=
+| PVS (inp:input) (active: list thread_vt) (best: option leaf_vt) (blocked: list thread_vt) (nextprefix: option (nat * literal * StrSearch)) (seen: seenpcs) (r:regs)
+| PVS_final (best: option leaf_vt) (r: regs).
 
 (* given an input and literal, we compute the next prefix counter *)
 (* since the counter is always offset by one, we first try to advance the input before performing a prefix search *)
@@ -201,89 +202,82 @@ Definition next_prefix_counter {strs:StrSearch} (inp: input) (lit: literal) : op
       end
   end.
 
-Definition pike_vm_initial_thread : thread := (0, GroupMap.empty, CanExit).
-Definition pike_vm_initial_thread : thread := (0, 0, CanExit).
-(* initial state for the PikeVM which operates in unanchored fashion *)
-Definition pike_vm_initial_state_unanchored {strs:StrSearch} (lit:literal) (inp:input) : pike_vm_state :=
-  let nextprefix := next_prefix_counter inp lit in
-  PVS inp [pike_vm_initial_thread] None [] nextprefix initial_seenpcs.
-(* initial state for the PikeVM which operates in anchored fashion *)
-Definition pike_vm_initial_state (inp:input) : pike_vm_state :=
-  PVS inp [pike_vm_initial_thread] None [] None initial_seenpcs.
+Definition vt_initial_id := 0.
+Definition pike_vm_initial_thread_vt : thread_vt := (0, vt_initial_id, CanExit).
 
+(* initial state for the PikeVM which operates in unanchored fashion *)
+(* ignored for vt *)
+(*Definition pike_vm_initial_state_unanchored {strs:StrSearch} (lit:literal) (inp:input) : pike_vm_state :=
+  let nextprefix := next_prefix_counter inp lit in
+  PVS inp [pike_vm_initial_thread] None [] nextprefix initial_seenpcs.*)
+
+(* initial state for the PikeVM which operates in anchored fashion *)
+Definition pike_vm_initial_state_vt (inp:input) (regs_size: nat) : pike_vm_state_vt :=
+  PVS inp [pike_vm_initial_thread_vt] None [] None initial_seenpcs (Regs.initial_tree regs_size).
+
+Definition delete_thread_regs_from_regs_state: list thread_vt -> regs -> regs :=
+  List.fold_left (fun r t => (* get regs_id from thread, delete it from r *)
+                    match t with
+                      (_, ri, _) => Regs.delete ri r end).
+Definition delete_best_regs_from_regs_state (best:option leaf_vt) (r:regs) : regs :=
+  match best with
+  | Some (_, ri) => Regs.delete ri r
+  | None => r
+  end.
 
 (* small-step semantics for the PikeVM algorithm *)
-Inductive pike_vm_step_vt (c:code): pike_vm_state -> pike_vm_state -> Prop :=
+Inductive pike_vm_step_vt (c:code): pike_vm_state_vt -> pike_vm_state_vt -> Prop :=
 | pvs_final:
-(* moving to a final state when there are no more active or blocked threads *)
+  (* moving to a final state when there are no more active or blocked threads *)
   forall inp best seen regs,
-    pike_vm_step c (PVS inp [] best [] None seen regs) (PVS_final best) (* regs with nat in best *)
-| pvs_acc: (* remove this rule *)
-(* if there are no more active or blocked threads and we know where the next prefix matches, *)
-(* we accelerate to that point *)
-  forall inp best n lit strs nextinp seen regs
-    (ADVANCE: advance_input_n inp (S n) forward = nextinp),
-    pike_vm_step c (PVS inp [] best [] (Some (n, lit, strs)) seen regs)
-                    (PVS nextinp [pike_vm_initial_thread] best [] (next_prefix_counter nextinp lit) initial_seenpcs regs) (* TODO define initial regs *)
+    pike_vm_step_vt c (PVS inp [] best [] None seen regs) (PVS_final best regs)
 | pvs_end:
   (* when the list of active is empty and we've reached the end of string *)
   (* in practice, this rule is never used because we can have no blocked threads *)
   (* when there is no input left. We keep this rule for convenience in the proofs *)
   (* and for relating it to the functional version *)
-  forall inp best thr blocked nextprefix seen
-    (ADVANCE: advance_input inp forward = None),
-    pike_vm_step c (PVS inp [] best (thr::blocked) nextprefix seen) (PVS_final best) (* TODO if final needs regs: final_regs is regs where we deleted all threads in blocked *)
+  forall inp best thr blocked nextprefix seen regs regs'
+         (ADVANCE: advance_input inp forward = None)
+         (DELETE_REGS: regs' = delete_thread_regs_from_regs_state (thr::blocked) regs),
+    pike_vm_step_vt c (PVS inp [] best (thr::blocked) nextprefix seen regs) (PVS_final best regs')
 | pvs_nextchar:
   (* when the list of active threads is empty (but not blocked), restart from the blocked ones, proceeding to the next character *)
   (* reset the set of seen pcs *)
   forall inp1 inp2 best thr blocked seen regs
-    (ADVANCE: advance_input inp1 forward = Some inp2),
-    pike_vm_step c (PVS inp1 [] best (thr::blocked) None seen regs) (PVS inp2 (thr::blocked) best [] None initial_seenpcs regs)
-| pvs_nextchar_generate: (* deactivate ? remove this rule *)
-  (* when the list of active threads is empty (but not blocked), restart from the blocked ones, proceeding to the next character *)
-  (* since the nextprefix counter reached zero, we must also append as lowest priority the initial thread *)
-  (* reset the set of seen pcs *)
-  forall inp1 inp2 best lit strs thr blocked seen
-    (ADVANCE: advance_input inp1 forward = Some inp2),
-    pike_vm_step c (PVS inp1 [] best (thr::blocked) (Some (0, lit, strs)) seen) 
-                  (PVS inp2 ((thr::blocked) ++ [pike_vm_initial_thread]) best [] (next_prefix_counter inp2 lit) initial_seenpcs)
-                  (* TODO is regs id correct for initial thread ? Maybe a function of that nb *)
-                  (* but then the leaf id is invalid, unless we split. Can we split ? *)
-| pvs_nextchar_filter:
-  (* when the list of active threads is empty (but not blocked), restart from the blocked ones, proceeding to the next character *)
-  (* since the nextprefix counter is nonzero, we do not append the initial thread *)
-  (* reset the set of seen pcs *)
-  forall inp1 inp2 best n lit strs thr blocked seen regs
-    (ADVANCE: advance_input inp1 forward = Some inp2),
-    pike_vm_step c (PVS inp1 [] best (thr::blocked) (Some (S n, lit, strs)) seen regs) 
-                  (PVS inp2 (thr::blocked) best [] (Some (n, lit, strs)) initial_seenpcs regs)
+         (ADVANCE: advance_input inp1 forward = Some inp2),
+    pike_vm_step_vt c (PVS inp1 [] best (thr::blocked) None seen regs) (PVS inp2 (thr::blocked) best [] None initial_seenpcs regs)
 | pvs_skip:
   (* when the pc has already been seen at this current index, we skip it entirely *)
-  forall inp t active best blocked nextprefix seen
-    (SEEN: seen_thread seen t = true),
-    (* so t is killed ? -> then regs' is regs where t's leaf is deleted *)
-    pike_vm_step c (PVS inp (t::active) best blocked nextprefix seen) (PVS inp active best blocked nextprefix seen)
+  forall inp t active best blocked nextprefix seen regs regs'
+         (SEEN: seen_thread_vt seen t = true)
+         (DELETE_REG:  regs' = delete_thread_regs_from_regs_state [t] regs), (* t is killed, so its regs are deleted *)
+    pike_vm_step_vt c (PVS inp (t::active) best blocked nextprefix seen regs) (PVS inp active best blocked nextprefix seen regs')
 | pvs_active:
   (* generated new active threads: add them in front of the low-priority ones *)
-  forall inp t active best blocked nextprefix seen nextactive
-    (UNSEEN: seen_thread seen t = false)
-    (STEP: epsilon_step t c inp = EpsActive nextactive), (* returns next regs *)
-    pike_vm_step c (PVS inp (t::active) best blocked nextprefix seen) (PVS inp (nextactive++active) best blocked nextprefix (add_thread seen t))
+  forall inp t active best blocked nextprefix seen nextactive regs regs'
+         (UNSEEN: seen_thread_vt seen t = false)
+         (STEP: epsilon_step_vt t c inp regs = (EpsActive nextactive, regs')), (* returns next regs *)
+    pike_vm_step_vt c (PVS inp (t::active) best blocked nextprefix seen regs)
+      (PVS inp (nextactive++active) best blocked nextprefix (add_thread_vt seen t) regs')
 | pvs_match:
   (* a match is found, discard remaining low-priority active threads *)
-  forall inp t active best blocked nextprefix seen
-    (UNSEEN: seen_thread seen t = false)
-    (STEP: epsilon_step t c inp = EpsMatch), (* returns new regs, must still delete active from that *)
-    pike_vm_step c (PVS inp (t::active) best blocked nextprefix seen) 
-                  (PVS inp [] (Some (inp,gm_of t)) blocked None (add_thread seen t))
+  forall inp t active best blocked nextprefix seen regs regs' regs''
+         (UNSEEN: seen_thread_vt seen t = false)
+         (STEP: epsilon_step_vt t c inp regs = (EpsMatch, regs'))
+         (* delete regs of active threads (except t) and of previous best match *)
+         (DELETE_REGS: regs'' = delete_thread_regs_from_regs_state active
+                                  (delete_best_regs_from_regs_state best regs')),
+    pike_vm_step_vt c (PVS inp (t::active) best blocked nextprefix seen regs) 
+      (PVS inp [] (Some (inp,ri_of t)) blocked None (add_thread_vt seen t) regs'')
 | pvs_blocked:
   (* add the new blocked thread after the previous ones *)
-  forall inp t active best blocked nextprefix seen newt
-    (UNSEEN: seen_thread seen t = false)
-    (STEP: epsilon_step t c inp = EpsBlocked newt), (* returns new regs *)
-    pike_vm_step c (PVS inp (t::active) best blocked nextprefix seen) (PVS inp active best (blocked ++ [newt]) nextprefix (add_thread seen t)).
+  forall inp t active best blocked nextprefix seen newt regs regs'
+         (UNSEEN: seen_thread_vt seen t = false)
+         (STEP: epsilon_step_vt t c inp regs = (EpsBlocked newt, regs')), (* returns new regs *)
+    pike_vm_step_vt c (PVS inp (t::active) best blocked nextprefix seen regs) (PVS inp active best (blocked ++ [newt]) nextprefix (add_thread_vt seen t) regs').
+(* Unanchored PikeVM rules are removed: pvs_acc, pvs_nextchar_generate, pvs_next_char_filter *)
 
-(** * PikeVM properties  *)
+(** * Equivalence to the original PikeVM *)
 
 equiv :
 group map vs (nat * regs) : forall i, gett on groupm i = get on regs with i
