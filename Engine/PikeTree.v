@@ -17,7 +17,7 @@ From Linden Require Import Parameters BooleanSemantics Semantics.
 From Warblre Require Import Base RegExpRecord.
 
 (* Read, Progress, Choice, Reset *)
-Abbreviation lazy_iter c t1 t2 := (Read c (Progress (Choice t1 (GroupAction (Reset []) t2)))).
+Notation lazy_iter c t1 t2 := (Read c (Progress (Choice t1 (GroupAction (Reset []) t2)))).
 
 
 Section PikeTree.

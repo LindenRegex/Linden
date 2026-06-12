@@ -223,7 +223,7 @@ Hint Unfold
   tree_nequiv_compute_dir
   : tree_equiv.
 
-Create Rewrite HintDb tree_equiv.
+(* Create Rewrite HintDb tree_equiv. *) (* LATER 9.2 *)
 Hint Rewrite app_nil_l app_nil_r : tree_equiv.
 Hint Rewrite <- app_assoc : tree_equiv.
 
@@ -264,7 +264,7 @@ Hint Unfold
      andb orb negb xorb
   : tree_equiv_symbex.
 
-Create Rewrite HintDb tree_equiv_symbex.
+(* Create Rewrite HintDb tree_equiv_symbex. *) (* LATER 9.2 *)
 Hint Rewrite
   PeanoNat.Nat.leb_le
   PeanoNat.Nat.leb_nle
@@ -295,7 +295,7 @@ Ltac leaves_equiv_step :=
 Ltac leaves_equiv_t :=
   first [ reflexivity | repeat leaves_equiv_step ].
 
-Create Rewrite HintDb charset.
+(* Create Rewrite HintDb charset. *) (* LATER 9.2 *)
 Hint Rewrite
   @CharSet.exist_canonicalized_equiv
   @CharSet.exist_spec
