@@ -48,8 +48,7 @@ Section NoPrioSemantics.
       (SEQ2: noprio backward inp1 r1 inp2),
       noprio backward inp0 (Sequence r1 r2) inp2
   | np_quant_forced:
-    forall dir inp0 r gidl min delta greedy inp1 inp2
-      (RESET: gidl = def_groups r)
+    forall dir inp0 r min delta greedy inp1 inp2
       (ITER: noprio dir inp0 r inp1)
       (LOOP: noprio dir inp1 (Quantified greedy min delta r) inp2),
       noprio dir inp0 (Quantified greedy (S min) delta r) inp2
@@ -57,8 +56,7 @@ Section NoPrioSemantics.
     forall dir inp r greedy,
       noprio dir inp (Quantified greedy 0 (NoI.N 0) r) inp
   | np_quant_free:
-    forall dir inp0 r greedy delta gidl inp1 inp2
-      (RESET: gidl = def_groups r)
+    forall dir inp0 r greedy delta inp1 inp2
       (ITER: noprio dir inp0 r inp1)
       (PROGRESS: strict_suffix inp1 inp0 dir)
       (LOOP: noprio dir inp1 (Quantified greedy 0 delta r) inp2),
@@ -329,6 +327,101 @@ Section NoPrioSemantics.
       inversion TREE; inversion NP_A; inversion NP_L; subst. auto.
   Qed.
 
+  (** * Quantifier Properties  *)
+
+  Lemma iteration_suffix:
+    forall dir r inp0 inp1
+      (NP: noprio dir inp0 r inp1),
+      inp0 = inp1 \/ strict_suffix inp1 inp0 dir.
+  Proof.
+    intros dir r inp0 inp1 NP. induction NP; auto.
+    1: { apply read_char_suffix in READ. auto. }
+    all: destruct IHNP1; destruct IHNP2; subst; auto;
+      right; eapply strict_suffix_trans; eauto.
+  Qed.
+
+  (* In order to prove the reversal property, we characterize quantifiers in the nopriority semantics *)
+
+  (* n iterations of a regex *)
+  Inductive iters : nat -> Direction -> input -> regex -> input -> Prop :=
+  | iters_refl:
+    forall inp r dir, iters 0 dir inp r inp
+  | iters_next:
+    forall r n inp0 inp1 inp2 dir
+      (NEXT: noprio dir inp0 r inp1)
+      (ITERS: iters n dir inp1 r inp2),
+      iters (S n) dir inp0 r inp2.
+
+  (* is n <= min + delta ? *)
+  Inductive smaller: nat -> nat -> non_neg_integer_or_inf -> Prop :=
+  | smaller_nat: forall n min delta,
+      n <= min + delta ->
+      smaller n min (NoI.N delta)
+  | smaller_inf: forall n min,
+      smaller n min NoI.Inf.
+
+  (* a characterization of quantifiers using numbered iterations *)
+  Lemma quant_iters:
+     forall r dir greedy inp0 inp1 min delta
+      (QUANT: noprio dir inp0 (Quantified greedy min delta r) inp1),
+     exists n, n >= min /\ smaller n min delta /\ iters n dir inp0 r inp1.
+  Proof.
+    intros r dir greedy inp0 inp1 min delta QUANT.
+    remember (Quantified greedy min delta r) as quant.
+    generalize dependent min. generalize dependent delta.
+    induction QUANT; intros; 
+      inversion Heqquant; subst.
+    - clear IHQUANT1.
+      specialize (IHQUANT2 delta0 min (eq_refl _)) as [n [GE [LE IT]]].
+      exists (S n). split; [lia|]. split.
+      { inversion LE; subst; constructor. lia. }
+      econstructor; eauto.
+    - exists 0. split; [lia|]. split; constructor; auto.
+    - clear IHQUANT1. specialize (IHQUANT2 delta 0 (eq_refl _)) as [n [GE [LE IT]]].
+      exists (S n). split; [lia|]. split.
+      { inversion LE; subst; constructor. lia. }
+      econstructor; eauto.
+    - exists 0. split; [lia|]. split.
+      { destruct delta; constructor. lia. }
+      constructor.
+  Qed.
+
+  Lemma iters_quant:
+    forall r dir greedy inp0 inp1 min delta n
+      (GE: n >= min)
+      (LE: smaller n min delta)
+      (ITERS: iters n dir inp0 r inp1),
+      noprio dir inp0 (Quantified greedy min delta r) inp1.
+  Proof.
+    intros r dir greedy inp0 inp1 min delta n GE LE ITERS.
+    generalize dependent min. generalize dependent delta.
+    induction ITERS; intros.
+    - destruct min; inversion GE. inversion LE; subst.
+      + destruct delta0.
+        * apply np_quant_done.
+        * replace (NoI.N (S delta0)) with (NoI.N 1 + NoI.N delta0)%NoI by auto.
+          apply np_quant_skip.
+      + replace NoI.Inf with (NoI.N 1 + NoI.Inf)%NoI by auto.
+        apply np_quant_skip.
+    - destruct min.
+      (* forced iteration *)
+      2:{ eapply np_quant_forced; eauto. apply IHITERS. lia.
+          inversion LE; subst; constructor. lia. }
+    (* free iteration: cas analysis on if the first iteration did progress   *)
+      apply iteration_suffix in NEXT as H. destruct H as [EQ|SUF].
+      + (* first iteration didn't progress: we skip it in the quantifier *)
+        subst. apply IHITERS. lia. inversion LE; subst; constructor. lia.
+      + (* first iteration made progress: we can use it as a quantifier iteration *)
+        inversion LE; subst.
+        * destruct delta0; [lia|].
+          replace (NoI.N (S delta0)) with (NoI.N 1 + NoI.N delta0)%NoI by auto.
+          eapply np_quant_free; eauto. apply IHITERS. lia.
+          constructor. lia.
+        * replace NoI.Inf with (NoI.N 1 + NoI.Inf)%NoI by auto.
+          eapply np_quant_free; eauto. apply IHITERS. lia.
+          constructor.
+  Qed.
+  
   (** * Reversal Property  *)
 
   Definition reverse (d:Direction): Direction :=
