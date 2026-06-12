@@ -303,6 +303,16 @@ Definition vt_regs_vals (gid: group_id) (regsdata: RegsData.t) : option nat * op
   let (cp2, _) := get_at (gid_to_idx gid + 1) 0 regsdata in
   (cp1, cp2).
 
+Definition all_ris (s_vt: pike_vm_state_vt) : list regs_id :=
+  match s_vt with
+  | PVS_vt _ act (Some leaf) blo _ _ _ =>
+      (map ri_of act) ++ [(match leaf with (_, ri) => ri end)] ++ (map ri_of blo)
+  | PVS_vt _ act None blo _ _ _ =>
+      (map ri_of act) ++ (map ri_of blo)
+  | PVS_final_vt (Some leaf) _ => match leaf with (_, ri) => [ri] end
+  | PVS_final_vt None _ => []
+  end.
+
 Definition gm_vt_equiv (gm: group_map) (ri: regs_id) (r: regs) : Prop :=
   match Regs.get_compressed_data ri r with
   | None => gm = GroupMap.empty (* assuming groupmap is empty when no updates have been made *)
@@ -325,6 +335,7 @@ Definition thread_equiv (t: thread) (t_vt: thread_vt) (r: regs) : Prop :=
 Definition threads_equiv (t: list thread) (t_vt: list thread_vt) (r: regs): Prop :=
   List.Forall2 (fun t t_vt => thread_equiv t t_vt r) t t_vt.
 
+(* TODO redefine as inductive *)
 Definition state_equiv (s: pike_vm_state) (s_vt: pike_vm_state_vt) : Prop :=
   match s, s_vt with
   | PVS i act best blo np seen, PVS_vt i' act' best' blo' np' seen' r =>
@@ -333,6 +344,66 @@ Definition state_equiv (s: pike_vm_state) (s_vt: pike_vm_state_vt) : Prop :=
   | PVS_final best, PVS_final_vt best' r => leaves_equiv best best' r
   | _, _ => False
   end.
+
+Definition leaf_ids_of (s: pike_vm_state_vt) : list nat :=
+  match s with
+  | PVS_vt _ _ _ _ _ _ r => Regs.get_all_ids (Regs.tree r)
+  | PVS_final_vt _ r => Regs.get_all_ids (Regs.tree r)
+  end.
+
+Lemma pike_vm_step_vt_threads_are_leaves :
+  forall c s_vt s_vt',
+    (* s_vt = (PVS inp act_vt best_vt blo_vt None seen regs) *)
+    all_ris s_vt = leaf_ids_of s_vt ->
+    pike_vm_step_vt c s_vt s_vt' ->
+    all_ris s_vt' = leaf_ids_of s_vt'.
+Proof.
+  intros c s_vt s_vt' ALLIDS STEP.
+  dependent induction STEP; simpl in *.
+  - destruct best; simpl in *; auto.
+    destruct l as [_ ri]; repeat constructor.
+    assumption.
+  - destruct best; simpl in *.
+    destruct l as [_ ri].
+    + admit.
+    + admit.
+  - destruct best; simpl in *.
+    destruct l as [_ ri].
+    + admit. (*List property*)
+    + rewrite app_nil_r.
+      assumption.
+  - destruct best; simpl in *.
+    + destruct l as [_ ri].
+      admit. (*use VT prop*)
+    + admit. (*use VT prop*)
+  - destruct best; simpl in *.
+    all: admit.
+  - admit.
+  - admit.
+Admitted.
+
+    
+Lemma pike_vm_step_vt_distinct_ri :
+  forall c s_vt s_vt',
+    (* s_vt = (PVS inp act_vt best_vt blo_vt None seen regs) *)
+    NoDup (all_ris s_vt) ->
+    pike_vm_step_vt c s_vt s_vt' ->
+    NoDup (all_ris s_vt').
+Proof.
+  intros c s_vt s_vt' DISTINCT STEP.
+  dependent induction STEP.
+  - destruct best; simpl in *; auto.
+    destruct l as [_ ri]; repeat constructor.
+    apply in_nil.
+  - destruct best; simpl in *; try constructor.
+    destruct l as [_ ri]; repeat constructor.
+    apply in_nil.
+  - destruct best; simpl in *.
+    + destruct l as [_ ri].
+      admit. (*just some list lemma *)
+    + rewrite app_nil_r. assumption.
+  - destruct best; simpl in *.
+Abort. (* provable but not very useful *)
 
 Lemma seen_equiv : forall t t_vt seen r,
     thread_equiv t t_vt r ->
@@ -348,13 +419,81 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma add_equiv_threads_to_seen : forall t t_vt seen r,
+    thread_equiv t t_vt r ->
+    add_thread seen t = add_thread_vt seen t_vt.
+Proof.
+  unfold add_thread, add_thread_vt.
+  intros t t_vt seen r H.
+  destruct t as [[l gm] b].
+  destruct t_vt as [[l_vt ri] b_vt].
+  destruct H as [Hl [Hr Hb]].
+  subst.
+  reflexivity.
+Qed.
+
 Lemma epsilon_step_equiv_active :
   forall c inp t t_vt nextactive_vt r r',
     thread_equiv t t_vt r ->
     epsilon_step_vt t_vt c inp r = (EpsActive_vt nextactive_vt, r') ->
     (exists nextactive,
         epsilon_step rer t c inp = EpsActive nextactive /\
-    threads_equiv nextactive nextactive_vt r').
+          threads_equiv nextactive nextactive_vt r').
+Proof.
+  intros c inp t t_vt nextactive_vt r r' Heq H.
+  unfold epsilon_step_vt, epsilon_step, thread_equiv in *.
+  destruct t_vt as [[l_vt ri] b_vt].
+  destruct t as [[l gm] b].
+  destruct Heq as [Hl [Hr Hb]]. subst.
+  destruct (get_pc c l_vt) eqn:BC.
+  - destruct b eqn:B;
+      try (injection H as H1 H2; inversion H1); subst.
+    + destruct (check_read rer c0 inp forward); injection H as H1 H2; inversion H1.
+      subst.
+      exists [].
+      split; [reflexivity | constructor].
+    + destruct (anchor_satisfied rer a inp); injection H as H1 H2; inversion H1; subst.
+      * admit.
+      * exists [].
+        split; [reflexivity | constructor].
+    + exists ([upd_label (l_vt, gm, b_vt) l]).
+      split; try reflexivity.
+      repeat constructor.
+      assumption.
+    + exists ([upd_label (l_vt, gm, b_vt) l; upd_label (l_vt, gm, b_vt) l0]).
+      split; try reflexivity.
+      repeat constructor.
+      all: admit.
+    + exists ([open_thread (l_vt, gm, b_vt) g (idx inp)]).
+      split; try reflexivity.
+      repeat constructor.
+      admit.
+    + exists ([close_thread (l_vt, gm, b_vt) g (idx inp)]).
+      split; try reflexivity.
+      repeat constructor.
+      admit.
+    + exists ([reset_thread (l_vt, gm, b_vt) l]).
+      split; try reflexivity.
+      repeat constructor.
+      admit.
+    + exists ([begin_thread (l_vt, gm, b_vt)]).
+      split; try reflexivity.
+      repeat constructor.
+      assumption.
+    + destruct b_vt; injection H as H1 H2; inversion H1; subst.
+      * exists ([upd_label (l_vt, gm, CanExit) l]).
+        split; try reflexivity.
+        repeat constructor.
+        assumption.
+      * exists [].
+        split; [reflexivity | constructor].
+    + exists [].
+      split; [reflexivity | constructor].
+  - injection H as H1 H2. inversion H1. subst.
+    exists [].
+    split.
+    + reflexivity.
+    + constructor.
 Admitted.
 
 Lemma epsilon_step_equiv_match :
@@ -443,7 +582,16 @@ Proof.
     destruct active0 as [| t act]; inversion EQUIV_ACT; subst.
     apply seen_equiv with (seen:= seen) in H2; auto.
     inversion STEP; subst; try (rewrite H2 in *; congruence).
-    admit.
+    repeat split; auto.
+    + admit.
+    + admit.
+    + destruct best0, best; try contradiction; try tauto.
+      destruct t0 as [[la0 ri0] b0].
+      unfold leaves_equiv in *. simpl.
+      destruct l as [i gm]. destruct l0 as [i_vt l_vt].
+      split; try tauto.
+      unfold gm_vt_equiv.
+      admit.
   - (* pvs_active_vt *)
     destruct H as [Hinp [Hnp [Hs [EQUIV_ACT [EQUIV_BLO EQUIV_LEA]]]]].
     destruct active0 as [| t act]; inversion EQUIV_ACT; subst.
@@ -451,7 +599,15 @@ Proof.
     destruct STEP1 as [na [STEP1 Hna]].
     apply seen_equiv with (seen:= seen) in H2; auto.
     inversion STEP; subst; try (rewrite H12 in *; congruence); try congruence.
-    admit.
+    repeat split; auto.
+    + apply add_equiv_threads_to_seen with (r:=regs0).
+      inversion EQUIV_ACT. subst. assumption.
+    + rewrite STEP1 in STEP2. injection STEP2 as STEP2. subst.
+      apply Forall2_app; auto.
+      (* TODO specify in lemma what are exactly the possible values for regs' *)
+      admit.
+    + admit.
+    + admit.
   - (* pvs_match_vt *)
     destruct H as [Hinp [Hnp [Hs [EQUIV_ACT [EQUIV_BLO EQUIV_LEA]]]]].
     destruct active0 as [| t act]; inversion EQUIV_ACT; subst.
@@ -459,7 +615,8 @@ Proof.
     specialize (seen_equiv t t0 seen regs0 H2) as Hse.
     inversion STEP; subst; try (rewrite H12 in *; congruence); try congruence.
     repeat split; try reflexivity.
-    + admit.
+    + apply add_equiv_threads_to_seen with (r:=regs').
+      inversion EQUIV_ACT. subst. assumption.
     + constructor.
     + admit.
     + unfold thread_equiv in *.
@@ -471,7 +628,8 @@ Proof.
     apply seen_equiv with (seen:= seen) in H2; auto.
     inversion STEP; subst; try (rewrite H12 in *; congruence); try congruence.
     repeat split; auto.
-    + admit.
+    + apply add_equiv_threads_to_seen with (r:=regs').
+      inversion EQUIV_ACT. subst. assumption.
     + rewrite STEP1 in STEP2. injection STEP2 as STEP2. subst.
       apply Forall2_app; auto.
 Admitted.
