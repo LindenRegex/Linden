@@ -286,7 +286,10 @@ Inductive pike_vm_step_vt (c:code): pike_vm_state_vt -> pike_vm_state_vt -> Prop
 
 Definition trc_pike_vm_vt (c:code) := @trc pike_vm_state_vt (pike_vm_step_vt c).
 
-Definition regs_size_from_rer := 4. (* 2 * rer.capturingGroupsCount *)
+Definition rer_to_regs_size : nat :=
+  match rer with
+  | RegExpRecord.make _ _ _ _ cgc => 2 * cgc (* regs_size = 2 * rer.capturingGroupsCount *)
+  end.
 
 Definition gm_regs_vals (gid: group_id) (gm: group_map) : option nat * option nat :=
   match GroupMap.find gid gm with
@@ -382,8 +385,27 @@ Lemma epsilon_step_equiv_blocked :
     epsilon_step_vt t_vt c inp r = (EpsBlocked_vt newt_vt, r') ->
     (exists newt,
         epsilon_step rer t c inp = EpsBlocked newt /\
-    thread_equiv newt newt_vt r').
-Admitted.
+          thread_equiv newt newt_vt r') /\ r = r'.
+Proof.
+  intros c inp t t_vt newt_vt r r' Heq H.
+  unfold epsilon_step_vt, epsilon_step, thread_equiv in *.
+  destruct t_vt as [[l_vt ri] b_vt].
+  destruct t as [[l gm] b].
+  destruct Heq as [Hl [Hr Hb]]. subst.
+  destruct (get_pc c l_vt) eqn:BC.
+  - destruct b eqn:B;
+      try (injection H as H1 H2; inversion H1).
+    + destruct (check_read rer c0 inp forward);
+        injection H as H1 H2.
+      * split; try assumption.
+        subst.
+        exists (l_vt + 1, gm, CanExit).
+        auto.
+      * inversion H1.
+    + destruct (anchor_satisfied rer a inp); injection H as H1 H2; inversion H1.
+    + destruct b_vt; injection H as H _; inversion H.
+  - injection H as H1 H2. inversion H1.
+Qed.
 
 Lemma pike_vm_step_vt_equiv :
   forall c s s_vt s' s_vt',
@@ -434,7 +456,6 @@ Proof.
     destruct H as [Hinp [Hnp [Hs [EQUIV_ACT [EQUIV_BLO EQUIV_LEA]]]]].
     destruct active0 as [| t act]; inversion EQUIV_ACT; subst.
     specialize (epsilon_step_equiv_match _ _ _ _ _ _ H2 STEP0) as [STEP1 Hr].
-    Print seen_equiv.
     specialize (seen_equiv t t0 seen regs0 H2) as Hse.
     inversion STEP; subst; try (rewrite H12 in *; congruence); try congruence.
     repeat split; try reflexivity.
@@ -446,11 +467,13 @@ Proof.
   - (* pvs_blocked_vt *)
     destruct H as [Hinp [Hnp [Hs [EQUIV_ACT [EQUIV_BLO EQUIV_LEA]]]]].
     destruct active0 as [| t act]; inversion EQUIV_ACT; subst.
-    specialize (epsilon_step_equiv_blocked _ _ _ _ _ _ _ H2 STEP0) as STEP1.
-    destruct STEP1 as [nt [STEP1 Hnt]].
+    specialize (epsilon_step_equiv_blocked _ _ _ _ _ _ _ H2 STEP0) as [[nt [STEP1 Hnt]] Hr].
     apply seen_equiv with (seen:= seen) in H2; auto.
     inversion STEP; subst; try (rewrite H12 in *; congruence); try congruence.
-    admit.
+    repeat split; auto.
+    + admit.
+    + rewrite STEP1 in STEP2. injection STEP2 as STEP2. subst.
+      apply Forall2_app; auto.
 Admitted.
 
 Theorem trc_pikevm_vt_equiv: 
@@ -477,254 +500,27 @@ Proof.
       * assumption.
 Qed.
 
+Lemma init_states_equiv :
+  forall inp,
+    state_equiv (pike_vm_initial_state inp) (pike_vm_initial_state_vt inp rer_to_regs_size).
+Proof.
+  intro inp.
+  unfold pike_vm_initial_state, pike_vm_initial_state_vt.
+  simpl.
+  repeat split; repeat constructor.
+Qed.
+
 Theorem pikevm_vt_equiv: 
   forall r inp result result_vt regs,
   trc_pike_vm rer (compilation r) (pike_vm_initial_state inp) (PVS_final result) ->
-  trc_pike_vm_vt (compilation r) (pike_vm_initial_state_vt inp (regs_size_from_rer)) (PVS_final_vt result_vt regs) ->
+  trc_pike_vm_vt (compilation r) (pike_vm_initial_state_vt inp (rer_to_regs_size)) (PVS_final_vt result_vt regs) ->
   leaves_equiv result result_vt regs.
 Proof.
   intros r inp result result_vt regs TRC TRCVT.
   eapply trc_pikevm_vt_equiv.
-  - admit.
+  - apply init_states_equiv.
   - exact TRC.
   - exact TRCVT.
-Admitted.
-
-
-
-
-(**************************)
-
-Lemma pike_vm_step_vt_equiv :
-  forall c inp seen inp' seen'
-         act best blo act_vt best_vt blo_vt regs
-         act' best' blo' act_vt' best_vt' blo_vt' regs',
-    (* s = (PVS inp act best blo None seen) *)
-    (* s_vt = (PVS inp act_vt best_vt blo_vt None seen regs) *)
-    threads_equiv act act_vt regs /\
-      threads_equiv blo blo_vt regs /\
-      leaves_equiv best best_vt regs ->
-    pike_vm_step rer c (PVS inp act best blo None seen)
-      (PVS inp' act' best' blo' None seen') ->
-    pike_vm_step_vt c (PVS_vt inp act_vt best_vt blo_vt None seen regs)
-      (PVS_vt inp' act_vt' best_vt' blo_vt' None seen' regs') ->
-    threads_equiv act' act_vt' regs' /\
-      threads_equiv blo' blo_vt' regs' /\
-      leaves_equiv best' best_vt' regs'.
-Proof.
-  intros c inp seen inp' seen'
-         act best blo act_vt best_vt blo_vt regs
-         act' best' blo' act_vt' best_vt' blo_vt' regs'
-         [EQUIV_ACT [EQUIV_BLO EQUIV_BEST]] STEP STEP_VT.
-  dependent induction STEP_VT.
-  - (* pvs_nextchar_vt *)
-    inversion EQUIV_ACT. subst.
-    inversion STEP; subst.
-    repeat split; try assumption.
-  - (* pvs_skip_vt *)
-    destruct act as [| t act]; inversion EQUIV_ACT; subst.
-    apply seen_equiv with (seen:= seen') in H2; auto.
-    inversion STEP; subst; try (rewrite H12 in *; congruence).
-    admit.
-  - (* pvs_active_vt *)
-    destruct act as [| t act]; inversion EQUIV_ACT; subst.
-    specialize (epsilon_step_equiv_active _ _ _ _ _ _ _ H2 STEP0) as STEP1.
-    destruct STEP1 as [na [STEP1 Hna]].
-    apply seen_equiv with (seen:= seen) in H2; auto.
-    inversion STEP; subst; try (rewrite H12 in *; congruence); try congruence.
-    admit.
-  - (* pvs_match_vt *)
-    destruct act as [| t act]; inversion EQUIV_ACT; subst.
-    specialize (epsilon_step_equiv_match _ _ _ _ _ _ H2 STEP0) as [STEP1 Hr].
-    Print seen_equiv.
-    specialize (seen_equiv t t0 seen regs H2) as Hse.
-    inversion STEP; subst; try (rewrite H12 in *; congruence); try congruence.
-    repeat split.
-    + constructor.
-    + admit.
-    + unfold thread_equiv in *.
-      admit.
-  - (* pvs_blocked_vt *)
-    destruct act as [| t act]; inversion EQUIV_ACT; subst.
-    specialize (epsilon_step_equiv_blocked _ _ _ _ _ _ _ H2 STEP0) as STEP1.
-    destruct STEP1 as [nt [STEP1 Hnt]].
-    apply seen_equiv with (seen:= seen) in H2; auto.
-    inversion STEP; subst; try (rewrite H12 in *; congruence); try congruence.
-    admit.
-Admitted.
-
-Lemma pike_vm_step_vt_equiv_final :
-  forall c inp seen
-         act best blo act_vt best_vt blo_vt regs
-         best' best_vt' regs',
-    (* s = (PVS inp act best blo None seen) *)
-    (* s_vt = (PVS inp act_vt best_vt blo_vt None seen regs) *)
-    threads_equiv act act_vt regs /\
-      threads_equiv blo blo_vt regs /\
-      leaves_equiv best best_vt regs ->
-    pike_vm_step rer c (PVS inp act best blo None seen)
-      (PVS_final best') ->
-    pike_vm_step_vt c (PVS_vt inp act_vt best_vt blo_vt None seen regs)
-      (PVS_final_vt best_vt' regs') ->
-      leaves_equiv best' best_vt' regs'.
-Admitted.
-
-(*Lemma pike_vm_step_vt_equiv :
-  forall c s s_vt s' s_vt' inp active best blocked seen,
-    s = (PVS inp active best blocked None seen) ->
-    pike_vm_state_equiv s s_vt ->
-    pike_vm_step rer c s s' ->
-    pike_vm_step_vt c s_vt s_vt' ->
-    pike_vm_state_equiv s' s_vt'.
-Admitted.*)
-
-Print trc.
-Lemma trc_consinv : forall (A: Type) (R: A -> A -> Prop) (x z: A),
-    @trc A R x z ->
-    x = z \/ (exists y, @trc A R x y /\ R y z).
-Proof.
-  intros A R x z H.
-  induction H.
-  - left. reflexivity.
-  - right.
-    destruct IHtrc as [Heq | [y' [Hxy Hyz]]].
-    + subst.
-      exists x.
-      split; [constructor | assumption].
-    + exists y'.
-      split.
-      * apply trc_cons with y; assumption.
-      * assumption.
 Qed.
-
-Lemma trc_tran : forall (A: Type) (R : A -> A -> Prop) (x y z: A),
-    @trc A R x y ->
-    @trc A R y z ->
-    @trc A R x z.
-Proof.
-  intros A R x y z Hxy Hyz.
-  induction Hxy.
-  - exact Hyz.
-  - apply trc_cons with (y := y).
-    + exact STEP.
-    + apply IHHxy.
-      exact Hyz.
-Qed.
-
-Lemma trc_pike_vm_vt_equiv_final :
-  forall c inp seen
-         act best blo act_vt best_vt blo_vt regs
-         best' best_vt' regs',
-    (* s = (PVS inp act best blo None seen) *)
-    (* s_vt = (PVS inp act_vt best_vt blo_vt None seen regs) *)
-    threads_equiv act act_vt regs /\
-      threads_equiv blo blo_vt regs /\
-      leaves_equiv best best_vt regs ->
-    trc_pike_vm rer c (PVS inp act best blo None seen)
-      (PVS_final best') ->
-    trc_pike_vm_vt c (PVS_vt inp act_vt best_vt blo_vt None seen regs)
-      (PVS_final_vt best_vt' regs') ->
-    leaves_equiv best' best_vt' regs'.
-Proof.
-  intros.
-  dependent induction H0.
-  eapply IHtrc.
-  - 
-  inversion H0; inversion H1; subst.
-Admitted.
-
-Print pike_vm_step.
-(*Lemma PVS_can_step :
-  forall c s s_vt res res_vt r',
-    pike_vm_step rer c s (PVS_final res) ->
-    pike_vm_step_vt c s_vt (PVS_final_vt res_vt r') ->
-    (exists inp act best blo np seen act_vt best_vt blo_vt np_vt seen_vt r,
-        s = PVS inp act best blo np seen /\
-          s_vt = PVS_vt inp act_vt best_vt blo_vt np_vt seen_vt r /\
-          leaves_equiv res res_vt r').
-Proof.
-  intros c s s_vt res res_vt r' H HVT.
-  inversion H; subst.
-  - repeat eexists.
-    inversion HVT; subst.
-    +  repeat eexists.
-  inversion HVT; subst; repeat eexists.
-  
-  inversion H; subst; repeat eexists.
-Qed.*)
-
-Lemma PVS_can_step :
-  forall c s s',
-    pike_vm_step rer c s s' ->
-    (exists inp act best blo np seen, s = PVS inp act best blo np seen).
-Proof.
-  intros c s s' H.
-  inversion H; subst; repeat eexists.
-Qed.
-
-Lemma PVS_can_step_vt :
-  forall c s s',
-    pike_vm_step_vt c s s' ->
-    (exists inp act best blo np seen r, s = PVS_vt inp act best blo np seen r).
-Proof.
-  intros c s s' H.
-  inversion H; subst; repeat eexists.
-Qed.
-
-Theorem pikevm_vt_equiv: 
-  forall r inp result result_vt regs,
-  trc_pike_vm rer (compilation r) (pike_vm_initial_state inp) (PVS_final result) ->
-  trc_pike_vm_vt (compilation r) (pike_vm_initial_state_vt inp (regs_size_from_rer)) (PVS_final_vt result_vt regs) ->
-  leaves_equiv result result_vt regs.
-Proof.
-  intros regex inp res res_vt r TRC TRC_VT.
-  dependent induction TRC_VT.
-  eapply IHTRC_VT in TRC_VT.
-  
-  unfold pike_vm_initial_state, pike_vm_initial_state_vt in *.
-  apply trc_consinv in TRC, TRC_VT.
-  destruct TRC as [TRC | [y [TRC TRC']]].
-  - inversion TRC.
-  - destruct TRC_VT as [TRC_VT | [y_vt [TRC_VT TRC_VT']]].
-    + inversion TRC_VT.
-    + specialize (PVS_can_step _ _ _ TRC')
-        as [i [act [best [blo [np [seen Hpvs]]]]]].
-      specialize (PVS_can_step_vt _ _ _ TRC_VT')
-        as [i' [act' [best' [blo' [np' [seen' [r' Hpvs']]]]]]].
-      subst.
-      eapply trc_pike_vm_vt_equiv_final. with
-        (inp:=inp) (c:=compilation regex) (seen:=initial_seenpcs)
-         (act:=[pike_vm_initial_thread]) (blo:=[]) (best:=None)
-         (act_vt:=[pike_vm_initial_thread_vt]) (blo_vt:=[]) (best_vt:=None) (regs:=r).
-  eapply trc_pike_vm_vt_equiv_final.
-  2: exact TRC.
-  2: exact TRC_VT.
-  split; try split.
-  - admit.
-  - constructor.
-  - simpl. tauto.
-  
-  unfold trc_pike_vm, trc_pike_vm_vt in *.
-  unfold pike_vm_initial_state, pike_vm_initial_state_vt in *.
-  inversion TRC; inversion TRC_VT; subst.
-  eapply pike_vm_step_vt_equiv_final.
-  2,3: econstructor
-  - admit.
-  - eapply pike_vm_step_vt_equiv.
-  1,2,3: admit.
-  - constructor.
-  - 
-  inversion TRC; inversion TRC_VT; subst.
-  unfold pike_vm_initial_state, pike_vm_initial_state_vt in *.
-  eapply pike_vm_step_vt_equiv_final
-    with (inp:=inp) (c:=compilation regex) (seen:=initial_seenpcs)
-         (act:=[pike_vm_initial_thread]) (blo:=[]) (best:=None)
-         (act_vt:=[pike_vm_initial_thread_vt]) (blo_vt:=[]) (best_vt:=None) (regs:=r).
-  - admit.
-  - constructor.
-  - simpl. tauto.
-  - admit.
-  
-Admitted.
 
 End PikeVM_VT.
