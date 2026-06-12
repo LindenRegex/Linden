@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        rocq: [ "9.2.0" ]
+        rocq: [ "9.1.1", "9.2.0" ]
       fail-fast: false
 
     steps:
