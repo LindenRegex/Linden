@@ -341,7 +341,17 @@ Section NoPrioSemantics.
   Qed.
 
   (* In order to prove the reversal property, we characterize quantifiers in the nopriority semantics *)
-
+  (* While reversing a quantifier, something interesting happens:
+     - when iterating the quantifier, both directions will first do the iteration, then match the reduced quantifier
+     - this means that the peeled iteration is used for different parts of the string (contrary to the case of the sequence where each subexpression matches exactly the same part of the string)
+     - to make things worse, the peeled iteration and the following ones might have different constraints: some might check for progress, and some might not.
+     - yet, the reversal theorem still holds. But, reversing a quantifier might result in a different number of iterations of that quantifier.
+     - the theorem still holds because all of the checked-for-progress iterations are optional. So if doing iterations in an order results in a position where an iteration cannot be made (but it could be made in the reverse direction), then it was an optional empty iteration that can be skipped entirely.
+     - to deal with this mix of out-of-orders and checked-for-progress-or-not iterations, we present an alternative characterization of quantifiers: being able to match r{min,delta} is equivalent to saying that there is a chain of n iterations where n in [min,min+delta].
+     - all of these iterations are allowed to be empty: even if that could be illegal, it can then be skipped when reconstructing the quantifier semantics
+     - this characterization makes it easier to prove reversal: we go from quantifier semantics to a numbered sequence, we add an extra iteration on either side (giving us a longer numbered sequence), and then we come back to quantifier semantics. *)
+  
+  (* Numbered sequence characterization *)
   (* n iterations of a regex *)
   Inductive iters : nat -> Direction -> input -> regex -> input -> Prop :=
   | iters_refl:
