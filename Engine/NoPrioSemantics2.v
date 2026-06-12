@@ -421,6 +421,18 @@ Section NoPrioSemantics.
           eapply np_quant_free; eauto. apply IHITERS. lia.
           constructor.
   Qed.
+
+  (* Adding an iteration at the end *)
+  Lemma add_iter_end:
+    forall dir r n inp0 inp1 inp2
+      (ITERS: iters n dir inp0 r inp1)
+      (NEXT: noprio dir inp1 r inp2),
+      iters (S n) dir inp0 r inp2.
+  Proof.
+    intros. induction ITERS; repeat (econstructor; eauto).
+  Qed.
+
+      
   
   (** * Reversal Property  *)
 
@@ -459,15 +471,39 @@ Section NoPrioSemantics.
     - solve[repeat (econstructor; eauto)].
     - repeat (econstructor; eauto).
     - repeat (econstructor; eauto).
-    - admit.
-    (* does not work: in one direction we do r and then r{min}
-       in the other we also do r and then r{min}, but we would like them switched to apply IH.
-       One solution would be to prove that for noprio, r.r{} is equivalent to r{}.r *)
+    - apply quant_iters in IHNP1_2 as [n [GE [LE IT]]].
+      apply iters_quant with (n:= S n); auto. lia.
+      { inversion LE; subst; constructor. lia. }
+      eapply add_iter_end; eauto.
     - repeat (econstructor; eauto).
-    - admit.
+    - apply quant_iters in IHNP1_2 as [n [GE [LE IT]]].
+      apply iters_quant with (n:=S n); auto.
+      { inversion LE; subst; constructor. lia. }
+      eapply add_iter_end; eauto.
     - eapply np_quant_skip.
     - repeat (econstructor; eauto).
     - repeat (econstructor; eauto).
-  Admitted.
+  Qed.
+
+  (** * Leaf Reversal Theorem  *)
+
+  (* We come back to is_tree semantics to prove the reversal property *)
   
+  Lemma leaf_reversal:
+    forall r dir inp1 inp2 gm2 t1 t2
+      (SUBSET: pike_regex r)
+      (TREE1: is_tree rer [Areg r] inp1 GroupMap.empty dir t1)
+      (TREE2: is_tree rer [Areg r] inp2 GroupMap.empty (reverse dir) t2)
+      (IN: In (inp2, gm2) (tree_leaves t1 GroupMap.empty inp1 dir)),
+    exists gm1, In (inp1, gm1) (tree_leaves t2 GroupMap.empty inp2 (reverse dir)).
+  Proof.
+    intros r dir inp1 inp2 gm2 t1 t2 SUBSET TREE1 TREE2 IN.
+    assert (NP1: noprio dir inp1 r inp2).
+    { apply <- noprio_eq_is_leaf; eauto. }
+    apply noprio_reversal in NP1 as NP2.
+    assert (IN2: exists leafgm, In (inp1, leafgm) (tree_leaves t2 GroupMap.empty inp2 (reverse dir))).
+    { eapply noprio_eq_is_leaf; eauto. }
+    eauto.
+  Qed.
+    
 End NoPrioSemantics.
