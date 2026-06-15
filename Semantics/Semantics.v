@@ -147,7 +147,7 @@ Section Semantics.
             end
         end
     end.
-  
+
   (** * Continuation Semantics *)
 
   (* actions encode the next things to do while constructing a tree, a stack of continuations *)
