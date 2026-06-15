@@ -134,6 +134,17 @@ Section Semantics.
             is_boundary i
         | NonWordBoundary =>
             negb (is_boundary i)
+        | BeginBuffer =>
+            match pref with | [] => true | _ => false end
+        | EndBuffer =>
+            match next with | [] => true | _ => false end
+        | TerminatedBuffer =>
+            match next with
+            | [] => true
+            | [c] => CharSet.contains Characters.line_terminators c
+            | [c1;c2] => c1 == Characters.CARRIAGE_RETURN && c2 == Characters.LINE_FEED
+            | _ => false
+            end
         end
     end.
 

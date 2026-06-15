@@ -35,10 +35,13 @@ Definition positivity (lk: lookaround): bool :=
 
 (** * Anchors *)
 Inductive anchor: Type :=
-| BeginInput
-| EndInput
-| WordBoundary
-| NonWordBoundary.
+| BeginInput                    (* ^ *)
+| EndInput                      (* $ *)
+| WordBoundary                  (* \b *)
+| NonWordBoundary               (* \B *)
+| BeginBuffer                   (* \A *)
+| EndBuffer                     (* \z *)
+| TerminatedBuffer.             (* \Z *)
 
 
 Section Regex.
