@@ -38,7 +38,7 @@ Section SeqAssoc.
     unfold actions_equiv_dir. intros. inversion TREE2; subst. simpl in CONT.
     eapply is_tree_determ in TREE1; eauto. subst. apply leaves_equiv_rel_Reflexive.
   Qed.
-  
+
   Theorem seq_assoc:
     forall r1 r2 r3,
       Sequence r1 (Sequence r2 r3) ≅[rer] Sequence (Sequence r1 r2) r3.

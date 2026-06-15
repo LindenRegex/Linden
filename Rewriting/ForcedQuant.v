@@ -41,6 +41,6 @@ Section ForcedQuant.
     - reflexivity.
     - symmetry. apply forced_equiv.
   Qed.
-    
+
 
 End ForcedQuant.

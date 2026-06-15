@@ -114,9 +114,9 @@ Section FailRegex.
   Context (rer: RegExpRecord).
   (* a regex that always fails to match *)
   (* (?=-)(?!-) : positive lookahead of hyphen followed by a negative lookahead of an hyphen *)
-  
+
   Definition hyphen : regex := Regex.Character (CdSingle Characters.HYPHEN_MINUS).
-  
+
   Definition fail_regex : regex := Sequence (Lookaround LookAhead hyphen) (Lookaround NegLookAhead hyphen).
 
   Lemma fail_regex_fail:

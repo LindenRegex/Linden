@@ -70,7 +70,7 @@ Section LWParameters.
       Parameters.string_marker := string_marker;
       Parameters.unicode_property_marker := unicode_marker
     |}.
-  
+
 
   (* Some lemmas *)
   (* Lemma contains_all:

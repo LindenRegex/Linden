@@ -152,7 +152,7 @@ Section MemoEquiv.
     specialize (INCL pc b inp SEEN) as [[t [gm [IN EQ]]] | [ST [cur [H _]]]]; eauto.
     inversion H.
   Qed.
-  
+
   Lemma add_inclusion:
     forall treeseen memoset code inp tree pc gm b nextcurrent nextpc
       (INCL: seen_inclusion code treeseen memoset (Some (tree,gm,inp)) (Some pc))
@@ -163,13 +163,13 @@ Section MemoEquiv.
     unfold seen_inclusion in *.
     intros pc0 b0 inp0 SEEN. apply is_memo_add in SEEN. destruct SEEN as [EQ|SEEN].
     - inversion EQ. subst. left. exists tree. exists gm. split; auto. apply in_add. left. auto.
-    - specialize (INCL pc0 b0 inp0 SEEN).      
+    - specialize (INCL pc0 b0 inp0 SEEN).
       destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [cur [Hcur [ts [gms [GEQ [EQ TTS]]]]]]]].
       + left. exists ts. exists gms. split; auto. apply in_add. right; auto.
       + left. exists ts. exists gms. split; auto.
         apply in_add. left; auto. inversion EQ. auto.
   Qed.
-  
+
   Lemma skip_inclusion:
     forall code inp treeseen memoset tree gm currentpc
       (INCL: seen_inclusion code treeseen memoset (Some (tree, gm, inp)) currentpc)
@@ -206,7 +206,7 @@ Section MemoEquiv.
     - right. split; auto. exists nextpc. split; auto. exists ts. exists gms. split; auto. inversion Hcur. lia.
   Qed.
 
-  
+
   Definition head_pc (stk:list config) : option label :=
     match stk with
     | [] => None
@@ -234,7 +234,7 @@ Section MemoEquiv.
   Proof.
     intros c. unfold seen_inclusion. intros pc b inp SEEN.
     rewrite initial_empty in SEEN. inversion SEEN.
-  Qed.  
+  Qed.
 
   (* the initial states of both smallstep semantics are related with the invariant *)
   Lemma initial_memo_inv_inclusion:

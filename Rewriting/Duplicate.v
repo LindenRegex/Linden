@@ -38,7 +38,7 @@ Section Duplicate.
     simpl. destruct a as [inp gm].
     specialize (IHl ((inp,gm)::seen)). simpl in IHl. rewrite <- app_assoc in IHl. simpl in IHl.
     destruct (is_seen (inp, gm) seen) eqn:SEEN; try solve [constructor; auto].
-    apply equiv_seen_right; auto. apply equiv_seen_left; auto.        
+    apply equiv_seen_right; auto. apply equiv_seen_left; auto.
     eapply leaves_equiv_monotony with (seen1:=(inp,gm)::seen); eauto.
     intros [i2 g2] H. simpl in H. apply Bool.orb_true_iff in H as [H|H]; auto.
     apply andb_prop in H as [H1 H2].

@@ -27,7 +27,7 @@ Section MemoTree.
 
   Definition initial_tree_state (t:tree) (i:input) (ts:seentrees): mtree_state :=
     MTree [(t, GroupMap.empty, i)] ts.
-  
+
   (** * MemoTree small-step semantics *)
 
   Inductive exec_tree_result : Type :=
@@ -98,7 +98,7 @@ Section MemoTree.
         | false => orb (negb (noleaftree tlk)) (noleaftree t1)
         end
     end.
-  
+
   (* tree without matching leaves *)
   Lemma noleaf_tree:
     forall t i gm d, noleaftree t = true <-> tree_res t gm i d = None.
@@ -191,8 +191,8 @@ Section MemoTree.
      This allows the MemoBT algorithm to reuse its seen set when no result has been found,
      and avoids exploring configurations that have been explored in a previous unfructuous run.
    *)
-  
-  
+
+
   (** * Initialization  *)
   (* In the initial state, the invariant holds *)
 
@@ -222,7 +222,7 @@ Section MemoTree.
     intros t gm inp ts res SUB NL ND. induction ND; try solve[constructor; auto; pike_subset].
     - apply NL in SEEN. apply noleaftree_nd; auto.
   Qed.
-  
+
   Lemma init_memotree_inv_noleaf:
     forall t inp ts,
       pike_subtree t ->
@@ -239,14 +239,14 @@ Section MemoTree.
 
   Lemma init_memotree_inv:
     forall t inp,
-      pike_subtree t -> 
+      pike_subtree t ->
       memotree_inv (initial_tree_state t inp initial_seentrees) (first_leaf t inp).
   Proof.
     intros. apply init_memotree_inv_noleaf; auto.
     apply noleaf_initial.
   Qed.
 
-  
+
   (** * Invariant Preservation  *)
 
   Theorem memotree_preservation:
@@ -267,7 +267,7 @@ Section MemoTree.
       intros H. apply NOLEAF in H as [_ H]. auto.
     (* skipping *)
     - constructor; try solve[pike_subset].
-      2:{ intros N. apply NOLEAF in N as [N1 N2]. split; auto. inversion N1; auto. } 
+      2:{ intros N. apply NOLEAF in N as [N1 N2]. split; auto. inversion N1; auto. }
       intros res LISTND.
       apply SAMERES. eapply tlr_cons with (l1:=None); eauto.
       apply tr_skip. auto.
@@ -281,10 +281,10 @@ Section MemoTree.
     (* Mismatch *)
     - simpl. constructor; try solve[pike_subset].
       2:{ intros N. apply NOLEAF in N as [N1 N2]. inversion N1. split; auto.
-          apply add_noleaf; auto. } 
+          apply add_noleaf; auto. }
       intros res LISTND.
       apply SAMERES. eapply tlr_cons; try solve[constructor].
-      eapply list_add_seen with (gm:=gm) (inp:=i) in LISTND; eauto. pike_subset. 
+      eapply list_add_seen with (gm:=gm) (inp:=i) in LISTND; eauto. pike_subset.
     (* Choice *)
     - simpl. constructor; try solve[pike_subset].
       2:{ intros N. apply NOLEAF in N as [N1 N2].

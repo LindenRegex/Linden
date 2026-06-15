@@ -187,7 +187,7 @@ Section RegexpTree.
         apply atmost_bounded_lazy_equiv. auto.
     Qed.
 
-        
+
 
     Context (c0 c1 c2: Parameters.Character).
 
@@ -296,7 +296,7 @@ Section RegexpTree.
         + apply in_or_app. left. eapply (flatmap_incl _ _ _ _ _ CONCAT CONCAT0); eauto.
           unfold funct_incl. intros a l1 l2 ACT1 ACT2.
           inversion ACT1; subst. inversion ACT2; subst. apply IHm; auto.
-        + apply in_or_app. auto. 
+        + apply in_or_app. auto.
     Qed.
 
     (* Specialization to d = n-m *)
@@ -451,7 +451,7 @@ Section RegexpTree.
         assert (plus = +∞). { destruct plus; try discriminate. reflexivity. }
         assert (plus0 = +∞). { destruct plus0; try discriminate. reflexivity. }
         subst plus plus0. clear H1 H2.
-        assert (EQUIV: leaves_equiv [] 
+        assert (EQUIV: leaves_equiv []
           (tree_leaves titer (GroupMap.reset (def_groups r) gm) inp dir)
           (tree_leaves titer0 (GroupMap.reset (def_groups r) gm) inp dir)). {
           apply actions_equiv_interm_prop with
@@ -533,7 +533,7 @@ Section RegexpTree.
       forall r n1 g1 n2 m2 g2,
         def_groups r = [] ->
         (Sequence (Quantified g1 n1 0 r) (Quantified g2 n2 m2 r))
-          ≅[rer][forward] Quantified g2 (n1+n2) m2 r. 
+          ≅[rer][forward] Quantified g2 (n1+n2) m2 r.
     Proof.
       intros r n1 g1 n2 m2 g2 DEF.
       (* break down r{n2,n2+m2} into r{n2}r{0,m2} *)
@@ -558,7 +558,7 @@ Section RegexpTree.
       (* merge the forced iterations r{n1+n2} back with the free iterations r{0,m2} *)
       apply bounded_atmost_forward. auto.
     Qed.
-    
+
     (* r{n1,m1}r{0,m2} -> r{n1,m1+m2} *)
     Theorem merge_greedy_forward:
       forall r n1 m1 m2,
@@ -590,7 +590,7 @@ Section RegexpTree.
       forall r n1 m1 g1 n2 g2,
         def_groups r = [] ->
         (Sequence (Quantified g1 n1 m1 r) (Quantified g2 n2 0 r))
-          ≅[rer][backward] Quantified g1 (n1+n2) m1 r. 
+          ≅[rer][backward] Quantified g1 (n1+n2) m1 r.
     Proof.
       intros r n1 m1 g1 n2 g2 DEF.
       (* break down r{n1,n1+m1} into r{0,m1}r{n1} *)
@@ -639,7 +639,7 @@ Section RegexpTree.
       apply atmost_bounded_backward. auto.
     Qed.
 
-    
+
   End BoundedRepetitions.
 
 (*|

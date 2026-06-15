@@ -22,7 +22,7 @@ Section EquivDef.
 
 
   (** ** Validity of input MatchStates with respect to a check *)
-  (* A continuation is only equivalent to a list of actions containing some check Acheck inp 
+  (* A continuation is only equivalent to a list of actions containing some check Acheck inp
      for input MatchStates that have either progressed or stayed unmodified wrt the input inp. *)
 
   (* Validity of a MatchState with respect to one fixed check input. *)
@@ -36,7 +36,7 @@ Section EquivDef.
   Definition ms_valid_wrt_checks (ms: MatchState) (act: actions) (dir: Direction): Prop :=
     forall inpcheck: input, In (Acheck inpcheck) act -> ms_valid_wrt_check ms inpcheck dir.
 
-  
+
   (* Equivalence of results is defined as equivalence of MatchStates, group maps and inputs. *)
   Inductive equiv_res: option leaf -> option MatchState -> Prop :=
   | Equiv_res_None: equiv_res None None
@@ -51,7 +51,7 @@ Section EquivDef.
   performs the actions described in act in the direction dir when: *)
   Definition equiv_cont (mc: MatcherContinuation) (gl: open_groups) (forbgroups: list group_id) (act: actions) (dir: Direction) (str0: string): Prop :=
     forall (gm: group_map) (ms: MatchState) (inp: input) (res: option MatchState) (fuel: nat) (t: tree),
-      (* for all corresponding tuples of a MatchState ms, an input inp, a group map gm 
+      (* for all corresponding tuples of a MatchState ms, an input inp, a group map gm
       and a list of open groups gl that use the input string str0, *)
       input_compat inp str0 ->
       equiv_groupmap_ms gm ms -> group_map_equiv_open_groups gm gl ->

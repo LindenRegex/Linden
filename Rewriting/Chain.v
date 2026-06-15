@@ -6,7 +6,7 @@ Section EquivalenceChain.
   Context (rer: RegExpRecord).
 
   (* The chain of equivalences that is defined in the paper *)
-  
+
 Theorem equivalence_chain:
   forall r min0 min1 Delta1 Delta2,
     (* when r defines no groups *)
@@ -50,4 +50,3 @@ Qed.
 
 
 End EquivalenceChain.
-  

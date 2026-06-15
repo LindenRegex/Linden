@@ -19,7 +19,7 @@ Section GroupMapMS.
   | Equiv_ranges_None: equiv_ranges_opt None None
   | Equiv_ranges_unclosed: forall idx, equiv_ranges_opt (Some (GroupMap.Range idx None)) None
   | Equiv_ranges_Some: forall lrange wrange, equiv_ranges lrange wrange -> equiv_ranges_opt (Some lrange) (Some wrange).
-  
+
 
   (* A group map and a MatchState are said to be equivalent when they define the same capture groups. *)
   Definition equiv_groupmap_ms (gm: GroupMap.t) (ms: MatchState): Prop :=

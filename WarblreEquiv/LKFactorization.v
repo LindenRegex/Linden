@@ -15,7 +15,7 @@ We factorize it in this file *)
 
 Section LKFactorization.
   Context {params: LindenParameters}.
-  
+
   Definition lkCtx (lkdir: Direction) (pos: bool) :=
     match lkdir, pos with
     | forward, true => Lookahead_inner

@@ -85,7 +85,7 @@ Section Preparation.
     | (inp,gm)::l' =>
         match (is_seen (inp,gm) seen) with
         | true => filter_leaves l' seen
-        | false => (inp,gm) :: (filter_leaves l' ((inp,gm)::seen)) 
+        | false => (inp,gm) :: (filter_leaves l' ((inp,gm)::seen))
         end
     end.
 
@@ -204,7 +204,7 @@ Section Lemmas.
       apply equiv_seen_left; auto.
     - apply equiv_cons; auto.
   Qed.
-  
+
   (* ... and symmetric *)
   Lemma leaves_equiv_comm:
     forall l1 l2 seen,
@@ -226,7 +226,7 @@ Section Lemmas.
     induction EQUIV; inversion HeqL1; subst; auto.
     - apply equiv_seen_right; auto.
     - rewrite SEEN in NEW. inversion NEW.
-  Qed.        
+  Qed.
 
   (* Leaves equivalence is transitive *)
   Lemma leaves_equiv_trans:
@@ -311,7 +311,7 @@ Section Lemmas.
         destruct H as [[HS|HI]|HL]; auto. }
   Qed.
 
-  
+
   (* Two equivalent lists of leaves either have the same first element or are both empty. *)
   Lemma equiv_head:
     forall l1 l2,

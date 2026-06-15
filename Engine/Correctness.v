@@ -264,7 +264,7 @@ Proof.
   generalize (initial_memo_inv_inclusion rer r inp tree (compilation r) initts initms TREE (@eq_refl _ _) SUBSET INCL).
   intros INIT.
   eapply memobt_to_tree in TRCBT as [btfinal [TRCTREE INV]]; eauto.
-  - inversion INV. subst. eauto. 
+  - inversion INV. subst. eauto.
   - eapply compilation_stutter_wf; eauto.
 Qed.
 
@@ -328,7 +328,7 @@ Theorem memobt_correct:
     /\ (result = None -> correctms finalms (compilation r)).
 Proof.
   intros r inp tree result initms finalms SUBSET CORRECT TREE TRC.
-  destruct CORRECT as [initts [INCL NOLEAF]]. 
+  destruct CORRECT as [initts [INCL NOLEAF]].
   eapply encode_equal with (b:=CanExit) in TREE as BOOLTREE; try solve[pike_subset].
   eapply memobt_to_memotree in TRC as [ts [TRC CORRECT]]; eauto.
   assert (SUBTREE: pike_subtree tree).
