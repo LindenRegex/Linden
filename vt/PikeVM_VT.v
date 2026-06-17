@@ -228,10 +228,11 @@ Section PikeVM_VT.
   Definition pike_vm_initial_state_vt (inp:input) (regs_size: nat) : pike_vm_state_vt :=
     PVS_vt inp [pike_vm_initial_thread_vt] None [] None initial_seenpcs (Regs.initial_tree regs_size).
 
-  Definition delete_thread_regs_from_regs_state: list thread_vt -> regs -> regs :=
-    List.fold_left (fun r t => (* get regs_id from thread, delete it from r *)
+  Print fold_right. Print fold_left.
+  Definition delete_thread_regs_from_regs_state (lt:list thread_vt) (r:regs) : regs :=
+    List.fold_right (fun t r => (* get regs_id from thread, delete it from r *)
                       match t with
-                        (_, ri, _) => Regs.delete ri r end).
+                        (_, ri, _) => Regs.delete ri r end) r lt.
   Definition delete_best_regs_from_regs_state (best:option leaf_vt) (r:regs) : regs :=
     match best with
     | Some (_, ri) => Regs.delete ri r
@@ -431,6 +432,19 @@ Section PikeVM_VT.
         apply H'; auto.
   Qed.
 
+  Lemma fold_right_preserves {A} {B} :
+    forall (l: list A) (acc: B) P f,
+      P acc ->
+      (forall a x, P a -> In x l -> P (f x a)) ->
+      P (fold_right f acc l).
+  Proof.
+    induction l as [|x xs IH]; intros acc P f H Hf; simpl in *.
+    - assumption.
+    - apply Hf.
+      + apply IH; auto.
+      + auto.
+  Qed.
+
   Inductive state_valid_regs: pike_vm_state_vt -> Prop :=
   | pvs_valid_regs:
     forall inp act best blo np seen regs
@@ -500,7 +514,7 @@ Section PikeVM_VT.
     dependent induction STEP; inversion H; subst; constructor.
     - assumption.
     - unfold delete_thread_regs_from_regs_state.
-      apply fold_left_preserves; try assumption.
+      apply fold_right_preserves; try assumption.
       intros a x Hs Hin.
       destruct x as [[l ri] b].
       apply Regs.delete_valid.
@@ -515,7 +529,7 @@ Section PikeVM_VT.
       unfold delete_best_regs_from_regs_state.
       destruct best;
         unfold delete_thread_regs_from_regs_state;
-        apply fold_left_preserves; try assumption;
+        apply fold_right_preserves; try assumption;
         try destruct l as [i l]; try (intros a x Hs Hin; destruct x as [[l' ri] b]);
         apply Regs.delete_valid; assumption.
     - apply epsblocked_same_regs in STEP. destruct STEP as [Hr Hnewt]. subst.
@@ -543,23 +557,67 @@ Section PikeVM_VT.
     | PVS_vt _ _ _ _ _ _ r => Regs.get_all_ids (Regs.tree r)
     | PVS_final_vt _ r => Regs.get_all_ids (Regs.tree r)
     end.
+
+  Lemma delete_threads_regs_removed :
+    forall lt regs,
+      (* NoDup map ri_of lt  ->*)
+      incl (map ri_of lt) (Regs.get_all_ids (Regs.tree regs)) ->
+      let regs' := delete_thread_regs_from_regs_state lt regs in
+      Permutation (Regs.get_all_ids (Regs.tree regs))
+        ((Regs.get_all_ids (Regs.tree regs')) ++ (map ri_of lt)).
+  Proof.
+    induction lt; intros regs INCL; simpl in *.
+    - rewrite app_nil_r.
+      apply Permutation_refl.
+    - destruct a as [[l ri] b].
+      simpl.
+      eapply perm_trans.
+      + apply IHlt.
+        apply incl_cons_inv in INCL.
+        tauto.
+      + eapply perm_trans.
+        2: apply Permutation_middle.
+        rewrite app_comm_cons.
+        apply Permutation_app_tail.
+        
+  Admitted.
+    
+  Lemma perm_incl {A} :
+    forall (a b: list A),
+      Permutation a b ->
+      incl a b.
+  Proof.
+    unfold incl.
+    intros a b PERM.
+    dependent induction PERM; intros n H; simpl in *.
+    - tauto.
+    - destruct H; auto.
+    - destruct H as [H | [H | H]]; auto.
+    - auto.
+  Qed.
   
   Lemma pike_vm_step_vt_threads_are_leaves :
     forall c s_vt s_vt',
       (* s_vt = (PVS inp act_vt best_vt blo_vt None seen regs) *)
-      all_ris s_vt = leaf_ids_of s_vt ->
+      state_valid_regs s_vt ->
+      Permutation (all_ris s_vt) (leaf_ids_of s_vt) ->
       pike_vm_step_vt c s_vt s_vt' ->
       Permutation (all_ris s_vt') (leaf_ids_of s_vt').
   Proof.
-    intros c s_vt s_vt' ALLIDS STEP.
-    dependent induction STEP; simpl in *.
+    intros c s_vt s_vt' VALID ALLIDS STEP.
+    dependent induction STEP.
     - destruct best; simpl in *;
         try destruct l as [_ ri]; rewrite ALLIDS;
         apply Permutation_refl.
-    - destruct best; simpl in *; destruct thr as [[l' ri] b].
-      + destruct l.
-        admit.
-      + admit.
+    - destruct best; destruct thr as [[l' ri] b];
+        try destruct l;
+        subst;
+        eapply Permutation_app_inv_r with (l:= map ri_of ((l', ri, b) :: blocked));
+        eapply perm_trans;
+        try exact ALLIDS; apply delete_threads_regs_removed;
+        apply perm_incl in ALLIDS; try tauto;
+        apply incl_cons_inv in ALLIDS;
+        try tauto.
     - destruct best; simpl in *.
       + destruct l.
         rewrite <- ALLIDS.
