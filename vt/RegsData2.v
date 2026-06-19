@@ -406,7 +406,7 @@ Module RegsData.
     | (j, _ , _) => i =? j
     end.
   
-  Definition get_at (i: nat) (p: p) (t: t): (option nat * option nat) :=
+  Definition get_at (i: nat) (t: t): (option nat * option nat) :=
     match t with
     | Complete a_cp a_clk =>
         match Array.get a_cp i, Array.get a_clk i with

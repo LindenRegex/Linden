@@ -684,6 +684,10 @@ Module VT (Data : CDATA).
         assumption.
   Qed.
 
+  Lemma insert_param_unchanged : forall s id d,
+      param s = param (insert id d s).
+  Proof. auto. Qed.
+
   (*** Insert: helper tactic *)
 
   Ltac solve_insert_trivial :=
@@ -1103,6 +1107,11 @@ Module VT (Data : CDATA).
     assumption.   
   Qed.
 
+  Lemma split_param_unchanged : forall s id,
+      let (s', j) := split id s in
+      param s = param s'.
+  Proof. reflexivity. Qed.
+
   (*** Split: get on resulting state *)
 
   Lemma split_get_unchanged_in_tree: forall t p i i' j o,
@@ -1313,6 +1322,49 @@ Module VT (Data : CDATA).
       + apply incl_nil_l.
       + apply incl_refl.
   Qed.
+
+  Lemma delete_ids' : forall t p id,
+      is_valid_id t id ->
+      is_valid_tree_structure t ->
+      is_valid_tree_ids t ->
+      Permutation (get_all_ids t) (id :: (get_all_ids (delete_in_tree id t p))).
+  Proof.
+    unfold is_valid_id, is_valid_tree_ids.
+    intros t param i; induction t; intros Hid Hs Hids; simpl in *.
+    - contradiction.
+    - destruct (delete_in_tree i t0 param) eqn:D.
+      destruct t0; try solve_node_trivial.
+      all: simpl in *; apply IHt; try solve_node_trivial.
+    - specialize (branch_id_valid_in_one _ _ i Hids) as XOR.
+      destruct (is_stem_with_id i t1) eqn:S1; simpl.
+      + apply get_all_ids_stem_with_id in S1.
+        rewrite S1.
+        simpl.
+        apply Permutation_refl.
+      + destruct (is_stem_with_id i t2) eqn:S2; simpl.
+        * apply get_all_ids_stem_with_id in S2.
+          rewrite S2.
+          eapply perm_trans.
+          apply Permutation_sym; apply Permutation_cons_append.
+          apply Permutation_refl.
+        * apply ListHelpers.NoDup_app_remove in Hids.
+          specialize (in_app_or _ _ _ Hid) as H.
+          destruct H as [H | H].
+          -- rewrite delete_on_invalid_id with (t:= t2); try solve_branch_trivial.
+             rewrite app_comm_cons.
+             apply Permutation_app_tail.
+             apply IHt1; try solve_branch_trivial.
+          -- rewrite delete_on_invalid_id with (t:= t1); try solve_branch_trivial.
+             eapply perm_trans.
+             2: apply Permutation_sym; apply Permutation_middle.
+             apply Permutation_app_head.
+             apply IHt2; try solve_branch_trivial.
+    - destruct Hid as [Hid|]; try contradiction.
+      subst.
+      rewrite Nat.eqb_refl.
+      simpl.
+      apply Permutation_refl.
+  Qed.
         
   Lemma delete_valid_ids : forall t p id,
       is_valid_tree_structure t ->
@@ -1395,6 +1447,10 @@ Module VT (Data : CDATA).
     - apply delete_valid_ids; tauto.
     - apply delete_valid_data; tauto.
   Qed.
+
+  Lemma delete_param_unchanged : forall s id,
+      param s = param (delete id s).
+  Proof. reflexivity. Qed.
 
   Lemma delete_invalid_id_tree : forall t p id,
       is_valid_tree_structure t ->
