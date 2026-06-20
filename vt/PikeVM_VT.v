@@ -334,13 +334,18 @@ Section PikeVM_VT.
 
   Definition all_ris (s_vt: pike_vm_state_vt) : list regs_id :=
     match s_vt with
+    | PVS_vt _ act best blo _ _ _ =>
+        (map ri_of act) ++ (ri_of_leaf best) ++ (map ri_of blo)
+    | PVS_final_vt best _ => ri_of_leaf best
+    end.
+    (*match s_vt with
     | PVS_vt _ act (Some leaf) blo _ _ _ =>
         (map ri_of act) ++ [(match leaf with (_, ri) => ri end)] ++ (map ri_of blo)
     | PVS_vt _ act None blo _ _ _ =>
         (map ri_of act) ++ (map ri_of blo)
     | PVS_final_vt (Some leaf) _ => match leaf with (_, ri) => [ri] end
     | PVS_final_vt None _ => []
-    end.
+    end.*)
 
   Definition gm_vt_equiv (gm: group_map) (ri: regs_id) (r: regs) : Prop :=
     match Regs.get_compressed_data ri r with
@@ -879,28 +884,29 @@ Section PikeVM_VT.
     intros c s_vt s_vt' VALID ALLIDS STEP.
     specialize (pike_vm_step_vt_valid_regs _ _ _ VALID STEP) as VALID'.
     dependent induction STEP.
-    - destruct best; simpl in *;
-        try destruct l as [i ri]; rewrite ALLIDS;
-        apply Permutation_refl.
-    - destruct best; destruct thr as [[l' ri] b];
-        try destruct l;
-        subst;
-        eapply Permutation_app_inv_r with (l:= map ri_of ((l', ri, b) :: blocked));
-        eapply perm_trans;
-        try exact ALLIDS;
-        apply delete_threads_regs_removed;
-        (inversion VALID; subst); simpl in *;
-        try assumption;
-        try (apply Permutation_sym, Permutation_NoDup in ALLIDS;
-             unfold Regs.is_valid_state, Regs.is_valid_tree_ids in VALID_REGS; try tauto;
-             apply NoDup_cons_iff in ALLIDS; tauto);
-        try (apply perm_incl in ALLIDS; try tauto; apply incl_cons_inv in ALLIDS; try tauto).
-    - destruct best; simpl in *.
-      + destruct l.
-        rewrite <- ALLIDS.
-        rewrite app_comm_cons. apply Permutation_app_comm.
-      + rewrite app_nil_r. rewrite ALLIDS.
-        apply Permutation_refl.
+    - simpl in *.
+      rewrite app_nil_r in ALLIDS.
+      rewrite ALLIDS.
+      apply Permutation_refl.
+    - simpl. simpl in ALLIDS.
+      destruct thr as [[l' ri] b].
+      subst.
+      eapply Permutation_app_inv_r with (l:= map ri_of ((l', ri, b) :: blocked)).
+      eapply perm_trans.
+      + exact ALLIDS.
+      + apply delete_threads_regs_removed;
+          inversion VALID; subst;
+          unfold Regs.is_valid_state, Regs.is_valid_tree_ids in VALID_REGS.
+        * auto.
+        * apply Permutation_sym, Permutation_NoDup in ALLIDS; try tauto.
+          eapply NoDup_app_remove_l; eauto.
+        * apply perm_incl in ALLIDS; try tauto.
+          apply incl_app_inv in ALLIDS. tauto.
+    - simpl in *.
+      rewrite <- ALLIDS.
+      rewrite app_nil_r.
+      rewrite app_comm_cons.
+      apply Permutation_app_comm.
     - subst.
       eapply Permutation_app_inv_r with (l:= [ri_of t0]).
       eapply perm_trans with (l':= (Regs.get_all_ids (Regs.tree regs0))).
@@ -956,19 +962,17 @@ Section PikeVM_VT.
         * assumption.
         * unfold Regs.is_valid_state, Regs.is_valid_tree_ids in VALID_REGS.
           apply Permutation_sym, Permutation_NoDup in ALLIDS; try tauto.
-          destruct best; try destruct l;
-            apply NoDup_cons_iff in ALLIDS; destruct ALLIDS as [_ ALLIDS];
-            try rewrite app_cons, app_assoc in ALLIDS;
-            apply NoDup_app_remove_r in ALLIDS;
-            try apply ListHelpers.NoDup_app_comm in ALLIDS;
-            assumption.
+          apply NoDup_cons_iff in ALLIDS; destruct ALLIDS as [_ ALLIDS].
+          rewrite app_assoc in ALLIDS.
+          apply NoDup_app_remove_r in ALLIDS.
+          apply ListHelpers.NoDup_app_comm.
+          assumption.
         * apply perm_incl in ALLIDS.
-          destruct best; try destruct l;
-            apply incl_cons_inv in ALLIDS; destruct ALLIDS as [_ ALLIDS];
-            try rewrite app_cons, app_assoc in ALLIDS;
-            apply incl_app_inv in ALLIDS; destruct ALLIDS as [ALLIDS _];
-            try apply incl_app_comm in ALLIDS;
-            tauto.
+          apply incl_cons_inv in ALLIDS; destruct ALLIDS as [_ ALLIDS].
+          rewrite app_assoc in ALLIDS.
+          apply incl_app_inv in ALLIDS; destruct ALLIDS as [ALLIDS _].
+          apply incl_app_comm.
+          assumption.
     - apply epsblocked_same_regs in STEP. destruct STEP as [Hr Hnewt]. subst.
       destruct best; simpl in *;
         try destruct l;
@@ -1231,6 +1235,39 @@ Section PikeVM_VT.
          -- exact H3.
   Qed.
 
+  Lemma leaves_equ_del: forall lri regs l lvt,
+      Regs.is_valid_state regs ->
+      ~ incl (ri_of_leaf lvt) lri \/ ri_of_leaf lvt = [] ->
+      leaves_equiv l lvt regs ->
+      leaves_equiv l lvt (delete_ris_from_regs_state lri regs).
+  Proof.
+    intros lri regs l lvt VALID INCL EQUIV.
+    inversion EQUIV; subst; constructor.
+    unfold gm_vt_equiv in *.
+    assert (GC: Regs.get_compressed_data ri (delete_ris_from_regs_state lri regs) =
+                  Regs.get_compressed_data ri regs).
+    - unfold delete_ris_from_regs_state.
+      remember (fold_right (fun ri r => Regs.delete ri r) regs lri) as fr.
+      apply proj1 with (B:= Regs.is_valid_state fr).
+      rewrite Heqfr.
+      apply fold_right_preserves.
+      + split; auto.
+      + intros rs x [Heq Hv] Hin.
+        split.
+        * apply Regs.delete_get_unchanged; auto.
+          intros Hxri.
+          unfold incl in INCL.
+          simpl in INCL.
+          destruct INCL as [INCL | INCL].
+          -- apply INCL.
+             intros a H; destruct H; [subst; assumption | contradiction].
+          -- congruence.
+        * apply Regs.delete_valid.
+          assumption.
+    - rewrite GC.
+      assumption.
+  Qed.
+
   Lemma perm_nd_in {A} : forall (l a b c d : list A),
       Permutation (a ++ c) l ->
       incl b a ->
@@ -1247,6 +1284,37 @@ Section PikeVM_VT.
     eapply ListHelpers.NoDup_in_app; eauto.
   Qed.
 
+  Lemma NoDup_app_not_incl_or_nil {A} :
+  forall (a b : list A),
+    NoDup (a ++ b) ->
+    ~ incl a b \/ a = [].
+  Proof.
+    intros a b Hnd.
+    destruct a as [|x a].
+    - right; reflexivity.
+    - left.
+      intro Hincl.
+      assert (Hinb : In x b).
+      { apply Hincl. left. reflexivity. }
+      simpl in Hnd.
+      inversion Hnd as [| ? ? Hnotin _]; subst.
+      apply Hnotin.
+      apply in_or_app.
+      right.
+      exact Hinb.
+  Qed.
+
+  Lemma nodup3 {A}: forall (a b c: list A),
+      NoDup (a ++ b ++ c) ->
+      NoDup (a ++ c ++ b).
+  Proof.
+     intros a b c Hnd.
+     apply (Permutation_NoDup (l := a ++ b ++ c)).
+     - apply Permutation_app_head.
+       apply Permutation_app_comm.
+     - auto.
+  Qed.
+
   Lemma pike_vm_step_vt_equiv :
     forall c s s_vt s' s_vt',
       (* s = (PVS inp act best blo None seen) *)
@@ -1259,7 +1327,9 @@ Section PikeVM_VT.
       state_equiv s' s_vt'.
   Proof.
     intros c s s_vt s' s_vt' VALID PERM H STEP STEPVT.
-    dependent induction STEPVT; destruct s; inversion H; subst.
+    dependent induction STEPVT; destruct s; inversion H; subst;
+      inversion VALID; subst;
+      unfold Regs.is_valid_state, Regs.is_valid_tree_ids in VALID_REGS.
     - (* pvs_final_vt *)
       inversion EQUIV_ACT. inversion EQUIV_BLO. subst.
       inversion STEP. subst.
@@ -1269,23 +1339,9 @@ Section PikeVM_VT.
       inversion EQUIV_ACT. inversion EQUIV_BLO. subst.
       inversion STEP; subst; try congruence.
       constructor.
-      inversion EQUIV_LEA; subst; constructor.
-      unfold gm_vt_equiv in *.
-      assert (GET: Regs.get_compressed_data ri (delete_ris_from_regs_state (map ri_of (thr::blocked)) regs0) = Regs.get_compressed_data ri regs0).
-      + unfold delete_ris_from_regs_state.
-        remember (fold_right (fun (ri0 : nat) (r : Regs.State) =>
-                                Regs.delete ri0 r) regs0 (map ri_of (thr :: blocked))) as fr.
-        apply proj1 with (B:= Regs.is_valid_state fr).
-        rewrite Heqfr.
-        apply fold_right_preserves; try (split; [reflexivity | inversion VALID; assumption]).
-        intros a id [Heq Hv] Hin.
-        split; try (apply Regs.delete_valid; exact Hv).
-        apply Regs.delete_get_unchanged; try assumption.
-        simpl in PERM.
-        inversion VALID; subst.
-        admit.
-      + rewrite GET.
-        exact GMVT.
+      apply leaves_equ_del; try assumption.
+      simpl in PERM. apply NoDup_app_not_incl_or_nil.
+      apply Permutation_sym, Permutation_NoDup in PERM; try tauto.
     - (* pvs_nextchar_vt *)
       inversion EQUIV_ACT. inversion EQUIV_BLO. subst.
       inversion STEP; subst.
@@ -1298,33 +1354,29 @@ Section PikeVM_VT.
       inversion STEP; subst; try (rewrite H3 in *; congruence).
       constructor.
       + apply threads_equ_del.
-        * inversion VALID; auto.
+        * auto.
         * simpl in PERM.
-          destruct best;
-            (eapply perm_nd_in; [
-                rewrite app_cons in PERM; exact PERM |
-                apply incl_refl |
-                apply incl_appl, incl_refl |
-                inversion VALID; subst; unfold Regs.is_valid_state in VALID_REGS; tauto]).
+          rewrite app_cons in PERM.
+          eapply perm_nd_in;
+            [exact PERM |
+              apply incl_refl |
+              apply incl_appl, incl_refl |
+              tauto].
         * exact H4.
-      + inversion EQUIV_LEA; subst; constructor.
-        unfold gm_vt_equiv in *.
-        assert (GET: Regs.get_compressed_data ri (delete_ris_from_regs_state [ri_of t0] regs0) = Regs.get_compressed_data ri regs0).
-        * unfold delete_ris_from_regs_state. simpl.
-          inversion VALID; subst.
-          apply Regs.delete_get_unchanged; try assumption; try reflexivity.
-          admit.
-        * rewrite GET.
-          exact GMVT.
+      + apply leaves_equ_del; try assumption.
+        simpl in PERM. apply NoDup_app_not_incl_or_nil.
+        apply Permutation_sym, Permutation_NoDup in PERM; try tauto.
+        rewrite app_comm_cons, app_assoc in PERM.
+        apply NoDup_app_remove_r, ListHelpers.NoDup_app_comm in PERM.
+        rewrite List.List.app_cons in PERM.
+        apply NoDup_app_remove_r in PERM.
+        assumption.
       + apply threads_equ_del.
         * inversion VALID; auto.
         * simpl in PERM.
-          destruct best;
-            (eapply perm_nd_in; [
-                rewrite app_cons in PERM; exact PERM |
-                apply incl_refl |
-                apply incl_appr; try apply incl_tl; apply incl_refl |
-                inversion VALID; subst; unfold Regs.is_valid_state in VALID_REGS; tauto]).
+          rewrite app_comm_cons in PERM.
+          eapply perm_nd_in; [exact PERM | unfold incl; simpl; tauto |
+                               apply incl_appr, incl_refl | tauto].
         * assumption.
     - (* pvs_active_vt *)
       inversion EQUIV_ACT. subst.
@@ -1349,19 +1401,24 @@ Section PikeVM_VT.
       rewrite Hadd.
       constructor.
       + constructor.
-      + constructor.
-        admit.
+      + apply leaves_equ_del; try assumption.
+        * simpl. simpl in PERM.
+          apply NoDup_app_not_incl_or_nil.
+          apply Permutation_sym, Permutation_NoDup in PERM; try tauto.
+          rewrite app_cons, app_assoc, app_assoc in PERM. apply NoDup_app_remove_r in PERM.
+          apply nodup3. assumption.
+        * inversion H3; subst.
+          constructor. simpl.
+          assumption.
       + apply threads_equ_del.
-        * inversion VALID; auto.
+        * auto.
         * simpl in PERM.
-          destruct best;
-            (eapply perm_nd_in with (c:= map ri_of blocked); [
-                rewrite app_cons in PERM; try rewrite app_cons with (l:= map ri_of blocked) in PERM;
-                repeat rewrite app_assoc in PERM; exact PERM |
-                try rewrite <- app_assoc; apply incl_appr, incl_app_comm;
-                try destruct l0; try rewrite app_nil_r; simpl; apply incl_refl |
-                apply incl_refl |
-                inversion VALID; subst; unfold Regs.is_valid_state in VALID_REGS; tauto]).
+          rewrite app_cons, app_assoc, app_assoc in PERM.
+          eapply perm_nd_in;
+            [exact PERM |
+              rewrite <- app_assoc; apply incl_appr, incl_app_comm, incl_refl |
+              apply incl_refl |
+              tauto].
         * assumption.
     - (* pvs_blocked_vt *)
       inversion EQUIV_ACT. subst.
