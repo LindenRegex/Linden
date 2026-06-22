@@ -792,7 +792,56 @@ Module RegsData.
     - rewrite app_assoc.
       reflexivity.
     
-  Qed.    
+  Qed.
+
+  Lemma get_at_eq_invalid : forall param i old clk l,
+      is_valid param old ->
+      is_valid param (Incomplete((i, Invalid, clk) :: l)) ->
+      exists clk', get_at i (compress param old (Incomplete((i, Invalid, clk) :: l))) = (None, clk').
+  Proof.
+    intros param i old clk l Hold Hnew.
+    destruct Hnew as [_ Hnew]. inversion Hnew; subst.
+    unfold is_valid_index, get_index in *.
+    destruct old eqn:OLD; simpl.
+    - rewrite Array.get_set_eq.
+      repeat match goal with | [|- context[match ?v with | _ => _ end] ] => destruct v end;
+        eexists; eauto.
+      simpl in Hold.
+      rewrite <- merge_new_list_old_array_length.
+      lia.
+    - destruct (param <=? S (length (l ++ l0))) eqn:L; simpl.
+      + rewrite list_to_array_get_invalid; try lia.
+        repeat match goal with | [|- context[match ?v with | _ => _ end] ] => destruct v end;
+          eexists; eauto.
+      + rewrite Nat.eqb_refl.
+        repeat match goal with | [|- context[match ?v with | _ => _ end] ] => destruct v end;
+          eexists; eauto.
+  Qed.
+
+  Lemma get_at_eq_valid : forall param i old cp clk l,
+      is_valid param old ->
+      is_valid param (Incomplete((i, Valid cp, clk)::l)) ->
+      exists clk', get_at i (compress param old (Incomplete((i, Valid cp, clk)::l))) =
+                     (Some cp, clk').
+  Proof.
+    intros param i old cp clk l Hold Hnew.
+    destruct Hnew as [_ Hnew]. inversion Hnew; subst.
+    unfold is_valid_index, get_index in *.
+    destruct old eqn:OLD; simpl.
+    - rewrite Array.get_set_eq.
+      repeat match goal with | [|- context[match ?v with | _ => _ end] ] => destruct v end;
+        eexists; eauto.
+      simpl in Hold.
+      rewrite <- merge_new_list_old_array_length.
+      lia.
+    - destruct (param <=? S (length (l ++ l0))) eqn:L; simpl.
+      + rewrite list_to_array_get_valid; try lia.
+        repeat match goal with | [|- context[match ?v with | _ => _ end] ] => destruct v end;
+          eexists; eauto.
+      + rewrite Nat.eqb_refl.
+        repeat match goal with | [|- context[match ?v with | _ => _ end] ] => destruct v end;
+          eexists; eauto.
+  Qed.
   
 End RegsData.
 

@@ -1323,7 +1323,7 @@ Module VT (Data : CDATA).
       + apply incl_refl.
   Qed.
 
-  Lemma delete_ids' : forall t p id,
+  Lemma delete_ids_perm_in_tree : forall t p id,
       is_valid_id t id ->
       is_valid_tree_structure t ->
       is_valid_tree_ids t ->
@@ -1364,6 +1364,15 @@ Module VT (Data : CDATA).
       rewrite Nat.eqb_refl.
       simpl.
       apply Permutation_refl.
+  Qed.
+
+  Lemma delete_ids_perm : forall s id,
+      is_valid_id (tree s) id ->
+      is_valid_state s ->
+      Permutation (get_all_ids (tree s)) (id :: (get_all_ids (tree (delete id s)))).
+  Proof.
+    intros s id Hid [Hs [Hids Hd]].
+    apply delete_ids_perm_in_tree; auto.
   Qed.
         
   Lemma delete_valid_ids : forall t p id,

@@ -3,38 +3,9 @@
 (* The PikeVM algorithm, expressed as small-step semantics on the bytecode NFA *)
 (* It records the code labels it has already handled to avoid doing work twice *)
 
-(*
-Anchored vs unanchored PikeVM:
+(* This version operates only in anchored PikeVM mode *)
 
-The PikeVM can operate in two modes: anchored and unanchored. Which mode we operate
-in is determined by the initial state we provide to the PikeVM. An anchored PikeVM
-finds matches only at the current position of the input, while an unanchored PikeVM
-finds matches at any position of the input.
-
-Normally, we can obtain an unanchored engine from an anchored one for a regex /r/ by
-simply executing the engine with the regex /[^]*?r/. Here, we take an optimized approach
-by simulating the /[^]*?/ in the engine directly. This allows us to perfom optimizations
-during execution. The simulation is done by attaching (as lowest priority) the initial
-thread to the active list whenever we advance the input. The optimizations come from
-knowing the literal of the regex allowing us to skip appending the initial thread at
-certain positions. We do it by maintaining a prefix counter.
-
-A prefix counter consists of two things:
-- A literal. This literal does not change throughout the entire execution of the PikeVM
-- A counter. It indicates in how many characters we will reach a position where
-  the literal matches the prefix of the input. If we are at position n of the input,
-  and the counter is k means, that at position n + k + 1, the prefix matches.
-
-The counter is decreased each time we consume a character. Whenever we consume a
-character and the counter is nonzero, we know that at this position we will not
-find a match. Therefore we perform the "filtering" step and not include the initial
-thread. When the counter is zero, we might find a match at the next position, so we
-include the initial thread in "generating" step. Finally, if we run out of both active
-and blocked thread, we can do the "acceleration" step, where we jump ahead in the input
-to the next position where the prefix matches.
-*)
-
-From Stdlib Require Import List Lia Permutation.
+From Stdlib Require Import List Arith Lia Permutation.
 Import ListNotations.
 From Stdlib Require Import Program.Equality.
 
@@ -42,7 +13,8 @@ From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree Semantics NFA.
 From Linden Require Import BooleanSemantics PikeSubset.
 From Linden Require Import Parameters SeenSets Prefix.
-From Linden Require Import VirtualTree RegsData2.
+From Linden Require Import VirtualTree RegsData.
+From Linden Require Import ListHelpers.
 From Linden Require Import PikeVM Correctness.
 From Warblre Require Import Base RegExpRecord.
 
@@ -209,23 +181,7 @@ Section PikeVM_VT.
   Inductive pike_vm_state_vt : Type :=
   | PVS_vt (inp:input) (active: list thread_vt) (best: option leaf_vt) (blocked: list thread_vt) (nextprefix: option (nat * literal * StrSearch)) (seen: seenpcs) (r:regs)
   | PVS_final_vt (best: option leaf_vt) (r: regs).
-
-(* given an input and literal, we compute the next prefix counter *)
-(* since the counter is always offset by one, we first try to advance the input before performing a prefix search *)
-(*Definition next_prefix_counter {strs:StrSearch} (inp: input) (lit: literal) : option (nat * literal * StrSearch) :=
-  match advance_input inp forward with
-  | None => None
-  | Some (Input next pref) =>
-      match str_search (prefix lit) next with
-      | None => None
-      | Some n => Some (n, lit, strs)
-      end
-  end.*)
-  Definition rer_to_regs_size : nat :=
-  match rer with
-  | RegExpRecord.make _ _ _ _ cgc => 2 * cgc (* regs_size = 2 * rer.capturingGroupsCount *)
-  end.
-
+  
   Definition max_gid_of (bc: bytecode) : group_id :=
     match bc with
     | Accept | Consume _ | CheckAnchor _ | Jmp _ | Fork _ _ | BeginLoop | EndLoop _ | KillThread => 0
@@ -246,17 +202,25 @@ Section PikeVM_VT.
   Definition pike_vm_initial_state_vt (inp:input) (regs_size: nat) : pike_vm_state_vt :=
     PVS_vt inp [pike_vm_initial_thread_vt] None [] None initial_seenpcs (Regs.initial_tree regs_size).
 
-  Print fold_right. Print fold_left.
   Definition delete_ris_from_regs_state (lr: list regs_id) (r: regs) : regs :=
     List.fold_right (fun ri r => Regs.delete ri r) r lr.
-  Definition delete_thread_regs_from_regs_state (lt:list thread_vt) (r:regs) : regs :=
-    List.fold_right (fun t r => (* get regs_id from thread, delete it from r *)
-                      match t with
-                        (_, ri, _) => Regs.delete ri r end) r lt.
-  Definition delete_best_regs_from_regs_state (best:option leaf_vt) (r:regs) : regs :=
-    match best with
-    | Some (_, ri) => Regs.delete ri r
-    | None => r
+
+  Inductive state_valid_regs (regs_size : nat) : pike_vm_state_vt -> Prop :=
+  | pvs_valid_regs:
+    forall inp act best blo np seen regs
+           (VALID_REGS: Regs.is_valid_state regs)
+           (VALID_PARAM: Regs.param regs = regs_size),
+      state_valid_regs regs_size (PVS_vt inp act best blo np seen regs)
+  | pvs_final_valid_regs:
+    forall best regs
+           (VALID_REGS: Regs.is_valid_state regs)
+           (VALID_PARAM: Regs.param regs = regs_size),
+      state_valid_regs regs_size (PVS_final_vt best regs).
+
+  Definition leaf_ids_of (s: pike_vm_state_vt) : list nat :=
+    match s with
+    | PVS_vt _ _ _ _ _ _ r => Regs.get_all_ids (Regs.tree r)
+    | PVS_final_vt _ r => Regs.get_all_ids (Regs.tree r)
     end.
 
   (* small-step semantics for the PikeVM_VT algorithm *)
@@ -338,14 +302,6 @@ Section PikeVM_VT.
         (map ri_of act) ++ (ri_of_leaf best) ++ (map ri_of blo)
     | PVS_final_vt best _ => ri_of_leaf best
     end.
-    (*match s_vt with
-    | PVS_vt _ act (Some leaf) blo _ _ _ =>
-        (map ri_of act) ++ [(match leaf with (_, ri) => ri end)] ++ (map ri_of blo)
-    | PVS_vt _ act None blo _ _ _ =>
-        (map ri_of act) ++ (map ri_of blo)
-    | PVS_final_vt (Some leaf) _ => match leaf with (_, ri) => [ri] end
-    | PVS_final_vt None _ => []
-    end.*)
 
   Definition gm_vt_equiv (gm: group_map) (ri: regs_id) (r: regs) : Prop :=
     match Regs.get_compressed_data ri r with
@@ -382,21 +338,7 @@ Section PikeVM_VT.
            (EQUIV_LEA: leaves_equiv best best_vt r),
       state_equiv (PVS_final best) (PVS_final_vt best_vt r).
 
-  (*** * Helpers: EpsMatch and EpsBlock do not modify the register state *)
-
-  Print epsilon_step_vt.
-
-  (*Lemma epsactive_inv :
-    forall c inp t r r' tl,
-      epsilon_step_vt t c inp r = (EpsActive_vt tl, r') ->
-      let (rsplit, ri') := Regs.split (ri_of t) r in
-      let (topen, ropen) := 
-      tl = [] /\ r' = Regs.delete (ri_of t) r \/
-        tl = [advance_thread_vt t] /\ r' = r \/
-        (exists next, tl = [upd_label_vt t next (ri_of t)] /\ r' = r) \/
-        (exists l1 l2, tl = [upd_label_vt t l1 (ri_of t); upd_labet_vt t l2 ri'] /\ r' = rsplit) \/*)
-        
-                                             
+  (*** * Helpers: EpsMatch and EpsBlock inversions  *)
 
   Lemma epsmatch_same_regs :
     forall c inp t_vt r r',
@@ -455,46 +397,7 @@ Section PikeVM_VT.
   Qed.
 
   (*** * Invariant: register state is valid *)
-
-  Lemma fold_left_preserves {A} {B} :
-    forall (l: list A) (acc: B) P f,
-      P acc ->
-      (forall a x, P a -> In x l -> P (f a x)) ->
-      P (fold_left f l acc).
-  Proof.
-    induction l as [|x xs IH]; intros acc P f H H'; simpl in *.
-    - assumption.
-    - apply IH.
-      + apply H'; auto.
-      + intros a x' HP Hin.
-        apply H'; auto.
-  Qed.
-
-  Lemma fold_right_preserves {A} {B} :
-    forall (l: list A) (acc: B) P f,
-      P acc ->
-      (forall a x, P a -> In x l -> P (f x a)) ->
-      P (fold_right f acc l).
-  Proof.
-    induction l as [|x xs IH]; intros acc P f H Hf; simpl in *.
-    - assumption.
-    - apply Hf.
-      + apply IH; auto.
-      + auto.
-  Qed.
-
-  Lemma in_smaller_than_max: forall l x acc,
-      In x l ->
-      x <= fold_left max l acc.
-  Proof.
-    induction l; intros x acc H; simpl in *.
-    - contradiction.
-    - destruct H as [H|H].
-      + subst.
-        apply fold_left_preserves; lia.
-      + auto.
-  Qed.
-
+  
   Lemma max_gid_is_greatest' : forall c bc l acc,
       get_pc c l = Some bc ->
       max_gid_of bc <= fold_left (fun acc bc => Nat.max (max_gid_of bc) acc) c acc.
@@ -508,7 +411,6 @@ Section PikeVM_VT.
       * eapply IHc.
         exact H.
   Qed.
-
   Lemma max_gid_is_greatest : forall c bc l,
       get_pc c l = Some bc ->
       max_gid_of bc <= max_group_c c.
@@ -517,18 +419,6 @@ Section PikeVM_VT.
     eapply max_gid_is_greatest' with (acc:= 0).
     eassumption.
   Qed.
-
-  Inductive state_valid_regs (regs_size : nat) : pike_vm_state_vt -> Prop :=
-  | pvs_valid_regs:
-    forall inp act best blo np seen regs
-           (VALID_REGS: Regs.is_valid_state regs)
-           (VALID_PARAM: Regs.param regs = regs_size),
-      state_valid_regs regs_size (PVS_vt inp act best blo np seen regs)
-  | pvs_final_valid_regs:
-    forall best regs
-           (VALID_REGS: Regs.is_valid_state regs)
-           (VALID_PARAM: Regs.param regs = regs_size),
-      state_valid_regs regs_size (PVS_final_vt best regs).
 
   Lemma epsactive_valid_regs :
     forall c inp t tl r r',
@@ -556,7 +446,7 @@ Section PikeVM_VT.
         apply Regs.insert_valid.
         * apply max_gid_is_greatest in BC.
           simpl in *.
-          split. lia.
+          split; try lia.
           repeat constructor.
           unfold is_valid_index, gid_to_idx.
           simpl. lia.
@@ -626,7 +516,8 @@ Section PikeVM_VT.
       apply Regs.delete_valid.
       assumption.
     - apply epsactive_valid_regs in STEP; try tauto.
-    - apply epsactive_valid_regs in STEP; destruct STEP as [STEP STEP']; congruence.
+    - apply epsactive_valid_regs in STEP; try congruence.
+      destruct STEP as [_ STEP']; congruence.
     - apply epsmatch_same_regs in STEP. subst.
       unfold delete_ris_from_regs_state.
       destruct best;
@@ -650,8 +541,8 @@ Section PikeVM_VT.
     intros inp.
     unfold pike_vm_initial_state_vt.
     constructor.
-    - unfold Regs.initial_tree, Regs.is_valid_state. simpl.
-      unfold Regs.is_valid_tree_ids. unfold Regs.get_all_ids.
+    - unfold Regs.initial_tree, Regs.is_valid_state, Regs.is_valid_tree_ids, Regs.get_all_ids.
+      simpl.
       repeat split; try tauto.
       constructor; auto.
       constructor.
@@ -660,40 +551,6 @@ Section PikeVM_VT.
   Qed.
 
   (*** * Invariant: register state's leaves ids is a permutation of state's regs_ids *)
-
-  Definition leaf_ids_of (s: pike_vm_state_vt) : list nat :=
-    match s with
-    | PVS_vt _ _ _ _ _ _ r => Regs.get_all_ids (Regs.tree r)
-    | PVS_final_vt _ r => Regs.get_all_ids (Regs.tree r)
-    end.
-
-  Lemma perm_incl {A} :
-    forall (a b: list A),
-      Permutation a b ->
-      incl a b.
-  Proof.
-    unfold incl.
-    intros a b PERM.
-    dependent induction PERM; intros n H; simpl in *.
-    - tauto.
-    - destruct H; auto.
-    - destruct H as [H | [H | H]]; auto.
-    - auto.
-  Qed.
-
-  Lemma list_helper {A} : forall (l l' l'': list A) x,
-      incl (x :: l'') l ->
-      NoDup (x :: l'') ->
-      Permutation l (l' ++ l'') ->
-      In x l'.
-  Proof.
-    intros l l' l'' x INCL NODUP PERM.
-    assert (IN: In x l) by (apply INCL; simpl; tauto).
-    assert (IN': In x (l' ++ l'')) by (eapply Permutation_in; eauto).
-    apply in_app_or in IN'.
-    apply NoDup_cons_iff in NODUP.
-    tauto.
-  Qed.
 
   Lemma delete_threads_regs_removed :
     forall lr regs,
@@ -716,75 +573,17 @@ Section PikeVM_VT.
         2: apply Permutation_middle.
         rewrite app_comm_cons.
         apply Permutation_app_tail.
-        apply Regs.delete_ids'; simpl in *. 
+        apply Regs.delete_ids_perm; simpl in *.
         * eapply list_helper with (l:= Regs.get_all_ids (Regs.tree regs)).
           -- exact INCL.
           -- assumption.
           -- inversion NODUP. subst.
              apply IHlr; auto.
              apply incl_cons_inv in INCL; tauto.
-  Admitted.
-
-  (*Lemma delete_threads_regs_removed' :
-    forall lt regs,
-      Regs.is_valid_state regs ->
-      NoDup (map ri_of lt)  ->
-      incl (map ri_of lt) (Regs.get_all_ids (Regs.tree regs)) ->
-      let regs' := delete_thread_regs_from_regs_state lt regs in
-      Permutation (Regs.get_all_ids (Regs.tree regs))
-        ((Regs.get_all_ids (Regs.tree regs')) ++ (map ri_of lt)).
-  Proof.
-    induction lt; intros regs VALID NODUP INCL; simpl in *.
-    - rewrite app_nil_r.
-      apply Permutation_refl.
-    - destruct a as [[l ri] b].
-      simpl.
-      eapply perm_trans.
-      + inversion NODUP. subst.
-        apply IHlt; apply incl_cons_inv in INCL; try tauto.
-      + eapply perm_trans.
-        2: apply Permutation_middle.
-        rewrite app_comm_cons.
-        apply Permutation_app_tail.
-        apply Regs.delete_ids'; simpl in *.
-        * eapply list_helper with (l:= Regs.get_all_ids (Regs.tree regs)).
-          -- exact INCL.
-          -- assumption.
-          -- inversion NODUP. subst.
-             apply IHlt; auto.
-             apply incl_cons_inv in INCL; tauto.
-        * admit.
-        * admit.
-  Admitted.*)
-(*
-  Lemma perm_swap_around {A} : forall (x: A) l l',
-      Permutation (l ++ x :: l') (l' ++ x :: l).
-  Proof.
-    intros x l l'. Check app_cons.
-    transitivity (l ++ l' ++ [x]).
-    Search (Permutation (_ ++ _) _).
-    - apply Permutation_app_head.
-      rewrite app_cons.
-      apply Permutation_app_comm.
-    - transitivity ((l' ++ l) ++ [x]).
-      + rewrite app_assoc.
-        apply Permutation_app_tail.
-        apply Permutation_app_comm.
-      + rewrite <- app_assoc.
-        apply Permutation_app_head.
-        rewrite app_cons with (l:=l).
-        apply Permutation_app_comm.
-  Qed.*)
-
-  Lemma incl_app_comm {A} : forall (l l' l'': list A),
-      incl (l' ++ l'') l ->
-      incl (l'' ++ l') l.
-  Proof.
-    unfold incl.
-    intros l l' l'' H x Hin.
-    apply in_app_or in Hin.
-    destruct Hin as [Hin | Hin];
-      apply H; apply in_or_app; [right | left]; assumption.
+        * unfold delete_ris_from_regs_state.
+          apply fold_right_preserves; auto.
+          intros rs x Hv Hin.
+          apply Regs.delete_valid. auto.
   Qed.
 
   Lemma active_regs_leaves :
@@ -812,13 +611,13 @@ Section PikeVM_VT.
         * left.
           injection STEP as Hs Hr; subst.
           split; try reflexivity.
-          apply Regs.delete_ids'; tauto.
+          apply Regs.delete_ids_perm; auto.
       + destruct (anchor_satisfied rer a inp).
         * right. right. injection STEP as Hs Hr; subst. auto.
         * left.
           injection STEP as Hs Hr; subst.
           split; try reflexivity.
-          apply Regs.delete_ids'; tauto.
+          apply Regs.delete_ids_perm; auto.
       + right. right. injection STEP as Hs Hr; subst. auto.
       + right. left.
         injection STEP as Hs Hr; subst.
@@ -853,15 +652,15 @@ Section PikeVM_VT.
         * left.
           injection STEP as Hs Hr; subst.
           split; try reflexivity.
-          apply Regs.delete_ids'; tauto.
+          apply Regs.delete_ids_perm; auto.
       + left.
         injection STEP as Hs Hr; subst.
         split; try reflexivity.
-        apply Regs.delete_ids'; tauto.
+        apply Regs.delete_ids_perm; auto.
     - left.
       injection STEP as Hs Hr; subst.
       split; try reflexivity.
-      apply Regs.delete_ids'; tauto.
+      apply Regs.delete_ids_perm; auto.
   Qed.
   
   Lemma pike_vm_step_vt_threads_are_leaves :
@@ -956,6 +755,8 @@ Section PikeVM_VT.
 
   (*** * Equivalence invariant *)
 
+  (**** * Helpers *)
+
   Lemma seen_equiv : forall t t_vt seen r,
       thread_equiv t t_vt r ->
       seen_thread_vt seen t_vt = seen_thread seen t.
@@ -976,76 +777,100 @@ Section PikeVM_VT.
     reflexivity.
   Qed.
 
-  Lemma Forall2_and {A B} (f g : A -> B -> Prop) :
-  forall l l',
-    Forall2 f l l' ->
-    Forall2 g l l' ->
-    Forall2 (fun x y => f x y /\ g x y) l l'.
-  Proof.
-    intros l l' Hf Hg.
-    induction Hf.
-    - inversion Hg; constructor.
-    - inversion Hg; subst.
-      constructor.
-      + auto.
-      + auto.
-  Qed.
-
-  Lemma Forall2_notin_r :
-  forall A B C (x : C) (l : list A) (l' : list B) p (f: B -> C),
-    Forall2 (fun z y => p z y /\ f y <> x) l l' ->
-    ~ In x (map f l').
-  Proof.
-    intros A B C x l l' p f H.
-    induction H.
-    - simpl; tauto.
-    - simpl.
-      intros [Hx | Hin].
-      + subst. destruct H as [H H']. congruence.
-      + apply IHForall2; assumption.
-  Qed.
-
-  Lemma notin_r_Forall :
-    forall A B C (x : C) (l : list A) (l' : list B) (f: B -> C),
-      ~ In x (map f l') ->
-      length l = length l' ->
-      Forall2 (fun z y => f y <> x) l l'.
-  Proof.
-    induction l; intros l' f H Hl.
-    - simpl in *.
-      destruct l'; try constructor; simpl in *; congruence.
-    - simpl in *. destruct l'; simpl in *.
-      + lia.
-      + constructor.
-        tauto.
-        auto.
-  Qed.
-
-  Lemma threads_equiv_delete : forall l lvt regs ri,
+  Lemma threads_equiv_delsplins : forall l lvt regs regs' ri d,
       Regs.is_valid_state regs ->
       ~ In ri (map ri_of lvt) ->
+      incl (map ri_of lvt) (Regs.get_all_ids (Regs.tree regs)) ->
       threads_equiv l lvt regs ->
-      threads_equiv l lvt (Regs.delete ri regs).
+      (regs' = Regs.delete ri regs \/
+         (regs', Regs.max_id_in_tree (Regs.tree regs) + 1) = Regs.split ri regs \/
+         regs' = Regs.insert ri d regs) ->
+      threads_equiv l lvt regs'.
   Proof.
-    intros l lvt regs ri VALID IN EQUIV.
+    intros l lvt regs regs' ri d VALID IN INCL EQUIV REGS.
     unfold threads_equiv in *.
     assert (Forall2 (fun t tvt => thread_equiv t tvt regs /\ ri_of tvt <> ri) l lvt) as H.
     - apply Forall2_and; auto.
-      apply notin_r_Forall; auto.
+      apply notin_r_Forall2; auto.
       eapply Forall2_length; exact EQUIV.
     - induction H; subst; constructor.
       + inversion EQUIV; subst.
         inversion H4; subst.
         constructor.
         unfold gm_vt_equiv in *.
-        assert (Regs.get_compressed_data ri0 (Regs.delete ri regs) =
-                  Regs.get_compressed_data ri0 regs) as GC.
-        * apply Regs.delete_get_unchanged; auto.
+        destruct REGS as [REGS | [REGS | REGS]].
+        * rewrite REGS.
+          assert (Regs.get_compressed_data ri0 (Regs.delete ri regs) =
+                    Regs.get_compressed_data ri0 regs) as GC;
+            try (rewrite GC; assumption).
+          apply Regs.delete_get_unchanged; auto.
           simpl in IN. symmetry. tauto.
-        * rewrite GC. assumption.
+        * assert (Regs.get_compressed_data ri0 regs' = Regs.get_compressed_data ri0 regs) as GC;
+            try (rewrite GC; assumption).
+          destruct regs as [regst regsp].
+          destruct regs' as [regst' regsp'].
+          unfold Regs.split in *. injection REGS as REGS; subst.
+          apply Regs.split_get_unchanged; auto.
+          
+          specialize (Regs.greater_than_max_is_invalid_id regst (Regs.max_id_in_tree regst + 1)) as MAX.
+          intros C; subst.
+          apply MAX.
+          -- lia.
+          -- unfold Regs.is_valid_id.
+             apply INCL.
+             constructor; reflexivity.
+        * rewrite REGS.
+          assert (Regs.get_compressed_data ri0 (Regs.insert ri d regs) =
+                    Regs.get_compressed_data ri0 regs) as GC;
+            try (rewrite GC; assumption).
+          apply Regs.insert_get_unchanged; auto.
+          simpl in IN. symmetry. tauto.
       + apply IHForall2.
         * eapply Forall2_notin_r. exact H0.
+        * simpl in INCL. apply incl_cons_inv in INCL. tauto.
         * inversion EQUIV; auto.
+  Qed.
+
+  Lemma leaves_equiv_split : forall l lvt regs regs' ri,
+      Regs.is_valid_state regs ->
+      incl (ri_of_leaf lvt) (Regs.get_all_ids (Regs.tree regs)) ->
+      (regs', Regs.max_id_in_tree (Regs.tree regs) + 1) = Regs.split ri regs ->
+      leaves_equiv l lvt regs ->
+      leaves_equiv l lvt regs'.
+  Proof.
+    intros l lvt regs regs' ri VALID INCL REGS EQUIV.
+    inversion EQUIV; subst; constructor.
+    unfold gm_vt_equiv in *.
+    assert (Regs.get_compressed_data ri0 regs' = Regs.get_compressed_data ri0 regs) as GC.
+    - destruct regs as [regst regsp].
+      destruct regs' as [regst' regsp'].
+      unfold Regs.split in *. injection REGS as REGS; subst.
+      apply Regs.split_get_unchanged; auto.
+      
+      specialize (Regs.greater_than_max_is_invalid_id regst (Regs.max_id_in_tree regst + 1)) as MAX.
+      intros C; subst.
+      apply MAX.
+      + lia.
+      + unfold Regs.is_valid_id.
+        apply INCL.
+        constructor; reflexivity.
+    - rewrite GC. assumption.
+  Qed.
+
+  Lemma leaves_equiv_insert : forall l lvt regs ri d,
+      Regs.is_valid_state regs ->
+      ri_of_leaf lvt <> [ri] ->
+      leaves_equiv l lvt regs ->
+      leaves_equiv l lvt (Regs.insert ri d regs).
+  Proof.
+    intros l lvt regs ri d VALID IN EQUIV.
+    inversion EQUIV; subst; constructor.
+    unfold gm_vt_equiv in *.
+    assert (Regs.get_compressed_data ri0 (Regs.insert ri d regs) =
+              Regs.get_compressed_data ri0 regs) as GC.
+    - apply Regs.insert_get_unchanged; auto.
+      simpl in IN. congruence.
+    - rewrite GC. assumption.
   Qed.
 
   Lemma leaves_equiv_delete : forall l lvt regs ri,
@@ -1064,9 +889,48 @@ Section PikeVM_VT.
     - rewrite GC. assumption.
   Qed.
 
+  Lemma equiv_open :forall inp g gm r ri,
+      Regs.is_valid_state r ->
+      In ri (Regs.get_all_ids (Regs.tree r)) ->
+      gm_vt_equiv gm ri r ->
+      gm_vt_equiv (GroupMap.open (idx inp) g gm) ri
+        (Regs.insert ri (Incomplete [(gid_to_idx g, Valid (idx inp), Undefined)]) r).
+  Proof.
+    intros inp g gm r ri VALID IN EQUIV.
+    unfold gm_vt_equiv in *.
+    destruct r as [rt rp].
+    destruct (Regs.get_compressed_data ri (rt, rp)) eqn:GC.
+    - assert (GCI: Regs.get_compressed_data ri
+              (Regs.insert ri (Incomplete [(gid_to_idx g, Valid (idx inp), Undefined)]) (rt, rp)) =
+                Some (compress rp t0 (Incomplete [(gid_to_idx g, Valid (idx inp), Undefined)]))).
+      + apply Regs.insert_get_some; auto.
+        admit.
+      + rewrite GCI.
+        unfold gm_regs_vals, vt_regs_vals.
+        admit.
+    - assert (GCI: Regs.get_compressed_data ri
+              (Regs.insert ri (Incomplete [(gid_to_idx g, Valid (idx inp), Undefined)]) (rt, rp)) =
+                     Some (Incomplete [(gid_to_idx g, Valid (idx inp), Undefined)])).
+      + apply Regs.insert_get_none; auto.
+      + rewrite GCI.
+        unfold gm_regs_vals, vt_regs_vals.
+        unfold gid_to_idx in *.
+        intros gid.
+        destruct (gid =? g) eqn:G.
+        * apply Nat.eqb_eq in G. subst.
+          unfold get_at, get_first_such_that, has_id.
+          rewrite Nat.eqb_refl.
+          assert (H: (2 * g + 1 =? 2 * g) = false) by (apply Nat.eqb_neq; lia).
+          rewrite H.
+          admit.
+        * admit.
+  Admitted.
+
   Lemma epsilon_step_equiv_active :
     forall c inp t t_vt nextactive_vt r r' act act_vt blo blo_vt l l_vt,
       Regs.is_valid_state r ->
+      incl ([ri_of t_vt] ++ (map ri_of act_vt) ++ ri_of_leaf l_vt ++ (map ri_of blo_vt))
+        (Regs.get_all_ids (Regs.tree r)) ->
       threads_equiv act act_vt r ->
       ~ In (ri_of t_vt) (map ri_of act_vt) ->
       threads_equiv blo blo_vt r ->
@@ -1083,7 +947,8 @@ Section PikeVM_VT.
             leaves_equiv l l_vt r').
   Proof.
     intros c inp t t_vt nextactive_vt r r' act act_vt blo blo_vt l l_vt.
-    intros VALID EQACT INACT EQBLO INBLO EQLEA INLEA EQUIV STEP.
+    intros VALID INCL EQACT INACT EQBLO INBLO EQLEA INLEA EQUIV STEP.
+    repeat rewrite <- incl_app_equiv in INCL.
     inversion EQUIV; subst.
     unfold epsilon_step_vt, epsilon_step in *.
     destruct (get_pc c l0) eqn:PC.
@@ -1091,14 +956,14 @@ Section PikeVM_VT.
       + inversion STEP.
       + destruct (check_read rer c0 inp forward); inversion STEP.
         eexists; repeat split; try constructor.
-        1, 2: apply threads_equiv_delete; auto.
+        1, 2: eapply threads_equiv_delsplins; eauto; tauto.
         apply leaves_equiv_delete; auto.
       + destruct (anchor_satisfied rer a inp); inversion STEP; subst.
         * eexists; repeat split; try assumption.
           repeat constructor.
           assumption.
         * eexists; repeat split; try constructor.
-          1, 2: apply threads_equiv_delete; auto.
+          1, 2: eapply threads_equiv_delsplins; eauto; tauto.
           apply leaves_equiv_delete; auto.
       + inversion STEP; subst.
         eexists; repeat split; try assumption.
@@ -1107,15 +972,34 @@ Section PikeVM_VT.
       + destruct (Regs.split ri r) as [rs ri'] eqn:SPLIT.
         inversion STEP; subst.
         eexists; repeat split.
-        all: admit. (* split *)
+        2, 3: eapply threads_equiv_delsplins; eauto; try tauto;
+        (unfold Regs.split in *; simpl in *; right; left; injection SPLIT as R RI; congruence).
+        2: eapply leaves_equiv_split with (ri:= ri); eauto; try tauto;
+        (unfold Regs.split in *; simpl in *; injection SPLIT as R RI; subst; reflexivity).
+        
+        repeat constructor;
+          unfold gm_vt_equiv in *;
+          [ assert (GC: Regs.get_compressed_data ri r' = Regs.get_compressed_data ri r) |
+            assert (GC: Regs.get_compressed_data ri' r' = Regs.get_compressed_data ri r)].
+        1, 3: destruct r as [rt rp]; destruct r' as [rt' rp'];
+        unfold Regs.split in *; injection SPLIT as SPLIT; subst;
+        apply Regs.split_get_new_leaves; auto.
+        all: rewrite GC; assumption.
       + unfold open_thread, open_thread_vt in *.
         inversion STEP; subst.
         eexists; repeat split.
-        all: admit. (* insert *)
+        2, 3: eapply threads_equiv_delsplins; eauto; try tauto.
+        2: apply leaves_equiv_insert; auto.
+        repeat constructor; apply equiv_open; auto.
+        destruct INCL as [INCL _]. unfold incl in INCL; simpl in INCL.
+        apply INCL. tauto.
       + unfold close_thread, close_thread_vt in *.
         inversion STEP; subst.
         admit.
-      + admit.
+      + unfold reset_thread, reset_thread_vt in *.
+        inversion STEP; subst.
+        eexists; repeat split.
+        all: admit.
       + inversion STEP; subst.
         eexists; repeat split; try assumption.
         repeat constructor.
@@ -1123,15 +1007,15 @@ Section PikeVM_VT.
       + destruct b; inversion STEP; subst;
           eexists; repeat split; try assumption.
         1, 2: repeat constructor; assumption.
-        1, 2: apply threads_equiv_delete; auto.
+        1, 2: eapply threads_equiv_delsplins; eauto; tauto.
         apply leaves_equiv_delete; auto.
       + inversion STEP; subst.
         eexists; repeat split; try constructor.
-        1, 2: apply threads_equiv_delete; auto.
+        1, 2: eapply threads_equiv_delsplins; eauto; tauto.
         apply leaves_equiv_delete; auto.
     - inversion STEP; subst.
       eexists; repeat split; try constructor.
-      1, 2: apply threads_equiv_delete; auto.
+      1, 2: eapply threads_equiv_delsplins; eauto; tauto.
       apply leaves_equiv_delete; auto.
   Admitted.
 
@@ -1185,15 +1069,6 @@ Section PikeVM_VT.
     - injection H as H1 H2. inversion H1.
   Qed.
 
-  Lemma in_not_in_neq {A}: forall (x y: A) l,
-      In x l ->
-      ~ In y l ->
-      x <> y.
-  Proof.
-    intros x y l Hx Hy Heq.
-    apply Hy. congruence.
-  Qed.
-
   Lemma threads_equ_del': forall lri regs lt ltvt,
       Forall2 (fun t tvt => thread_equiv t tvt regs /\
                               Regs.is_valid_state regs /\ ~ In (ri_of tvt) lri) lt ltvt ->
@@ -1220,39 +1095,6 @@ Section PikeVM_VT.
           eapply in_not_in_neq; eauto.
         * rewrite GC. assumption.
       + apply Regs.delete_valid. assumption.
-  Qed.
-
-  Lemma Forall2_and {A B} (f g : A -> B -> Prop) :
-  forall l l',
-    Forall2 f l l' ->
-    Forall2 g l l' ->
-    Forall2 (fun x y => f x y /\ g x y) l l'.
-  Proof.
-    intros l l' Hf Hg.
-    induction Hf.
-    - inversion Hg; constructor.
-    - inversion Hg; subst.
-      constructor.
-      + auto.
-      + auto.
-  Qed.
-
-  Lemma Forall2_true_pred {A B} :
-    forall (l : list A) (l' : list B) p,
-      length l = length l' ->
-      p ->
-      Forall2 (fun x y => p) l l'.
-  Proof.
-    induction l as [|x l IH]; intros l' p Hlen Hp.
-    - destruct l'.
-      + constructor.
-      + simpl in *. lia.
-    - destruct l'; simpl in Hlen.
-      + congruence.
-      + inversion Hlen.
-        constructor.
-        * assumption.
-        * apply IH; [lia | assumption].
   Qed.
     
   Lemma threads_equ_del: forall lri regs lt ltvt,
@@ -1318,49 +1160,7 @@ Section PikeVM_VT.
       assumption.
   Qed.
 
-  Lemma perm_nd_in {A} : forall (l a b c d : list A),
-      Permutation (a ++ c) l ->
-      incl b a ->
-      incl d c ->
-      NoDup l ->
-      (forall x, In x b -> ~ In x d).
-  Proof.
-    intros l a b c d PERM IAB ICD ND.
-    intros x Hb Hd.
-    apply Permutation_sym in PERM.
-    apply Permutation_NoDup in PERM; try assumption.
-    unfold incl in *.
-    apply IAB in Hb. apply ICD in Hd.
-    eapply ListHelpers.NoDup_in_app; eauto.
-  Qed.
-
-  Lemma NoDup_app_not_incl_or_nil {A} :
-  forall (a b : list A),
-    NoDup (a ++ b) ->
-    ~ incl a b \/ a = [].
-  Proof.
-    intros a b Hnd.
-    destruct a as [|x a].
-    - right; reflexivity.
-    - left.
-      intro Hincl.
-      assert (Hinb : In x b) by (apply Hincl; left; reflexivity).
-      inversion Hnd; subst.
-      apply H1.
-      apply in_or_app.
-      tauto.
-  Qed.
-
-  Lemma nodup3 {A}: forall (a b c: list A),
-      NoDup (a ++ b ++ c) ->
-      NoDup (a ++ c ++ b).
-  Proof.
-     intros a b c Hnd.
-     apply (Permutation_NoDup (l := a ++ b ++ c)).
-     - apply Permutation_app_head.
-       apply Permutation_app_comm.
-     - auto.
-  Qed.
+  (**** * Invariant statement *)
 
   Lemma pike_vm_step_vt_equiv :
     forall c s s_vt s' s_vt',
@@ -1429,18 +1229,19 @@ Section PikeVM_VT.
       inversion EQUIV_ACT. subst.
       specialize (seen_equiv _ _ seen regs0 H3) as Hse.
       specialize (add_equiv_threads_to_seen _ _ seen _ H3) as Hadd.
+      specialize (perm_incl _ _ PERM) as INCL.
       apply Permutation_sym, Permutation_NoDup in PERM; try tauto. simpl in PERM.
       inversion PERM; subst.
       repeat rewrite in_app_iff in H2.
       assert (~ In (ri_of t0) (map ri_of active)) as Hinact by tauto.
           (*(intros C; eapply in_map with (f:= ri_of) in C; tauto).*)
-      assert (~ In t0 blocked) as Hinblo by (intros C; eapply in_map with (f:= ri_of) in C; tauto).
+      assert (~ In (ri_of t0) (map ri_of blocked)) as Hinblo by tauto.
       assert (ri_of_leaf best <> [ri_of t0]) as Hinbest
           by (destruct best; try destruct l0; simpl in *; try congruence;
               assert (r <> ri_of t0) as K; [tauto | congruence]).
       specialize (epsilon_step_equiv_active _ _ _ _ _ _ _
                     l active blocked0 blocked best0 best
-                    H4 Hinact EQUIV_BLO Hinblo EQUIV_LEA Hinbest H3 STEP0) as STEP1.
+                    VALID_REGS INCL H4 Hinact EQUIV_BLO Hinblo EQUIV_LEA Hinbest H3 STEP0) as STEP1.
       destruct STEP1 as [na [STEP1 Heq]].
       inversion STEP; subst; try (rewrite H12 in *; congruence); try congruence.
       rewrite Hadd.
