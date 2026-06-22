@@ -976,12 +976,101 @@ Section PikeVM_VT.
     reflexivity.
   Qed.
 
+  Lemma Forall2_and {A B} (f g : A -> B -> Prop) :
+  forall l l',
+    Forall2 f l l' ->
+    Forall2 g l l' ->
+    Forall2 (fun x y => f x y /\ g x y) l l'.
+  Proof.
+    intros l l' Hf Hg.
+    induction Hf.
+    - inversion Hg; constructor.
+    - inversion Hg; subst.
+      constructor.
+      + auto.
+      + auto.
+  Qed.
+
+  Lemma Forall2_notin_r :
+  forall A B C (x : C) (l : list A) (l' : list B) p (f: B -> C),
+    Forall2 (fun z y => p z y /\ f y <> x) l l' ->
+    ~ In x (map f l').
+  Proof.
+    intros A B C x l l' p f H.
+    induction H.
+    - simpl; tauto.
+    - simpl.
+      intros [Hx | Hin].
+      + subst. destruct H as [H H']. congruence.
+      + apply IHForall2; assumption.
+  Qed.
+
+  Lemma notin_r_Forall :
+    forall A B C (x : C) (l : list A) (l' : list B) (f: B -> C),
+      ~ In x (map f l') ->
+      length l = length l' ->
+      Forall2 (fun z y => f y <> x) l l'.
+  Proof.
+    induction l; intros l' f H Hl.
+    - simpl in *.
+      destruct l'; try constructor; simpl in *; congruence.
+    - simpl in *. destruct l'; simpl in *.
+      + lia.
+      + constructor.
+        tauto.
+        auto.
+  Qed.
+
+  Lemma threads_equiv_delete : forall l lvt regs ri,
+      Regs.is_valid_state regs ->
+      ~ In ri (map ri_of lvt) ->
+      threads_equiv l lvt regs ->
+      threads_equiv l lvt (Regs.delete ri regs).
+  Proof.
+    intros l lvt regs ri VALID IN EQUIV.
+    unfold threads_equiv in *.
+    assert (Forall2 (fun t tvt => thread_equiv t tvt regs /\ ri_of tvt <> ri) l lvt) as H.
+    - apply Forall2_and; auto.
+      apply notin_r_Forall; auto.
+      eapply Forall2_length; exact EQUIV.
+    - induction H; subst; constructor.
+      + inversion EQUIV; subst.
+        inversion H4; subst.
+        constructor.
+        unfold gm_vt_equiv in *.
+        assert (Regs.get_compressed_data ri0 (Regs.delete ri regs) =
+                  Regs.get_compressed_data ri0 regs) as GC.
+        * apply Regs.delete_get_unchanged; auto.
+          simpl in IN. symmetry. tauto.
+        * rewrite GC. assumption.
+      + apply IHForall2.
+        * eapply Forall2_notin_r. exact H0.
+        * inversion EQUIV; auto.
+  Qed.
+
+  Lemma leaves_equiv_delete : forall l lvt regs ri,
+      Regs.is_valid_state regs ->
+      ri_of_leaf lvt <> [ri] ->
+      leaves_equiv l lvt regs ->
+      leaves_equiv l lvt (Regs.delete ri regs).
+  Proof.
+    intros l lvt regs ri VALID IN EQUIV.
+    inversion EQUIV; subst; constructor.
+    unfold gm_vt_equiv in *.
+    assert (Regs.get_compressed_data ri0 (Regs.delete ri regs) =
+              Regs.get_compressed_data ri0 regs) as GC.
+    - apply Regs.delete_get_unchanged; auto.
+      simpl in IN. congruence.
+    - rewrite GC. assumption.
+  Qed.
+
   Lemma epsilon_step_equiv_active :
     forall c inp t t_vt nextactive_vt r r' act act_vt blo blo_vt l l_vt,
+      Regs.is_valid_state r ->
       threads_equiv act act_vt r ->
-      ~ In t_vt act_vt ->
+      ~ In (ri_of t_vt) (map ri_of act_vt) ->
       threads_equiv blo blo_vt r ->
-      ~ In t_vt blo_vt ->
+      ~ In (ri_of t_vt) (map ri_of blo_vt) ->
       leaves_equiv l l_vt r ->
       ri_of_leaf l_vt <> [ri_of t_vt] ->
       thread_equiv t t_vt r ->
@@ -993,58 +1082,57 @@ Section PikeVM_VT.
             threads_equiv blo blo_vt r' /\
             leaves_equiv l l_vt r').
   Proof.
-    (*intros c inp t t_vt nextactive_vt r r' Heq H.
-    inversion Heq. subst.
+    intros c inp t t_vt nextactive_vt r r' act act_vt blo blo_vt l l_vt.
+    intros VALID EQACT INACT EQBLO INBLO EQLEA INLEA EQUIV STEP.
+    inversion EQUIV; subst.
     unfold epsilon_step_vt, epsilon_step in *.
-    destruct (get_pc c l) eqn:BC.
-    - destruct b0 eqn:B;
-        try (injection H as H1 H2; inversion H1); subst.
-      + destruct (check_read rer c0 inp forward); injection H as H1 H2; inversion H1.
-        subst.
-        exists [].
-        split; [reflexivity | constructor].
-      + destruct (anchor_satisfied rer a inp); injection H as H1 H2; inversion H1; subst.
-        * admit.
-        * exists [].
-          split; [reflexivity | constructor].
-      + exists ([upd_label (l, gm, b) l0]).
-        split; try reflexivity.
-        repeat constructor.
-        assumption.
-      + exists ([upd_label (l, gm, b) l0; upd_label (l, gm, b) l0]).
-        split; try reflexivity.
-        repeat constructor.
-        all: admit.
-      + exists ([open_thread (l, gm, b) g (idx inp)]).
-        split; try reflexivity.
-        repeat constructor.
-        admit.
-      + exists ([close_thread (l, gm, b) g (idx inp)]).
-        split; try reflexivity.
-        repeat constructor.
-        admit.
-      + exists ([reset_thread (l, gm, b) l0]).
-        split; try reflexivity.
-        repeat constructor.
-        admit.
-      + exists ([begin_thread (l, gm, b)]).
-        split; try reflexivity.
-        repeat constructor.
-        assumption.
-      + destruct b; injection H as H1 H2; inversion H1; subst.
-        * exists ([upd_label (l, gm, CanExit) l0]).
-          split; try reflexivity.
+    destruct (get_pc c l0) eqn:PC.
+    - destruct b0 eqn:B.
+      + inversion STEP.
+      + destruct (check_read rer c0 inp forward); inversion STEP.
+        eexists; repeat split; try constructor.
+        1, 2: apply threads_equiv_delete; auto.
+        apply leaves_equiv_delete; auto.
+      + destruct (anchor_satisfied rer a inp); inversion STEP; subst.
+        * eexists; repeat split; try assumption.
           repeat constructor.
           assumption.
-        * exists [].
-          split; [reflexivity | constructor].
-      + exists [].
-        split; [reflexivity | constructor].
-    - injection H as H1 H2. inversion H1. subst.
-      exists [].
-      split.
-      + reflexivity.
-      + constructor.*)
+        * eexists; repeat split; try constructor.
+          1, 2: apply threads_equiv_delete; auto.
+          apply leaves_equiv_delete; auto.
+      + inversion STEP; subst.
+        eexists; repeat split; try assumption.
+        repeat constructor.
+        assumption.
+      + destruct (Regs.split ri r) as [rs ri'] eqn:SPLIT.
+        inversion STEP; subst.
+        eexists; repeat split.
+        all: admit. (* split *)
+      + unfold open_thread, open_thread_vt in *.
+        inversion STEP; subst.
+        eexists; repeat split.
+        all: admit. (* insert *)
+      + unfold close_thread, close_thread_vt in *.
+        inversion STEP; subst.
+        admit.
+      + admit.
+      + inversion STEP; subst.
+        eexists; repeat split; try assumption.
+        repeat constructor.
+        assumption.
+      + destruct b; inversion STEP; subst;
+          eexists; repeat split; try assumption.
+        1, 2: repeat constructor; assumption.
+        1, 2: apply threads_equiv_delete; auto.
+        apply leaves_equiv_delete; auto.
+      + inversion STEP; subst.
+        eexists; repeat split; try constructor.
+        1, 2: apply threads_equiv_delete; auto.
+        apply leaves_equiv_delete; auto.
+    - inversion STEP; subst.
+      eexists; repeat split; try constructor.
+      1, 2: apply threads_equiv_delete; auto.
+      apply leaves_equiv_delete; auto.
   Admitted.
 
   Lemma epsilon_step_equiv_match :
@@ -1344,7 +1432,8 @@ Section PikeVM_VT.
       apply Permutation_sym, Permutation_NoDup in PERM; try tauto. simpl in PERM.
       inversion PERM; subst.
       repeat rewrite in_app_iff in H2.
-      assert (~ In t0 active) as Hinact by (intros C; eapply in_map with (f:= ri_of) in C; tauto).
+      assert (~ In (ri_of t0) (map ri_of active)) as Hinact by tauto.
+          (*(intros C; eapply in_map with (f:= ri_of) in C; tauto).*)
       assert (~ In t0 blocked) as Hinblo by (intros C; eapply in_map with (f:= ri_of) in C; tauto).
       assert (ri_of_leaf best <> [ri_of t0]) as Hinbest
           by (destruct best; try destruct l0; simpl in *; try congruence;
