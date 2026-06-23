@@ -72,10 +72,10 @@ Section NoPrioSemantics.
     forall dir inp a
       (ANCHOR: anchor_satisfied rer a inp = true),
       noprio dir inp (Anchor a) inp.
-  
+
   (* LATER: there will be an issue if we want to add negative lookarounds: strict positivity *)
   (* We might want to declare an oracle version of this, since this reversal is used in engines when we already know about the values of deeper lookarounds. *)
-    
+
   (** * NoPrio Tree Equivalence  *)
 
   Lemma two_app:
@@ -129,10 +129,10 @@ Section NoPrioSemantics.
   Theorem noprio_is_leaf:
     forall dir r inp gm t leafinp
       (TREE: is_tree rer [Areg r] inp gm dir t),
-      noprio dir inp r leafinp -> 
+      noprio dir inp r leafinp ->
       exists leafgm, In (leafinp, leafgm) (tree_leaves t gm inp dir).
   Proof.
-    intros dir r inp gm t leafinp TREE NP. 
+    intros dir r inp gm t leafinp TREE NP.
     generalize dependent t. generalize dependent gm.
     induction NP; intros.
     - inversion TREE; subst. inversion ISTREE; subst.
@@ -186,20 +186,20 @@ Section NoPrioSemantics.
         - inversion TREECONT; subst. simpl. auto.
         - apply CHECKFAIL in PROGRESS. inversion PROGRESS. (* we know progress happened *)
       }
-      specialize (is_tree_productivity rer [Areg (Quantified greedy 0 delta r)] inp1 gm1 dir) as [t3 HT3].      
+      specialize (is_tree_productivity rer [Areg (Quantified greedy 0 delta r)] inp1 gm1 dir) as [t3 HT3].
       assert (IN3: exists gm2, In (inp2, gm2) (tree_leaves t3 gm1 inp1 dir)).
       { apply IHNP2. auto. } destruct IN3 as [gm2 IN3].
       rewrite three_app in ISTREE1.
       destruct greedy; simpl.
       + eexists. apply in_or_app. left.
-        eapply (in_leaves_app3 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ISTREE1 HT1 HT2 HT3 IN1 IN2 IN3). 
+        eapply (in_leaves_app3 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ISTREE1 HT1 HT2 HT3 IN1 IN2 IN3).
       + eexists. apply in_or_app. right.
-        eapply (in_leaves_app3 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ISTREE1 HT1 HT2 HT3 IN1 IN2 IN3). 
+        eapply (in_leaves_app3 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ISTREE1 HT1 HT2 HT3 IN1 IN2 IN3).
     - inversion TREE; subst.
       { destruct delta; inversion H1. }
       inversion SKIP. subst.
       destruct greedy; simpl; eauto.
-      eexists. apply in_or_app; simpl; eauto.      
+      eexists. apply in_or_app; simpl; eauto.
     - inversion TREE; subst.
       rewrite two_app in TREECONT.
       specialize (is_tree_productivity rer [Areg r] inp (GroupMap.open (idx inp) gid gm) dir) as [t1 HT1].
@@ -251,12 +251,12 @@ Section NoPrioSemantics.
       try solve [inversion LEAF]; pike_subset.
     - destruct LEAF as [LEAF|LEAF]; inversion LEAF; subst. constructor.
     - repeat (econstructor; eauto).
-    - repeat (econstructor; eauto). 
+    - repeat (econstructor; eauto).
     - repeat (econstructor; eauto).
     - econstructor; eauto.
       2: { apply read_char_success_advance in READ as ADV.
            unfold advance_input' in LEAF. rewrite ADV in LEAF. eauto. }
-      repeat (econstructor; eauto). 
+      repeat (econstructor; eauto).
     - apply in_app_or in LEAF as [LEAF|LEAF].
       + assert (noprio_list dir inp (Areg r1::cont) inp1).
         { apply IHTREE1; auto. pike_subset. }
@@ -317,7 +317,7 @@ Section NoPrioSemantics.
     forall dir r inp gm t leafinp
       (SUBSET: pike_regex r)
       (TREE: is_tree rer [Areg r] inp gm dir t),
-      noprio dir inp r leafinp <-> 
+      noprio dir inp r leafinp <->
         exists leafgm, In (leafinp, leafgm) (tree_leaves t gm inp dir).
   Proof.
     intros dir r inp gm t leafinp SUBSET TREE. split.
@@ -350,7 +350,7 @@ Section NoPrioSemantics.
      - to deal with this mix of out-of-orders and checked-for-progress-or-not iterations, we present an alternative characterization of quantifiers: being able to match r{min,delta} is equivalent to saying that there is a chain of n iterations where n in [min,min+delta].
      - all of these iterations are allowed to be empty: even if that could be illegal, it can then be skipped when reconstructing the quantifier semantics
      - this characterization makes it easier to prove reversal: we go from quantifier semantics to a numbered sequence, we add an extra iteration on either side (giving us a longer numbered sequence), and then we come back to quantifier semantics. *)
-  
+
   (* Numbered sequence characterization *)
   (* n iterations of a regex *)
   Inductive iters : nat -> Direction -> input -> regex -> input -> Prop :=
@@ -379,7 +379,7 @@ Section NoPrioSemantics.
     intros r dir greedy inp0 inp1 min delta QUANT.
     remember (Quantified greedy min delta r) as quant.
     generalize dependent min. generalize dependent delta.
-    induction QUANT; intros; 
+    induction QUANT; intros;
       inversion Heqquant; subst.
     - clear IHQUANT1.
       specialize (IHQUANT2 delta0 min (eq_refl _)) as [n [GE [LE IT]]].
@@ -442,8 +442,8 @@ Section NoPrioSemantics.
     intros. induction ITERS; repeat (econstructor; eauto).
   Qed.
 
-      
-  
+
+
   (** * Reversal Property  *)
 
   Definition reverse (d:Direction): Direction :=
@@ -466,7 +466,7 @@ Section NoPrioSemantics.
       destruct (char_match) eqn:CM; inversion H. subst.
       rewrite CM. auto.
   Qed.
-  
+
   Theorem noprio_reversal:
     forall dir r inp1 inp2
       (NP1: noprio dir inp1 r inp2),
@@ -477,7 +477,7 @@ Section NoPrioSemantics.
     - repeat (econstructor; eauto).
     - apply read_char_reverse in READ as REV.
       destruct dir; simpl; econstructor; eauto.
-    - repeat (econstructor; eauto). 
+    - repeat (econstructor; eauto).
     - solve[repeat (econstructor; eauto)].
     - repeat (econstructor; eauto).
     - repeat (econstructor; eauto).
@@ -498,7 +498,7 @@ Section NoPrioSemantics.
   (** * Leaf Reversal Theorem  *)
 
   (* We come back to is_tree semantics to prove the reversal property *)
-  
+
   Lemma leaf_reversal:
     forall r dir inp1 inp2 gm2 t1 t2
       (SUBSET: pike_regex r)
@@ -515,5 +515,5 @@ Section NoPrioSemantics.
     { eapply noprio_eq_is_leaf; eauto. }
     eauto.
   Qed.
-    
+
 End NoPrioSemantics.
