@@ -40,6 +40,22 @@ Definition determ {A B: Type} (f: A -> B -> Prop) :=
 
 (* Building up to flatmap_leaves_equiv_l *)
 
+Lemma In_FlatMap {A B}:
+  forall (l: list A) (f: A -> list B -> Prop) (fl:list B) (b:B),
+    determ f ->
+    FlatMap l f fl ->
+    In b fl ->
+    exists a fa, In a l /\ f a fa /\ In b fa.
+Proof.
+  intros l f fl b DET FM IN.
+  induction FM.
+  - inversion IN.
+  - apply in_app_or in IN as [IN|IN].
+    + exists x. exists ly. split; auto. constructor. auto.
+    + specialize (IHFM DET IN) as [a [fa [INA [FA INB]]]].
+      exists a. exists fa. split; auto. simpl. right. auto.
+Qed.
+
 Lemma FlatMap_in {A B}:
   forall (l: list A) (f: A -> list B -> Prop) fl x fx,
     (* For a deterministic f, *)
