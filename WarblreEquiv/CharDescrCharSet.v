@@ -46,27 +46,6 @@ Section CharDescrCharSet.
         rewrite CharSet.exist_iff. exists c0. auto.
   Qed.
 
-  (* Correctness of simplifying the union with empty *)
-  Lemma equiv_cd_union_emp:
-    forall cd1 cd2 s1 s2,
-      equiv_cd_charset cd1 s1 -> equiv_cd_charset cd2 s2 ->
-      equiv_cd_charset (union_emp_r cd1 cd2) (CharSet.union s1 s2).
-  Proof.
-    intros cd1 cd2 s1 s2 EQ1 EQ2. destruct cd2; simpl; try apply equiv_cd_union; auto.
-    unfold equiv_cd_charset in *. intros c. specialize (EQ1 c). rewrite EQ1.
-    rewrite !CharSet.exist_canonicalized_equiv in *.
-    unfold char_match, char_match' in EQ2.
-    symmetry. destruct (CharSet.exist s1) eqn:EX.
-    - rewrite CharSet.exist_iff in *. destruct EX as [c1 [CONT CAN]]. exists c1. split; auto.
-      rewrite CharSet.union_contains. setoid_rewrite Bool.orb_true_iff. left. auto.
-    - symmetry in EQ2. rewrite CharSet.exist_false_iff in *. intros c1. specialize (EX c1) as [CONT|CAN].
-      + left. rewrite CharSet.union_contains. setoid_rewrite Bool.orb_false_iff. split; auto.
-        specialize (EQ2 c1). rewrite CharSet.exist_canonicalized_equiv in EQ2.
-        rewrite CharSet.exist_false_iff in EQ2. specialize (EQ2 c1). destruct EQ2; auto.
-        rewrite EqDec.reflb in H. inversion H.
-      + right; auto.
-  Qed.
-
   (* Lemmas for various character descriptors *)
   Lemma equiv_cd_empty:
     equiv_cd_charset CdEmpty CharSet.empty.
@@ -250,15 +229,51 @@ Section CharDescrCharSet.
              equiv_cd_charset cd a.
   Proof.
     intros crs cd Hequiv.
-    induction Hequiv as [|ca cacd t tcd Hequiv' Hequiv IH | l h cl ch t tcd Hequivl Hequivh Hl_le_h Hequiv IH].
+    induction Hequiv as [|ca cacd Hequiv |ca cacd t tcd Hequiv' Hequiv IH | l h cl ch Hequivl Hequivh Hl_le_h |l h cl ch t tcd Hequivl Hequivh Hl_le_h Hequiv IH].
     - simpl. unfold Coercions.Coercions.wrap_CharSet.
       eexists. split. + reflexivity. + apply equiv_cd_empty.
+    - simpl. pose proof equiv_cd_ClassAtom ca cacd Hequiv as [A [HeqA Hequivatom]].
+      rewrite HeqA. simpl.
+      unfold Coercions.Coercions.wrap_CharSet. eexists. split; try reflexivity.
+      unfold equiv_cd_charset. intros c. rewrite CharSet.exist_canonicalized_equiv.
+      symmetry. destruct char_match eqn:MATCH.
+      + rewrite Hequivatom in MATCH. rewrite CharSet.exist_canonicalized_equiv in MATCH.
+        rewrite CharSet.exist_iff in *.
+        destruct MATCH as [c0 [CONT CAN]]. exists c0.
+        split; auto.
+        rewrite CharSet.union_contains. rewrite Bool.orb_true_iff. left. auto.
+      + rewrite Hequivatom in MATCH. rewrite CharSet.exist_canonicalized_equiv in MATCH.
+        rewrite CharSet.exist_false_iff in *.
+        intros c0. specialize (MATCH c0) as [CONT|CAN].
+        * left. rewrite CharSet.union_contains. rewrite Bool.orb_false_iff. split; auto.
+          apply CharSet.empty_contains.
+        * right; auto.
     - simpl. pose proof equiv_cd_ClassAtom ca cacd Hequiv' as [A [HeqA Hequivatom]].
       rewrite HeqA. simpl.
       destruct IH as [B [HeqB IH]]. rewrite HeqB. simpl.
       unfold Coercions.Coercions.wrap_CharSet. eexists. split.
       + reflexivity.
-      + now apply equiv_cd_union_emp.
+      + now apply equiv_cd_union.
+    - simpl.
+      rewrite equiv_ClassAtom_single_charset with (c := cl) by auto.
+      rewrite equiv_ClassAtom_single_charset with (c := ch) by auto.
+      simpl.
+      unfold Semantics.characterRange. setoid_rewrite CharSet.singleton_size. simpl.
+      do 2 rewrite CharSet.singleton_unique. simpl.
+      pose proof Hl_le_h as Hl_le_h'. rewrite <- PeanoNat.Nat.leb_le in Hl_le_h'. rewrite Hl_le_h'. simpl.
+      unfold Coercions.Coercions.wrap_CharSet. eexists. split; try reflexivity.
+      unfold equiv_cd_charset. intros c. rewrite CharSet.exist_canonicalized_equiv.
+      symmetry. destruct char_match eqn:MATCH.
+      + unfold char_match, char_match' in MATCH.
+        rewrite CharSet.exist_canonicalized_equiv in MATCH.
+        rewrite CharSet.exist_iff in *. destruct MATCH as [c0 [CONT CAN]]. exists c0.
+        split; auto. rewrite CharSet.union_contains. rewrite Bool.orb_true_iff. left. auto.
+      + unfold char_match, char_match' in MATCH.
+        rewrite CharSet.exist_canonicalized_equiv in MATCH.
+        rewrite CharSet.exist_false_iff in *. intros c0. specialize (MATCH c0) as [CONT|CAN].
+        * left. rewrite CharSet.union_contains. rewrite Bool.orb_false_iff. split; auto.
+          apply CharSet.empty_contains.
+        * right; auto.
     - simpl.
       rewrite equiv_ClassAtom_single_charset with (c := cl) by auto.
       rewrite equiv_ClassAtom_single_charset with (c := ch) by auto.
@@ -269,6 +284,6 @@ Section CharDescrCharSet.
       pose proof Hl_le_h as Hl_le_h'. rewrite <- PeanoNat.Nat.leb_le in Hl_le_h'. rewrite Hl_le_h'. simpl.
       unfold Coercions.Coercions.wrap_CharSet. eexists. split.
       + reflexivity.
-      + apply equiv_cd_union_emp; auto. do 2 rewrite Character.numeric_pseudo_bij. apply equiv_cd_range. assumption.
+      + apply equiv_cd_union; auto. do 2 rewrite Character.numeric_pseudo_bij. apply equiv_cd_range. assumption.
   Qed.
 End CharDescrCharSet.

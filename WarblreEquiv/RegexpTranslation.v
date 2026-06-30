@@ -150,23 +150,21 @@ Section RegexpTranslation.
   | Equiv_SourceCharacter: forall c: Parameters.Character, equiv_ClassAtom (Patterns.SourceCharacter c) (CdSingle c)
   | Equiv_ClassEsc: forall esc cd, equiv_ClassEscape esc cd -> equiv_ClassAtom (Patterns.ClassEsc esc) cd.
 
-  (* If we naively translate a list of Patterns.ClassRanges into a CdUnion, we end up with a CdEmpty at the end,
-     corresponding to the EmptyCR (= nil) that terminates the list. We remove the CdEmpty from the generated Union *)
-  Definition union_emp_r (cd1 cd2: char_descr) :=
-    match cd2 with
-    | CdEmpty => cd1
-    | _ => CdUnion cd1 cd2
-    end.
-
   Inductive equiv_ClassRanges: Patterns.ClassRanges -> char_descr -> Prop :=
   | Equiv_EmptyCR: equiv_ClassRanges Patterns.EmptyCR CdEmpty
-  | Equiv_ClassAtomCR: forall ca cacd t tcd, equiv_ClassAtom ca cacd -> equiv_ClassRanges t tcd -> equiv_ClassRanges (Patterns.ClassAtomCR ca t) (union_emp_r cacd tcd)
+  | Equiv_ClassAtomCR_empty: forall ca cacd , equiv_ClassAtom ca cacd -> equiv_ClassRanges (Patterns.ClassAtomCR ca Patterns.EmptyCR) cacd
+  | Equiv_ClassAtomCR: forall ca cacd t tcd, equiv_ClassAtom ca cacd -> equiv_ClassRanges t tcd -> equiv_ClassRanges (Patterns.ClassAtomCR ca t) (CdUnion cacd tcd)
+  | Equiv_RangeCR_empty:
+    forall l h cl ch,
+      equiv_ClassAtom l (CdSingle cl) -> equiv_ClassAtom h (CdSingle ch) ->
+      Character.numeric_value cl <= Character.numeric_value ch ->
+      equiv_ClassRanges (Patterns.RangeCR l h Patterns.EmptyCR) (CdRange cl ch)
   | Equiv_RangeCR:
     forall l h cl ch t tcd,
       equiv_ClassAtom l (CdSingle cl) -> equiv_ClassAtom h (CdSingle ch) ->
       Character.numeric_value cl <= Character.numeric_value ch ->
       equiv_ClassRanges t tcd ->
-      equiv_ClassRanges (Patterns.RangeCR l h t) (union_emp_r (CdRange cl ch) tcd).
+      equiv_ClassRanges (Patterns.RangeCR l h t) (CdUnion (CdRange cl ch) tcd).
 
   Inductive equiv_CharClass: Patterns.CharClass -> char_descr -> Prop :=
   | Equiv_NoninvertedCC: forall crs cd, equiv_ClassRanges crs cd -> equiv_CharClass (Patterns.NoninvertedCC crs) cd
@@ -525,16 +523,25 @@ Section RegexpTranslation.
     Fixpoint classRanges_to_linden (cr: Patterns.ClassRanges): Result char_descr wl_transl_error :=
       match cr with
       | Patterns.EmptyCR => Success CdEmpty
+      | Patterns.ClassAtomCR ca Patterns.EmptyCR =>
+          Success (classAtom_to_linden ca)
       | Patterns.ClassAtomCR ca t =>
           let cda := classAtom_to_linden ca in
           let! cdt =<< classRanges_to_linden t in
-          Success (union_emp_r cda cdt)
+          Success (CdUnion cda cdt)
+      | Patterns.RangeCR l h Patterns.EmptyCR =>
+          let! cl =<< classAtom_singleCharacter_numValue l in
+          let! ch =<< classAtom_singleCharacter_numValue h in
+          if cl <=? ch then
+            Success (CdRange (Character.from_numeric_value cl) (Character.from_numeric_value ch))
+          else
+            Error WlMalformed
       | Patterns.RangeCR l h t =>
           let! cl =<< classAtom_singleCharacter_numValue l in
           let! ch =<< classAtom_singleCharacter_numValue h in
           let! cdt =<< classRanges_to_linden t in
           if cl <=? ch then
-            Success (union_emp_r (CdRange (Character.from_numeric_value cl) (Character.from_numeric_value ch)) cdt)
+            Success (CdUnion (CdRange (Character.from_numeric_value cl) (Character.from_numeric_value ch)) cdt)
           else
             Error WlMalformed
       end.
@@ -751,24 +758,32 @@ Section RegexpTranslation.
     Proof.
       intro crs. induction crs.
       - simpl. intros cd H. injection H as <-. constructor.
-      - simpl. intro cd.
-        destruct classRanges_to_linden as [cdt|] eqn:Hcdt; try discriminate; simpl.
-        intro H. injection H as <-. unfold union_emp_r.
-        destruct cdt eqn:CDT.
-        all: try rewrite <- CDT.
-        all: try replace (CdUnion (classAtom_to_linden ca) cdt) with (union_emp_r (classAtom_to_linden ca) cdt) by (subst; auto).
-        all: try constructor; subst; auto; try apply classAtom_to_linden_sound; auto.
-        replace (classAtom_to_linden ca) with (union_emp_r (classAtom_to_linden ca) CdEmpty) by auto.
-        constructor; auto. apply classAtom_to_linden_sound. auto.
-      - simpl. intro cd.
-        destruct classAtom_singleCharacter_numValue as [cl|] eqn:Hcl; try discriminate; simpl.
-        destruct (classAtom_singleCharacter_numValue h) as [ch|] eqn:Hch; try discriminate; simpl.
-        destruct classRanges_to_linden as [cdt|] eqn:Hcdt; try discriminate; simpl.
-        destruct Nat.leb eqn:Hle; try discriminate; simpl.
-        apply PeanoNat.Nat.leb_le in Hle.
-        intro H. injection H as <-. constructor; auto.
-        1,2: apply classAtom_singleCharacter_numValue_sound; auto.
-        apply Character.numeric_round_trip_order; auto.
+      - simpl. intro cd. destruct crs.
+        + intros H. inversion H. subst. constructor. apply classAtom_to_linden_sound. auto.
+        + destruct classRanges_to_linden as [cdt|] eqn:Hcdt; try discriminate; simpl.
+          intros H. injection H as <-. constructor; auto. apply classAtom_to_linden_sound; auto.
+        + destruct classRanges_to_linden as [cdt|] eqn:Hcdt; try discriminate; simpl.
+          intros H. injection H as <-. constructor; auto. apply classAtom_to_linden_sound; auto.
+      - simpl. destruct crs; intros cd H.
+        + destruct classAtom_singleCharacter_numValue as [cl|] eqn:Hcl; try discriminate; simpl in H.
+          destruct (classAtom_singleCharacter_numValue h) as [ch|] eqn:Hch; try discriminate; simpl in H.
+          destruct Nat.leb eqn:Hle; try discriminate; simpl. injection H as <-. constructor; auto.
+          1,2: apply classAtom_singleCharacter_numValue_sound; auto.
+          apply Character.numeric_round_trip_order; auto. apply PeanoNat.Nat.leb_le in Hle. auto.
+        + destruct classAtom_singleCharacter_numValue as [cl|] eqn:Hcl; try discriminate.
+          destruct (classAtom_singleCharacter_numValue h) as [ch|] eqn:Hch; try discriminate.
+          destruct classRanges_to_linden as [cdt|] eqn:Hcdt; try discriminate. simpl in H.
+          destruct (Nat.leb cl ch) eqn:Hle; try discriminate; simpl in H.
+          injection H as <-. constructor; auto.
+          1,2: apply classAtom_singleCharacter_numValue_sound; auto.
+          apply Character.numeric_round_trip_order; auto. apply PeanoNat.Nat.leb_le in Hle. auto.
+        + destruct classAtom_singleCharacter_numValue as [cl|] eqn:Hcl; try discriminate.
+          destruct (classAtom_singleCharacter_numValue h) as [ch|] eqn:Hch; try discriminate.
+          destruct classRanges_to_linden as [cdt|] eqn:Hcdt; try discriminate. simpl in H.
+          destruct (Nat.leb cl ch) eqn:Hle; try discriminate; simpl in H.
+          injection H as <-. constructor; auto.
+          1,2: apply classAtom_singleCharacter_numValue_sound; auto.
+          apply Character.numeric_round_trip_order; auto. apply PeanoNat.Nat.leb_le in Hle. auto.
     Qed.
 
     Lemma charclass_to_linden_sound:
@@ -927,11 +942,11 @@ Section RegexpTranslation.
     Proof.
       intros crs EE. induction EE; simpl.
       - eexists. reflexivity.
-      - destruct IHEE as [cdt IHEE]. rewrite IHEE. eexists. reflexivity.
+      - destruct IHEE as [cdt IHEE]. rewrite IHEE. destruct t; eexists; reflexivity.
       - destruct IHEE as [cdt IHEE]. rewrite IHEE.
         rewrite earlyErrors_translation_singletonClassAtom with (cl := cl); auto.
         rewrite earlyErrors_translation_singletonClassAtom with (cl := ch); auto.
-        simpl. apply Nat.leb_le in H1. rewrite H1. eexists. reflexivity.
+        simpl. apply Nat.leb_le in H1. rewrite H1. destruct t; eexists; reflexivity.
     Qed.
 
     Theorem earlyErrors_pass_translation':
