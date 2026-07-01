@@ -6,7 +6,7 @@ From Linden Require Import Utils Parameters LWParameters.
 Import Utils.List.
 From Warblre Require Import Base Typeclasses RegExpRecord Semantics Result Errors.
 
-(** * Characters and Strings  *)
+(** * Characters, Input and Strings  *)
 
 Section Chars.
   Context {params: LindenParameters}.
@@ -34,9 +34,9 @@ Section Chars.
     end.
 
   Definition pref_str (i:input) : string :=
-  match i with
-  | Input _ s => s
-  end.
+    match i with
+    | Input _ s => s
+    end.
 
   Definition current_str (i:input) (dir: Direction) : string :=
     match i with
@@ -304,7 +304,15 @@ Section Chars.
         end
     end.
 
-  (* the proof of equivalence between the two *)
+  Lemma advance_S_n:
+    forall n next pref c,
+      advance_input_n (Input (c::next) pref) (S n) forward =
+        advance_input_n (Input next (c::pref)) n forward.
+  Proof.
+    intros n next pref c. simpl. f_equal. rewrite <- app_assoc. auto.
+  Qed.
+
+  (* the proof of equivalence between read_char and check_read *)
   Theorem can_read_correct:
     forall i1 cd dir i2,
     (exists c, read_char cd i1 dir = Some (c, i2)) <->

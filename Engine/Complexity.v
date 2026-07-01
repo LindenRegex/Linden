@@ -372,14 +372,6 @@ Section SearchRange.
     simpl in H0. simpl. lia.
   Qed.
 
-  Lemma advance_S_n:
-    forall n next pref c,
-      advance_input_n (Input (c::next) pref) (S n) forward =
-        advance_input_n (Input next (c::pref)) n forward.
-  Proof.
-    intros n next pref c. simpl. f_equal. rewrite <- app_assoc. auto.
-  Qed.
-
   Lemma advance_n_inpsize:
     forall inp n,
       inpsize inp > S n ->
