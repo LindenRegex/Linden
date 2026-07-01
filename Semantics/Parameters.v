@@ -8,21 +8,15 @@ Class LindenParameters := make {
   #[global] char:: Character.class; (* a type of characters, *)
   #[global] unicodeProp:: Parameters.Property.class (@Parameters.Character char); (* a type of Unicode properties, *)
   #[global] charset_class:: @CharSet.class char; (* and a type of character sets. *)
-
-  (* As per the ECMA specification (22.2.2.7.3 Canonicalize ( rer, ch )), when we do not ignore case, canonicalization is the identity function. *)
-  canonicalize_casesenst: forall rer chr, RegExpRecord.ignoreCase rer = false -> Character.canonicalize rer chr = chr;
 }.
 
 Section OfWarblre.
   Context (p: Parameters).
-  Context (canon: forall rer chr,
-              RegExpRecord.ignoreCase rer = false ->
-              Character.canonicalize rer chr = chr).
 
   Definition lindenParameters_of_warblre : LindenParameters :=
     make
       (@Parameters.character_class p)
       (@Parameters.unicode_property_class p)
-      (@Parameters.set_class p)
-      canon.
+      (@Parameters.set_class p).
+
 End OfWarblre.

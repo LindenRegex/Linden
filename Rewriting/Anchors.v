@@ -151,6 +151,6 @@ Section Anchors.
     Anchor a ≅[rer] desugar_anchor a.
   Proof.
     intros Hic; apply desugar_anchor_correct.
-    all: intros c; try rewrite canonicalize_casesenst; intuition.
+    all: intros c; try rewrite Character.canonicalize_casesenst; intuition.
   Qed.
 End Anchors.
