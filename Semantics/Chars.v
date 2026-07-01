@@ -312,6 +312,35 @@ Section Chars.
     intros n next pref c. simpl. f_equal. rewrite <- app_assoc. auto.
   Qed.
 
+  Lemma firstn_add_split:
+    forall {A: Type} (n m : nat) (l: list A),
+      firstn n l ++ firstn m (skipn n l) = firstn (n+m) l.
+  Proof.
+    intros A n. induction n; intros m [|h l]; simpl; auto.
+    - apply firstn_nil.
+    - f_equal. apply IHn.
+  Qed.
+
+  Lemma advance_input_n_seq:
+    forall (n m : nat) (inp : input) (dir : Direction),
+      advance_input_n (advance_input_n inp n dir) m dir = advance_input_n inp (n + m) dir.
+  Proof.
+    intros n m [next pref] dir. unfold advance_input_n; simpl.
+    destruct dir.
+    - f_equal.
+      + rewrite skipn_skipn. f_equal. lia.
+      + rewrite app_assoc. rewrite <- rev_app_distr. rewrite firstn_add_split. auto.
+    - f_equal.
+      + rewrite app_assoc. f_equal. rewrite <- rev_app_distr. f_equal.
+        apply firstn_add_split.
+      + rewrite skipn_skipn. f_equal. lia.
+  Qed.
+
+  Lemma next_str_advance_is_skip_str:
+    forall (inp : input) (n : nat),
+      next_str (advance_input_n inp n forward) = skipn n (next_str inp).
+  Proof. intros [next pref] n. auto. Qed.
+
   (* the proof of equivalence between read_char and check_read *)
   Theorem can_read_correct:
     forall i1 cd dir i2,

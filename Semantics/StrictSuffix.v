@@ -408,7 +408,6 @@ Section StrictSuffix.
     eapply strict_suffix_trans; eauto.
   Qed.
 
-
   Lemma ss_forward_backward :
     forall inp1 inp2,
       strict_suffix inp1 inp2 forward -> strict_suffix inp2 inp1 backward.
@@ -438,6 +437,34 @@ Section StrictSuffix.
       strict_suffix inp1 inp2 backward <-> strict_suffix inp2 inp1 forward.
   Proof.
     intros. split; eauto using ss_forward_backward, ss_backward_forward.
+  Qed.
+
+  (** * Lemmas about advance_input_n  *)
+
+  Lemma advance_n_is_strict_suffix:
+    forall (inp : input) (n : nat) (dir: Direction)
+      (GT: n > 0)
+      (LE: n <= length (current_str inp dir)),
+      is_strict_suffix (advance_input_n inp n dir) inp dir = true.
+  Proof.
+    intros [next pref] n dir GT LE.
+    simpl in LE.
+    apply is_strict_suffix_correct.
+    destruct dir.
+    - apply ss_fwd_diff.
+      exists (firstn n next). split.
+      + unfold not. intro H_contra. apply (f_equal (@length _)) in H_contra.
+        rewrite length_firstn in H_contra.
+        simpl in H_contra. lia.
+      + split; auto.
+        symmetry. apply firstn_skipn.
+    - apply ss_bwd_diff.
+      exists (rev (firstn n pref)). split.
+      + unfold not. intro H_contra. apply (f_equal (@length _)) in H_contra.
+        rewrite length_rev in H_contra. rewrite length_firstn in H_contra.
+        simpl in H_contra. lia.
+      + split; auto. rewrite rev_involutive.
+        symmetry. apply firstn_skipn.
   Qed.
 
   (** * Prefixes *)
