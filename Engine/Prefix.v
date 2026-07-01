@@ -621,7 +621,7 @@ Proof.
     repeat rewrite Character.numeric_pseudo_bij in H4.
     assumption.
   } subst.
-  repeat rewrite (canonicalize_casesenst rer _ no_i_flag) in H2.
+  repeat rewrite (Character.canonicalize_casesenst rer _ no_i_flag) in H2.
   symmetry. apply EqDec.inversion_true. assumption.
 Qed.
 
@@ -778,7 +778,7 @@ Proof.
   intros rest s c cd no_i_flag Hstart Hmatch.
 
   Ltac unfold_match H no_i_flag :=
-    unfold char_match in H; rewrite (canonicalize_casesenst _ _ no_i_flag) in H.
+    unfold char_match in H; rewrite (Character.canonicalize_casesenst _ _ no_i_flag) in H.
 
   induction cd;
     (* there is no known literal *)
@@ -786,7 +786,7 @@ Proof.
   (* CdSingle *)
   - unfold_match Hmatch no_i_flag.
     assert (c = c0). {
-      simpl in Hmatch. rewrite (canonicalize_casesenst _ _ no_i_flag) in Hmatch.
+      simpl in Hmatch. rewrite (Character.canonicalize_casesenst _ _ no_i_flag) in Hmatch.
       eqdec. reflexivity.
     } subst.
     simpl.
@@ -802,12 +802,12 @@ Proof.
     + etransitivity.
       * eapply starts_with_chain_merge_literals.
         intro. eapply extract_literal_char_impossible_no_match; eauto.
-      * eapply IHcd1. unfold char_match. rewrite canonicalize_casesenst; eauto.
+      * eapply IHcd1. unfold char_match. rewrite Character.canonicalize_casesenst; eauto.
     + simpl. rewrite merge_literals_comm.
       etransitivity.
       * eapply starts_with_chain_merge_literals.
         intro. eapply extract_literal_char_impossible_no_match; eauto.
-      * eapply IHcd2. unfold char_match. rewrite canonicalize_casesenst; eauto.
+      * eapply IHcd2. unfold char_match. rewrite Character.canonicalize_casesenst; eauto.
 Qed.
 
 (* generalization of extract_literal_prefix on the group map and the list of actions *)

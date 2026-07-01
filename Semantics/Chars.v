@@ -82,7 +82,7 @@ Section Chars.
   Proof.
     intro Hcasesenst.
     induction l; simpl; auto.
-    rewrite canonicalize_casesenst, IHl by auto. auto.
+    rewrite Character.canonicalize_casesenst, IHl by auto. auto.
   Qed.
 
   Lemma inb_canonicalized_casesenst:
@@ -90,7 +90,7 @@ Section Chars.
     forall c l, inb_canonicalized c l = inb c l.
   Proof.
     intros Hcasesenst c l. unfold inb_canonicalized.
-    rewrite canonicalize_casesenst by assumption.
+    rewrite Character.canonicalize_casesenst by assumption.
     rewrite map_canonicalize_casesenst by assumption.
     reflexivity.
   Qed.
