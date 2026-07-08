@@ -15,11 +15,9 @@
 
 - [ ] #link("https://github.com/LindenRegex/Linden/tree/mw/reverse-pikevm")[Reverse PikeVM] -- Extending PikeVM to read input from right to left. This is useful for avoiding the need to reverse the entire input. PR open #link("https://github.com/LindenRegex/Linden/pull/30")[here]. Zero blockers, just needs a review and merge.
 - [ ] #link("https://github.com/LindenRegex/Linden/tree/mw/booltree-dir")[Lookarounds in bool_tree] -- Extending bool_tree semantics with lookarounds (non-oracle). Required adding a direction to bool_tree inductive which generates a large diff. PR open #link("https://github.com/LindenRegex/Linden/pull/31")[here]. Zero blockers, just needs a review and merge.
-- [ ] #link("https://github.com/LindenRegex/Warblre/tree/mw/rocq-released")[Prepare Warblre release] -- We want to release Warblre to #link("https://rocq-prover.org/packages")[Rocq's opam repository] which will make it easier for dependents to install Warblre (plus we enforce some versioning of Warblre). PR open #link("https://github.com/LindenRegex/Warblre/pull/17")[here]. Zero blockers, just needs a review and merge.
-  - [ ] Once merged, a release should be performed (v0.1.0). The PR has a markdown file explaining how to perform a release. If the GitHub action does not work, it should be performed manually. In that case:
-    - [ ] Remove the `cd.yml` workflow file
-    - [ ] Update docs for publishing. See #link("https://github.com/epfl-systemf/StrictOrderSolver/blob/9a43aaa2bab0afad99953b6b31677b1980a6e7a4/MAINTAINERS.md")[here] for a manual release version. It contains a `publish.sh` script which should be ran by a human.
-    - [ ] Do a manual release of v0.1.0 as per the docs
+- [ ] #link("https://github.com/LindenRegex/Warblre/tree/mw/rocq-released")[Prepare Warblre release] -- We want to release Warblre to #link("https://rocq-prover.org/packages")[Rocq's opam repository] which will make it easier for dependents to install Warblre (plus we enforce some versioning of Warblre). Zero blockers, just needs to be done.
+  - [ ] Follow instructions in `doc/Publishing.md` and release version v0.1.0
+  - [ ] Close https://github.com/LindenRegex/Warblre/issues/14
 
 == Needs a small amount of work to finish
 
