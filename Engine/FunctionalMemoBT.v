@@ -79,25 +79,20 @@ Definition memobt_match (r:regex) (inp:input) : matchres :=
 (* Instead of running MemoBT with a lazy prefix, we run it in anchored mode at each position where *)
 (* the prefix matches. By reusing cache from each anchored run, this still executes in linear time. *)
 
-Inductive matchres_unanchored : Type :=
-| OutOfFuel_un
-| Finished_un: option leaf -> memoset -> matchres_unanchored.
-
 (* unanchored search for MemoBT with prefix acceleration *)
 Function memobt_match_unanchored' {strs:StrSearch} (r:regex) (inp:input) (ms:memoset) (p:string)
-  {measure (fun inp => remaining_length inp forward) inp}: matchres_unanchored :=
+  {measure (fun inp => remaining_length inp forward) inp}: matchres :=
   (* we skip the initial input that does not match the prefix *)
   match (input_search p inp) with
-  | None => Finished_un None ms (* if prefix is not present anywhere, then we cannot match *)
+  | None => Finished None ms (* if prefix is not present anywhere, then we cannot match *)
   | Some inp' =>
     match memobt_match' r inp' ms with
-    | OutOfFuel => OutOfFuel_un
-    | Finished (Some leaf) ms' => Finished_un (Some leaf) ms'
     | Finished None ms' =>
       match advance_input inp' forward with
       | Some inp'' => memobt_match_unanchored' r inp'' ms' p
-      | None => Finished_un None ms' (* we already tried to match at every potential position *)
+      | None => Finished None ms' (* we already tried to match at every potential position *)
       end
+    | m => m
     end
   end.
 Proof.
@@ -108,7 +103,7 @@ Proof.
   eapply input_search_strict_suffix in Hsearch as [<-|Hss]; ss_solve.
 Defined.
 
-Definition memobt_match_unanchored {strs:StrSearch} (r:regex) (inp:input) : matchres_unanchored :=
+Definition memobt_match_unanchored {strs:StrSearch} (r:regex) (inp:input) : matchres :=
   memobt_match_unanchored' strs r inp initial_memoset (prefix (extract_literal rer r)).
 
 
@@ -224,7 +219,7 @@ Theorem memobt_match_correct_unanchored' {strs:StrSearch}:
   forall r result inp tree ms ms',
     pike_regex r ->
     correctms rer ms (compilation r) ->
-    memobt_match_unanchored' strs r inp ms (prefix (extract_literal rer r)) = Finished_un result ms' ->
+    memobt_match_unanchored' strs r inp ms (prefix (extract_literal rer r)) = Finished result ms' ->
     is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
     first_leaf tree inp = result.
 Proof.
@@ -237,17 +232,6 @@ Proof.
     injection Hres as <- <-.
     rewrite input_search_none_str_search in *.
     eauto using str_search_none_nores_unanchored.
-  - (* we jumped to the position with the result *)
-    (* all previous positions have no results *)
-    injection Hres as <- ->.
-    rename e into Hsearch, e0 into Hmatch.
-    pose proof is_tree_productivity rer [Areg r] inp' GroupMap.empty forward as [tree' Htree'].
-    eapply memobt_match'_correct, memobt_correct in Hmatch as [Hres _]; eauto.
-    eapply input_search_strict_suffix in Hsearch as Hss.
-    eapply lazy_prefix_result_some; eauto.
-    intros.
-    eapply extract_literal_prefix_contra; eauto.
-    eapply input_search_no_earlier; try split; eauto.
   - (* we jumped to a position with no result, but the match is present in the rest of the matching *)
     rename e into Hsearch, e0 into Hmatch, e1 into Hadv.
     pose proof is_tree_productivity rer [Areg r] inp' GroupMap.empty forward as [tree' Htree'].
@@ -297,6 +281,17 @@ Proof.
     + (* we are strictly before the jump position *)
       eapply extract_literal_prefix_contra; eauto.
       eapply input_search_no_earlier; try split; eauto.
+  - (* we jumped to the position with the result *)
+    (* all previous positions have no results *)
+    rename e into Hsearch, y into Hmatch.
+    rewrite Hres in Hmatch. destruct result; only 2: contradiction.
+    pose proof is_tree_productivity rer [Areg r] inp' GroupMap.empty forward as [tree' Htree'].
+    eapply memobt_match'_correct, memobt_correct in Hres as [Hres _]; eauto.
+    eapply input_search_strict_suffix in Hsearch as Hss.
+    eapply lazy_prefix_result_some; eauto.
+    intros.
+    eapply extract_literal_prefix_contra; eauto.
+    eapply input_search_no_earlier; try split; eauto.
 Qed.
 
 
@@ -304,7 +299,7 @@ Qed.
 Theorem memobt_match_correct_unanchored {strs:StrSearch}:
   forall r result inp tree ms,
     pike_regex r ->
-    memobt_match_unanchored r inp = Finished_un result ms ->
+    memobt_match_unanchored r inp = Finished result ms ->
     is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
     first_leaf tree inp = result.
 Proof.
