@@ -8,7 +8,7 @@
 From Stdlib Require Import List.
 Import ListNotations.
 
-From Linden Require Import Regex Chars Semantics Tree.
+From Linden Require Import Regex Chars Semantics Tree LazyPrefix.
 From Linden Require Import FunctionalUtils.
 From Linden Require Import Parameters LWParameters.
 From Linden Require Import StrictSuffix Prefix.
