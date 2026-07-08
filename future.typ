@@ -18,21 +18,20 @@
 - [ ] #link("https://github.com/LindenRegex/Warblre/tree/mw/rocq-released")[Prepare Warblre release] -- We want to release Warblre to #link("https://rocq-prover.org/packages")[Rocq's opam repository] which will make it easier for dependents to install Warblre (plus we enforce some versioning of Warblre). Zero blockers, just needs to be done.
   - [ ] Follow instructions in `doc/Publishing.md` and release version v0.1.0
   - [ ] Close https://github.com/LindenRegex/Warblre/issues/14
+- [ ] #link("https://github.com/LindenRegex/Linden/tree/mw/memobt-acc")[Prefix accelerated MemoBT] -- Performing prefix acceleration multiple times in the MemoBT regex engine. The proof of correctness is complete. `memobt_match_unanchored` in `FunctionalMemoBT.v` is the new unanchored search definition (with cache sharing) and `memobt_match_correct_unanchored` is the proof of its correctness (no admits). PR open #link("https://github.com/LindenRegex/Linden/pull/40")[here]. Zero blockers, just needs a review and merge.
 
 == Needs a small amount of work to finish
 
-- [ ] #link("https://github.com/LindenRegex/Linden/tree/mw/memobt-acc")[Prefix accelerated MemoBT] -- Performing prefix acceleration multiple times in the MemoBT regex engine. The proof of correctness is complete and the meta engine is updated to use this new version. `memobt_match_unanchored` in `FunctionalMemoBT.v` is the new unanchored search definition (with cache sharing) and `memobt_match_correct_unanchored` is the proof of its correctness (no admits).
-  - [ ] The `matchres_unanchored` definition is a duplicate of `matchres`. It can be removed.
-  - [ ] The proof of termination is admitted, namely `memobt_match_terminates_unanchored'`. By termination we mean that the fuel will be enough. The unanchored matching itself is not fuel based, its termination is proven on the fact that the input is decreasing on every recursive call. But between those recursive calls we call the anchored search function which is fuel based. We have a proof that the fuel we provide for the anchored search is sufficient, but the issue stems from the cache we share between each call.
+- [ ] #link("https://github.com/LindenRegex/Linden/tree/mw/memobt-unanchored-termination")[Prefix accelerated MemoBT termination] -- The proof of termination is admitted, namely `memobt_match_terminates_unanchored'`. By termination we mean that the fuel will be enough. The unanchored matching itself is not fuel based, its termination is proven on the fact that the input is decreasing on every recursive call. But between those recursive calls we call the anchored search function which is fuel based. We have a proof that the fuel we provide for the anchored search is sufficient, but the issue stems from the cache we share between each call.
 
-    The unanchored search works the following way:
+  The unanchored search works the following way:
 
-    1. We use prefix acceleration to find a point where we want to perform a search
-    2. In that position we run the anchored MemoBT. If it found a match, great! Otherwise we retrieve the output memoset.
-    3. We advance the input by one and once again use prefix acceleration to find the next position to run an anchored search, this time with the memoset we got from the previous run.
+  1. We use prefix acceleration to find a point where we want to perform a search
+  2. In that position we run the anchored MemoBT. If it found a match, great! Otherwise we retrieve the output memoset.
+  3. We advance the input by one and once again use prefix acceleration to find the next position to run an anchored search, this time with the memoset we got from the previous run.
 
-    The fuel for the anchored search comes from the proof of complexity of the MemoBT. We then use the complexity bound as the fuel. However, the theorem about fuel sufficiency has a precondition that the provided memoset is valid (with some WF definition of "valid"). When just doing an anchored search, we provide an empty memoset for which we can easily then show that it is valid. On the other hand, for the unanchored search we *share* the memoset that was produced from the previous run of an anchored search. So to prove termination we must prove that the memoset remains valid between runs. That is what was left admitted. Unclear if with the current setup this validity preservation is provable or requires changing the theorem statements in the complexity proofs.
-- [ ] Release Linden to Rocq's opam repository. To do this we should follow how it was done with Warblre. If the GitHub actions work, do that. Otherwise we do the manual release process. The docs should be similarly pushed to Linden.
+  The fuel for the anchored search comes from the proof of complexity of the MemoBT. We then use the complexity bound as the fuel. However, the theorem about fuel sufficiency has a precondition that the provided memoset is valid (with some WF definition of "valid"). When just doing an anchored search, we provide an empty memoset for which we can easily then show that it is valid. On the other hand, for the unanchored search we *share* the memoset that was produced from the previous run of an anchored search. So to prove termination we must prove that the memoset remains valid between runs. That is what was left admitted. Unclear if with the current setup this validity preservation is provable or requires changing the theorem statements in the complexity proofs.
+- [ ] Release Linden to Rocq's opam repository. To do this we should follow how it was done with Warblre. Do the manual release process and add the doc and publish script.
 
 == Self-contained bigger tasks
 
