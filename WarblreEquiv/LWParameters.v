@@ -22,15 +22,8 @@ Section LWParameters.
   Defined.
   #[export] Instance string_EqDec: EqDec string := EqDec.make string string_eq_dec.
 
-  (* Adapted from String.substring: returns the substring of s starting at index n and of length m (or less if the string is not long enough). *)
-  Fixpoint substring (s: string) (n m: nat): string :=
-    match n, m, s with
-    | 0, 0, _ => nil
-    | 0, S m', nil => s
-    | 0, S m', c::s' => c::substring s' 0 m'
-    | S n', _, nil => s
-    | S n', _, c::s' => substring s' n' m
-    end.
+  Definition substring (s: string) (n m: nat): string :=
+    firstn (m - n) (skipn n s).
 
   Definition advanceStringIndex (s: string) (i: nat) := S i.
   Definition getStringIndex (s: string) (i: nat) := i.
