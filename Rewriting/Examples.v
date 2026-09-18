@@ -6,6 +6,9 @@ Section Utilities.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
 
+
+    
+
   Lemma sequence_assoc_equiv r0 r1 r2:
     Sequence r0 (Sequence r1 r2) ≅[rer] Sequence (Sequence r0 r1) r2.
   Proof.
@@ -32,6 +35,14 @@ Section Utilities.
       inversion TREE2; subst. simpl in CONT. replace t2 with t1 by (eapply is_tree_determ; eauto). reflexivity.
   Qed.
 
+  Lemma sequence_assoc_equiv_dir r0 r1 r2:
+    forall dir, Sequence r0 (Sequence r1 r2) ≅[rer][dir] Sequence (Sequence r0 r1) r2.
+  Proof.
+    intros dir.
+    pose proof (sequence_assoc_equiv r0 r1 r2 dir) as SEQASSOC. assumption.
+  Qed.
+    
+
   Create HintDb is_tree.
   Hint Constructors is_tree: is_tree.
   Lemma is_tree_skip_epsilon_r a i gm dir tr:
@@ -41,6 +52,15 @@ Section Utilities.
     induction 1; subst; simpl; eauto with is_tree.
     rewrite <- app_assoc in IHis_tree; eauto with is_tree.
   Qed.
+
+    Lemma is_tree_skip_zero_r a i gm dir tr r b:
+    is_tree rer a i gm dir tr ->
+    is_tree rer (a ++ [Areg (Quantified b 0 (NoI.N 0) r)]) i gm dir tr.
+  Proof.
+    induction 1; subst; simpl; eauto with is_tree.
+    - rewrite <- app_assoc in IHis_tree; eauto with is_tree.
+  Qed.
+
 
   Lemma seq_equiv_dir: forall x x' y y' dir, x ≅[rer][dir] x' -> y ≅[rer][dir] y' -> Sequence x y ≅[rer][dir] Sequence x' y'.
   Proof.
@@ -143,4 +163,94 @@ Section Examples.
     2: { destruct plus; discriminate. }
     replace t2 with t1 by eauto using is_tree_determ. reflexivity.
   Qed.
+
+
+  Lemma quantified_one_equiv r:
+    def_groups r = [] ->
+    forall greedy, Quantified greedy 1 (NoI.N 0) r ≅[rer] r.
+  Proof.
+    tree_equiv_inv; try rewrite H; simpl; eauto.
+    2: { apply (is_tree_skip_zero_r rer [Areg r]). eauto. }
+    apply leaves_equiv_refl.
+  Qed.
+  
+  
+
+  Theorem disj_equiv_dir: forall x x' y y' dir, x ≅[rer][dir] x' -> y ≅[rer][dir] y' -> Disjunction x y ≅[rer][dir] Disjunction x' y'.
+  Proof.
+    intros x x' y y' dir [GRPX EQSX] [GRPY EQSY]; split; simpl; try rewrite GRPX; try rewrite GRPY; try reflexivity.
+    intros i gm t1 t2 TREE1 TREE2.
+    inversion TREE1; inversion TREE2; subst. clear TREE1 TREE2. simpl.
+    unfold tree_equiv_tr_dir. simpl. Search leaves_equiv. apply leaves_equiv_app.
+    specialize (EQSX _ _ _ _ ISTREE1 ISTREE0). auto.
+    specialize (EQSY _ _ _ _ ISTREE2 ISTREE3). auto.
+  Qed.
+
+ 
+
+
+
+  Lemma check_not_stops_quantifier n:
+    forall inp gm r1 dir t1 t2 g,
+    is_tree rer [Areg r1; Acheck inp; Areg (Quantified g 0 (NoI.N n) r1)] inp gm dir t1 ->
+    is_tree rer [Areg r1; Areg (Quantified g 0 (NoI.N n) r1)] inp gm dir t2 ->
+    leaves_equiv [] (tree_leaves t1 gm inp dir) (tree_leaves t2 gm inp dir).
+  Proof.
+    intros inp gm r1 dir t1 t2 greedy TREE1 TREE2.
+    induction n.
+    Admitted.
+
+    (* you can transform a quantifier into a easier one. *)
+  Theorem greedy_quantifier_steps_opt:
+    forall r n,
+      def_groups r = [] ->
+      (Quantified true 0 (S n) r) ≅[rer] (Disjunction (Quantified true 1 n r) Epsilon).
+  Proof.
+    intros r n GROUPEMPT.
+    split. simpl. rewrite GROUPEMPT. auto.
+    intros inp gm t1 t2 TREE1 TREE2.
+    inversion TREE1; inversion TREE2; inversion ISTREE0; inversion ISTREE2; subst.
+    clear TREE1 TREE2 ISTREE0 ISTREE2. 
+    rename titer into t11. rename tskip into t12. rename t3 into t22. rename titer0 into t21.
+    rename ISTREE1 into TREE11. rename ISTREE into TREE22. rename ISTREE3 into TREE21. rename SKIP into TREE12.
+    unfold tree_equiv_tr_dir. simpl.
+    destruct plus; inversion H1. clear H1.
+    apply leaves_equiv_app. 
+    2:{ clear  TREE11 TREE21. revert inp gm t12 t22 TREE12 TREE22.
+       change (actions_equiv_dir rer dir [] []).
+       reflexivity.
+    } clear t12 t22 TREE12 TREE22. subst.
+    remember (GroupMap.reset (def_groups r) gm) as gm2.
+    eapply (check_not_stops_quantifier n inp gm2 r); eauto.
+  Qed.
+    
+  
+  Theorem non_greedy_quantifier_steps_opt:
+    forall r n,
+      def_groups r = [] ->
+      (Quantified false 0 (S n) r) ≅[rer] (Disjunction Epsilon (Quantified false 1 n r)).
+  Proof.
+    intros r n GROUPEMPT.
+    split. simpl. rewrite GROUPEMPT. auto.
+    intros inp gm t1 t2 TREE1 TREE2.
+    inversion TREE1; inversion TREE2; inversion ISTREE0; inversion ISTREE2; subst.
+    clear TREE1 TREE2 ISTREE0 ISTREE2. 
+    rename titer into t11. rename tskip into t12. rename t0 into t22. rename titer0 into t21.
+    rename ISTREE1 into TREE11. rename ISTREE into TREE22. rename ISTREE3 into TREE21. rename SKIP into TREE12.
+    unfold tree_equiv_tr_dir. simpl.
+    destruct plus; inversion H1. clear H1.
+    apply leaves_equiv_app. 
+    + clear  TREE11 TREE21. revert inp gm t12 t22 TREE12 TREE22.
+      change (actions_equiv_dir rer dir [] []).
+      reflexivity.
+    + subst. remember (GroupMap.reset (def_groups r) gm) as gm2. 
+      simpl in *. eapply (check_not_stops_quantifier n inp gm2 r); eauto.
+  Qed.
+      
+    
+  
 End Examples.
+
+
+
+                      
