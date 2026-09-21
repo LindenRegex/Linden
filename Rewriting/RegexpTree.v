@@ -794,7 +794,7 @@ Section UnAmbiguity.
 
   (* Syntaxic lemmas: some syntaxic rules to simplify the overall structure of the proof *)
    
-  (* you can distribute an unambiguous regex *)
+  (* you can distribute an unambiguous regex on the left *)
   Theorem unamb_distribute_left:
     forall r1 r2 r3,
       def_groups r1 = [] ->
@@ -834,8 +834,8 @@ Section UnAmbiguity.
   Qed.
 
 
-  (* you can distribute an unambiguous regex *)
-  (*Theorem unamb_distribute_right:
+  (* you can distribute an unambiguous regex on the right *)
+  Theorem unamb_distribute_right:
     forall r1 r2 r3,
       def_groups r3 = [] ->
       unamb [Areg r3] ->
@@ -862,222 +862,266 @@ Section UnAmbiguity.
     specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE1 TREE0) as eq1.
     specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE2 TREE) as eq2. subst.
     apply leaves_equiv_refl.
-  Qed.*)
+  Qed.
 
-  
-  (* Unamb lemmas: examples useful to prove that a single regex can be swapped if we are in the unambigous case.*)
-  (*Lemma seq_quantified_eq_seq_plusone_left:
+  Theorem unamb_quantifier_pops_left:
     forall r g m n,
       def_groups r = [] ->
       unamb [Areg r] ->
       (Quantified g (S m) n r)
-        ≅[rer][forward] Sequence (Quantified g m n r) (Quantified g 1 (NoI.N 0) r) .
+        ≅[rer] Sequence (Quantified g 1 (NoI.N 0) r) (Quantified g m n r).
   Proof.
-    intros r g m n GROUPEMPT UNAMBR.
+    intros r g m n GROUPEMPT UNAMBR dir.
+    destruct dir. {apply quantified_S_equiv_forward. assumption.} (* Forward case has already been proven*)
     induction m as [| i IH].
-    (* Starting with the induction with min (just pop new element to the left)*)
+    (* Starting with the induction of the min case*)
     2:{
-      rewrite quantified_S_equiv_forward. symmetry.
-      etransitivity. {
-        apply seq_equiv_dir. apply quantified_S_equiv_forward. assumption.
-        reflexivity.
-      }
-      rewrite <- sequence_assoc_equiv_dir. apply seq_equiv_dir.
-      reflexivity. symmetry. all: assumption.
+      (* r{min + 2, delta}*)
+      rewrite quantified_S_equiv_backward.
+      (* r{min + 1, delta} r{1, 0}*)
+      etransitivity. {apply seq_equiv_dir. apply IH. reflexivity. }
+      (* (r{1, 0} r{min, delta}) r{1, 0}*)
+      rewrite <- sequence_assoc_equiv_dir.
+      (* r{1, 0} (r{min, delta} r{1, 0})*)
+      etransitivity. {apply seq_equiv_dir. reflexivity. rewrite <- quantified_S_equiv_backward. reflexivity. assumption.}
+      reflexivity. assumption.
     }
-    induction  n. induction n.
-    + symmetry. etransitivity. {
-        apply seq_equiv. apply quantified_zero_equiv. assumption. reflexivity.
+    (*Three cases: 0, (S n) and infinity*)
+    destruct n. induction n.
+    + (* Base case: n = 0*)
+      symmetry.
+      (*r{1, 0} r{0, 0}*)
+      etransitivity. {
+        apply seq_equiv. reflexivity. apply quantified_zero_equiv. assumption.
       }
-      apply sequence_epsilon_left_equiv.
-    + destruct g.
-    - symmetry. etransitivity. {
-        apply seq_equiv. apply greedy_quantifier_steps_opt. assumption. apply quantified_one_equiv. assumption.
+      (*r{1, 0} Epsilon*)
+      apply (sequence_epsilon_right_equiv rer ).
+    + (* Inductive case: (S n)*)
+      (* r{1, delta1 + 1}*)
+      rewrite quantified_S_equiv_backward; auto.
+      (* r{0, delta1 + 1}r{1, 0}*)
+      destruct g; simpl. (*case greedy and non greedy*)
+      - (* Greedy case *)
+        etransitivity. { eapply seq_equiv. apply greedy_quantifier_steps_opt. 2: apply quantified_one_equiv. all: auto.}
+        (* (r{1, delta1} | ) r *)
+        rewrite (unamb_distribute_right _ _ _ GROUPEMPT UNAMBR backward).
+        (* (r{1, delta1} r | r *)
+        etransitivity. {
+          apply disj_equiv_dir. apply seq_equiv_dir. apply IHn. 
+          rewrite <-  (quantified_one_equiv _ _ GROUPEMPT true backward). reflexivity.
+          apply sequence_epsilon_left_equiv.
+        }
+        (* ((r{1, 0} r{0, delta1}) r{1, 0} | r *)
+        etransitivity. {
+          apply disj_equiv_dir. rewrite <- sequence_assoc_equiv_dir. apply seq_equiv_dir.
+          apply quantified_one_equiv; auto. rewrite <- quantified_S_equiv_backward; auto.
+          reflexivity. rewrite <- (sequence_epsilon_right_equiv _ _ backward). reflexivity.
+        }
+        (* (r r{1, delta1}) | r *)
+        rewrite <- (unamb_distribute_left _ _ _ GROUPEMPT UNAMBR backward).
+        (* r (r{1, delta1} | )  *)
+        etransitivity. { eapply seq_equiv. rewrite <- quantified_one_equiv. 3: rewrite <- greedy_quantifier_steps_opt. all: auto. all: reflexivity. }
+        (* r{1, 0} r{0, delta1 + 1}  *)
+        reflexivity.
+      - (* Nongreedy case *)
+        etransitivity. { eapply seq_equiv. apply non_greedy_quantifier_steps_opt. 2: apply quantified_one_equiv. all: auto.}
+        (* (| r{1, delta1}) r *)
+        rewrite (unamb_distribute_right _ _ _ GROUPEMPT UNAMBR backward).
+        (* r | r{1, delta1} r *)
+        etransitivity. {
+          apply disj_equiv_dir. apply sequence_epsilon_left_equiv.
+          apply seq_equiv_dir. apply IHn. 
+          rewrite <-  (quantified_one_equiv _ _ GROUPEMPT false backward). reflexivity.
+          
+        }
+        (* r | (r{1, 0} r{0, delta1}) r{1, 0} *)
+        etransitivity. {
+          apply disj_equiv_dir. rewrite <- (sequence_epsilon_right_equiv _ _ backward). reflexivity.
+          rewrite <- sequence_assoc_equiv_dir. apply seq_equiv_dir.
+          apply quantified_one_equiv; auto. rewrite <- quantified_S_equiv_backward; auto.
+          reflexivity. 
+        }
+        (* r | r r{1, delta1} *)
+        rewrite <- (unamb_distribute_left _ _ _ GROUPEMPT UNAMBR backward).
+        (* r (r{1, delta1} | )  *)
+        etransitivity. { eapply seq_equiv. rewrite <- quantified_one_equiv. 3: rewrite <- non_greedy_quantifier_steps_opt. all: auto. all: reflexivity. }
+        (* r{1, 0} r{0, delta1 + 1}  *)
+        reflexivity.
+        + Admitted. (* MISSING: proof for infinity*)
+
+      
+
+    Theorem unamb_quantifier_pops_right:
+    forall r g m n,
+      def_groups r = [] ->
+      unamb [Areg r] ->
+      (Quantified g (S m) n r)
+        ≅[rer] Sequence (Quantified g m n r) (Quantified g 1 (NoI.N 0) r).
+    Proof.
+          intros r g m n GROUPEMPT UNAMBR dir.
+    destruct dir. 2: {apply quantified_S_equiv_backward. assumption.} (* Backward case has already been proven*)
+    induction m as [| i IH].
+    (* Starting with the induction of the min case*)
+    2:{
+      (* r{min + 2, delta}*)
+      rewrite quantified_S_equiv_forward.
+      (* r{1, 0} r{min + 1, delta} *)
+      etransitivity. {apply seq_equiv_dir. reflexivity. apply IH.  }
+      (* r{1, 0} (r{min, delta} r{1, 0})*)
+      rewrite  sequence_assoc_equiv_dir.
+      (* (r{1, 0} r{min, delta}) r{1, 0}*)
+      etransitivity. {apply seq_equiv_dir. rewrite <- quantified_S_equiv_forward. 2: auto. all: reflexivity. }
+      reflexivity. assumption.
+    }
+    (*Three cases: 0, (S n) and infinity*)
+    destruct n. induction n.
+    + (* Base case: n = 0*)
+      symmetry.
+      (*r{0, 0} r{1, 0}*)
+      etransitivity. {
+        apply seq_equiv.  apply quantified_zero_equiv. assumption. reflexivity.
       }
-      etransitivity. {
-        apply unamb_distribute_right. all: assumption.
-      } etransitivity. {
-        apply disj_equiv_dir. apply seq_equiv_dir. apply quantified_S_equiv_forward. assumption. rewrite <- (quantified_one_equiv r GROUPEMPT true forward). reflexivity. apply sequence_epsilon_left_equiv.
-      } etransitivity. {
-        apply disj_equiv_dir. rewrite <- sequence_assoc_equiv_dir. apply seq_equiv_dir. apply quantified_one_equiv; assumption. rewrite  <- IHn. reflexivity. rewrite <- (sequence_epsilon_right_equiv rer r forward). reflexivity.
-      } rewrite <- (unamb_distribute_left _ _ _ GROUPEMPT UNAMBR forward).
-      etransitivity. {
-        apply seq_equiv_dir. rewrite <- (quantified_one_equiv r GROUPEMPT true forward). reflexivity. rewrite <- (greedy_quantifier_steps_opt _ _ GROUPEMPT forward). reflexivity. 
-      } rewrite <- (quantified_S_equiv_forward); auto. reflexivity.
-    - symmetry. etransitivity. {
-        apply seq_equiv. apply non_greedy_quantifier_steps_opt. assumption. apply quantified_one_equiv. assumption.
-      }
-      etransitivity. {
-        apply unamb_distribute_right. all: assumption.
-      } etransitivity. {
-        apply disj_equiv_dir. apply sequence_epsilon_left_equiv. apply seq_equiv_dir. apply quantified_S_equiv_forward. assumption. rewrite <- (quantified_one_equiv r GROUPEMPT false forward). reflexivity. 
-      } etransitivity. {
-        apply disj_equiv_dir. rewrite <- (sequence_epsilon_right_equiv rer r forward). reflexivity. rewrite <- sequence_assoc_equiv_dir. apply seq_equiv_dir. apply quantified_one_equiv; assumption. rewrite <- IHn. reflexivity. 
-      } rewrite <- (unamb_distribute_left _ _ _ GROUPEMPT UNAMBR forward).
-      etransitivity. {
-        apply seq_equiv_dir. rewrite <- (quantified_one_equiv r GROUPEMPT false forward). reflexivity. rewrite <- (non_greedy_quantifier_steps_opt _ _ GROUPEMPT forward). reflexivity. 
-      } rewrite <- (quantified_S_equiv_forward); auto. reflexivity.    
-      + Admitted.     
-  
-      
-      
-      
-      
-      
-      
-      Lemma seq_quantified_eq_seq_plusone_right:
-        forall r g m n,
-          def_groups r = [] ->
-          unamb [Areg r] ->
-          Sequence (Quantified g 1 (NoI.N 0) r) (Quantified g m n r) ≅[rer][backward] (Quantified g (S m) n r).
-      Proof.
-        intros r g m n GROUPEMPT UNAMBR.
+      (* Epsilon r{1, 0} *)
+      apply (sequence_epsilon_left_equiv rer ).
+    + (* Inductive case: (S n)*)
+      (* r{1, delta1 + 1}*)
+      rewrite quantified_S_equiv_forward; auto.
+      (* r{1, 0} r{0, delta1 + 1}*)
+      destruct g; simpl. (*case greedy and non greedy*)
+      - (* Greedy case *)
+        etransitivity. { eapply seq_equiv. apply quantified_one_equiv. 2: apply greedy_quantifier_steps_opt. all: auto.}
+        (* r (r{1, delta1} | )  *)
+        rewrite (unamb_distribute_left _ _ _ GROUPEMPT UNAMBR forward).
+        (* (r{1, delta1} r | r *)
+        etransitivity. {
+          apply disj_equiv_dir. apply seq_equiv_dir.
+          rewrite <-  (quantified_one_equiv _ _ GROUPEMPT true forward). reflexivity.
+          apply IHn. apply sequence_epsilon_right_equiv.
+        }
+        (* r{1, 0} (r{0, delta1} r{1, 0}) | r *)
+        etransitivity. {
+          apply disj_equiv_dir. rewrite sequence_assoc_equiv_dir. apply seq_equiv_dir.
+          rewrite <- quantified_S_equiv_forward; auto. reflexivity.
+          apply quantified_one_equiv; auto. 
+          rewrite <- (sequence_epsilon_left_equiv _ _ forward). reflexivity.
+        }
+        (* ( r{1, delta1}) r | r *)
+        rewrite <- (unamb_distribute_right _ _ _ GROUPEMPT UNAMBR forward).
+        (* (r{1, delta1} | ) r *)
+        etransitivity. { eapply seq_equiv. 2: rewrite <- quantified_one_equiv. rewrite <- greedy_quantifier_steps_opt. all: auto. all: reflexivity. }
+        (* r{0, delta1 + 1} r{1, 0} *)
+        reflexivity.
+      - (* Nongreedy case *)
+        etransitivity. { eapply seq_equiv. 2:apply non_greedy_quantifier_steps_opt. apply quantified_one_equiv. all: auto.}
+        (* r (| r{1, delta1}) *)
+        rewrite (unamb_distribute_left _ _ _ GROUPEMPT UNAMBR forward).
+        (* r | r r{1, delta1} *)
+        etransitivity. {
+          apply disj_equiv_dir. apply sequence_epsilon_right_equiv.
+          apply seq_equiv_dir.
+          rewrite <-  (quantified_one_equiv _ _ GROUPEMPT false forward). reflexivity.
+          apply IHn. 
+        }
+        (* r | r{1, 0} (r{0, delta1} r{1, 0}) *)
+        etransitivity. {
+          apply disj_equiv_dir. rewrite <- (sequence_epsilon_left_equiv _ _ forward). reflexivity.
+          rewrite  sequence_assoc_equiv_dir. apply seq_equiv_dir.
+          rewrite <- quantified_S_equiv_forward; auto. reflexivity.
+          apply quantified_one_equiv; auto. 
+        }
+        (* r | r{1, delta1} r *)
+        rewrite <- (unamb_distribute_right _ _ _ GROUPEMPT UNAMBR forward).
+        (* ( | r{1, delta1}) r  *)
+        etransitivity. {
+          eapply seq_equiv. rewrite <- non_greedy_quantifier_steps_opt.
+          reflexivity. auto.
+          rewrite <- quantified_one_equiv. all: auto.  all: reflexivity. }
+        (* r{0, delta1 + 1} r{1, 0} *)
+        reflexivity.
+        + Admitted. (* MISSING: proof for infinity*)
 
-      Admitted.     
 
-      (*TODO: inspire from previous proof to see how it works.*)
+    
 
-      
-
-
-      Lemma seq_quantified_invertible:
+  Lemma unamb_quantifier_invertible:
         forall r g m n,
           def_groups r = [] ->
           unamb [Areg r] ->
           Sequence (Quantified g 1 (NoI.N 0) r) (Quantified g m n r) ≅[rer] Sequence (Quantified g m n r) (Quantified g 1 (NoI.N 0) r).
       Proof.
-        intros r g m n GROUPEMPT UNAMBR dir.
-        destruct dir.
-        + rewrite <- (quantified_S_equiv_forward) .
-          rewrite seq_quantified_eq_seq_plusone_left.
-          reflexivity. all: assumption.
-        + rewrite seq_quantified_eq_seq_plusone_right.
-          rewrite <- (quantified_S_equiv_backward).
-          reflexivity. all: assumption.
+        intros r g m n GROUPEMPT UNAMBR.
+        rewrite <- unamb_quantifier_pops_left.
+        rewrite unamb_quantifier_pops_right.
+        reflexivity.
+        all: assumption.
       Qed.
 
 
 
-      (* Intermediate steps: induction on Delta1 min2 that help with the final statement*)
-      Theorem unamb_equivalence_chain_basecase:
-        forall r delta1 delta2 g,
-          (* if the tree corresponding to the regex is unambigous *)
-          unamb [Areg r] ->
-          def_groups r = [] ->
-          (* r{min1, Delta1, g } *)
-          (Sequence (Quantified g 0 delta1 r)
-             (* r{min2, Delta2, g } *)
-             (Quantified g 0 delta2 r))
-            ≅[rer] (Quantified g 0 (delta1 + delta2)%NoI r).
-      Proof.
-        intros reg delta1 delta2 g UNAMBR UNDEFGROUPS.
-        destruct g. apply atmost_atmost_equiv. assumption.
-        destruct delta1.
-        induction n.
-        + etransitivity. {
-            apply seq_equiv. apply quantified_zero_equiv. assumption.
-            reflexivity.
-          }
-          rewrite sequence_epsilon_left_equiv. destruct delta2; simpl; reflexivity.
-        + etransitivity. {
-            apply seq_equiv. apply non_greedy_quantifier_steps_opt. assumption. reflexivity. 
-          }
-      Admitted.
-      (* TODO: do a proof like in the last part where we show there are duplicates in the lists*)
-            
-          
-          
-
-
-          
-      Theorem unamb_equivalence_chain_I1:
-        forall r min2 delta1 delta2 g,
-          def_groups r = [] -> 
-          (* if the tree corresponding to the regex is unambigous *)
-          unamb [Areg r] ->
-          (* r{min1, Delta1, g } *)
-          (Sequence (Quantified g 0 delta1 r)
-             (* r{min2, Delta2, g } *)
-             (Quantified g min2 delta2 r))
-            ≅[rer] (Quantified g min2 (delta1 + delta2)%NoI r).
-      Proof.
-        intros reg min2 delta1 delta2 g GROUPEMPT UNAMBR dir.
-        induction min2.
-        - apply unamb_equivalence_chain_basecase; assumption.
-        - destruct dir.
-          + etransitivity. {
-              apply seq_equiv_dir. reflexivity. apply quantified_S_equiv_forward; assumption. 
-            }
-            etransitivity. {rewrite sequence_assoc_equiv_dir. apply seq_equiv_dir. pose proof (seq_quantified_invertible reg g 0 delta1 GROUPEMPT UNAMBR forward) as dd. rewrite <- dd. all: reflexivity.
-            }rewrite <- sequence_assoc_equiv_dir. 
-            symmetry.
-            etransitivity. {
-              apply quantified_S_equiv_forward. assumption.
-            }
-            apply seq_equiv_dir. reflexivity.
-            symmetry. assumption.
-          + etransitivity. {
-              apply seq_equiv_dir. reflexivity. apply quantified_S_equiv_backward; assumption. 
-            } rewrite  sequence_assoc_equiv_dir.
-            symmetry. etransitivity. {
-              apply quantified_S_equiv_backward. assumption.
-            }
-            apply seq_equiv_dir. symmetry; assumption.
-            reflexivity.
-      Qed.
-
-      
-   *)
-
-
-
-
-  Theorem unamb_quantifier_pops_left:
-    
-
-  
-
-
+  (* Base case: we do an induction on Delta1. We already know that the case for the greedy Quantified is true, so here *)
   Theorem unamb_equivalence_chain_basecase:
         forall r delta1 delta2 g,
           (* if the tree corresponding to the regex is unambigous *)
           unamb [Areg r] ->
           def_groups r = [] ->
-          (* r{min1, Delta1, g } *)
+          (* r{0, Delta1, g } *)
           (Sequence (Quantified g 0 delta1 r)
-             (* r{min2, Delta2, g } *)
+             (* r{0, Delta2, g } *)
              (Quantified g 0 delta2 r))
             ≅[rer] (Quantified g 0 (delta1 + delta2)%NoI r).
       Proof.
-        Admitted.
+        intros reg delta1 delta2 g UNAMBR UNDEFGROUPS.
+        destruct g. {apply atmost_atmost_equiv. assumption.} (* The greedy case has already been proven*)
+        destruct delta1. (*Three cases: 0, (S n) and infinity*)
+        induction n.
+        + (* Base case: delta1 = 0 *)
+          etransitivity. {
+            apply seq_equiv. apply quantified_zero_equiv. assumption.
+            reflexivity.
+          }
+          rewrite sequence_epsilon_left_equiv.
+          destruct delta2; reflexivity.
+        + (* Inductive case: (S n)*)
+      Admitted.
+      (*TODO: do both inductive and infinite case*)
+          
+          
 
-
-
-
-
-  Theorem unamb_equivalence_chain_I1:
+  (* Intermediate step: r{0, delta1}r{min2, delta2} = r{min2, delta1 + delta2}*)
+      Theorem unamb_equivalence_chain_I1:
         forall r min2 delta1 delta2 g,
           def_groups r = [] -> 
           (* if the tree corresponding to the regex is unambigous *)
           unamb [Areg r] ->
-          (* r{min1, Delta1, g } *)
+          (* r{0, Delta1, g } *)
           (Sequence (Quantified g 0 delta1 r)
              (* r{min2, Delta2, g } *)
              (Quantified g min2 delta2 r))
             ≅[rer] (Quantified g min2 (delta1 + delta2)%NoI r).
-  Proof.
-    intros r min2 delta1 delta2 g GROUPEMPT UNAMBR.
-    induction min2. apply unamb_equivalence_chain_basecase; auto.
-    split.simpl.rewrite GROUPEMPT. auto.
-    intros inp gm t1 t2 TREE1 TREE2.
-    Admitted.
+      Proof.
+        intros reg min2 delta1 delta2 g GROUPEMPT UNAMBR.
+        induction min2.
+        (* Base case: done in previous proof*)
+        - apply unamb_equivalence_chain_basecase; assumption.
+        (*Inductive case: if is true for min2 then it is true for min2 + 1*)
+        - (*r{0, delta1} r{min2+1, delta2}*)
+          etransitivity. {      
+            apply seq_equiv. reflexivity.
+            apply unamb_quantifier_pops_right; assumption.
+          }
+          (* r{0, delta1} (r{min2, delta2} r{1,0})*)
+          rewrite sequence_assoc_equiv.
+          (* (r{0, delta1} r{min2, delta2}) r{1,0}*)
+          etransitivity. {
+            apply seq_equiv. apply IHmin2. reflexivity.
+          }
+          (* (r{min2, delta1 + delta2})  r{1,0} using IH*)
+          rewrite <- unamb_quantifier_pops_right; try assumption.
+          (* r{min2 + 1, delta1 + delta2} *)
+          reflexivity.
+      Qed.
 
-
-
-
-
-
-  
+      
     (* Final statement: if a tree is unambigous then the two chains correspond *)
     Theorem unamb_equivalence_chain:
         forall r min1 min2 delta1 delta2 g,
@@ -1090,41 +1134,30 @@ Section UnAmbiguity.
              (Quantified g min2 delta2 r))
             ≅[rer] (Quantified g (min1 + min2) (delta1 + delta2)%NoI r).
       Proof.
-        intros r min1 min2 Delta1 Delta2 d GROUPEMPT UNAMBR dir.
+        intros r min1 min2 Delta1 Delta2 d GROUPEMPT UNAMBR.
         induction min1.
-        - apply unamb_equivalence_chain_I1; assumption. 
-        - destruct dir.
-          + etransitivity. {      
-              apply seq_equiv_dir. 2: reflexivity.
-              apply (quantified_S_equiv_forward); assumption.
-            }
-            etransitivity. { rewrite <- sequence_assoc_equiv_dir; auto. reflexivity.}
-            symmetry.
-            etransitivity. {
-              apply (quantified_S_equiv_forward). assumption.
-            }
-            apply seq_equiv_dir. reflexivity.
-            symmetry. auto.
-          + etransitivity. {      
-              apply seq_equiv_dir. 2: reflexivity.
-              apply (quantified_S_equiv_backward); assumption.
-            }
-            rewrite <- sequence_assoc_equiv_dir.
-            etransitivity. {
-              apply seq_equiv_dir. reflexivity. pose proof (seq_quantified_invertible r d min2 Delta2 GROUPEMPT UNAMBR backward) as dd. rewrite dd. reflexivity.
-            }
-            rewrite -> sequence_assoc_equiv_dir.
-            symmetry. etransitivity. {
-              apply (quantified_S_equiv_backward); assumption.
-            }
-            apply seq_equiv_dir. 2: reflexivity.
-            symmetry; auto.     
+        (* Base case: done in an adjacent proof*)
+        - apply unamb_equivalence_chain_I1; assumption.
+        (*Inductive case: if is true for min1 then it is true for min1 + 1*)
+        - (*r{min1+1, delta1} r{min2, delta2}*)
+          etransitivity. {      
+            apply seq_equiv. 2: reflexivity.
+            apply unamb_quantifier_pops_left; assumption.
+          }
+          (* (r{1,0} r{min1, delta1}) r{min2, delta2}*)
+          rewrite <- sequence_assoc_equiv.
+          (* r{1,0} (r{min1, delta1} r{min2, delta2})*)
+          etransitivity. {
+            apply seq_equiv. reflexivity.
+            apply IHmin1.
+          }
+          (* r{1,0} (r{min1 + min2, delta1 + delta2}) using IH*)
+          rewrite <- unamb_quantifier_pops_left; try assumption.
+          (* r{min1 + min2 + 1, delta1 + delta2} *)
+          reflexivity.
       Qed.
 
-
-
       
-         
       (* Same as above only this time in respect to the function *)
       Corollary unamb_fun_equivalence_chain:
         forall r min1 min2 delta1 delta2 g,
@@ -1142,6 +1175,6 @@ Section UnAmbiguity.
         apply unamb_equivalence_chain; try apply naive_unambiguity; auto.
       Qed.
       
-    
-
+      
+      
 End UnAmbiguity.
