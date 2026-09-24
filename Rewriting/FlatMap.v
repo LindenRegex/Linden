@@ -199,3 +199,14 @@ Proof.
         intros x0 H. simpl in H. inversion H.
       * now inversion PL.
 Qed.
+
+Lemma FlatMap_one_leaf:
+    forall X Y (x:X) f (y:list Y),
+      FlatMap [x] f y ->
+      f x y.
+Proof.
+  intros X Y x f y H. inversion H; inversion FM; subst.
+  rewrite app_nil_r. auto.
+Qed.
+
+

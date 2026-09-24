@@ -1,4 +1,5 @@
 From Linden Require Import ProofSetup.
+Import FlatMap.
 
 (** * A few examples of regex rewrites *)
 
@@ -186,69 +187,6 @@ Section Examples.
     specialize (EQSY _ _ _ _ ISTREE2 ISTREE3). auto.
   Qed.
 
- 
-
-
-
-  Lemma check_not_stops_quantifier n:
-    forall inp gm r1 dir t1 t2 g,
-    is_tree rer [Areg r1; Acheck inp; Areg (Quantified g 0 (NoI.N n) r1)] inp gm dir t1 ->
-    is_tree rer [Areg r1; Areg (Quantified g 0 (NoI.N n) r1)] inp gm dir t2 ->
-    leaves_equiv [] (tree_leaves t1 gm inp dir) (tree_leaves t2 gm inp dir).
-  Proof.
-    intros inp gm r1 dir t1 t2 greedy TREE1 TREE2.
-    induction n.
-    Admitted.
-
-    (* you can transform a quantifier into a easier one. *)
-  Theorem greedy_quantifier_steps_opt:
-    forall r n,
-      def_groups r = [] ->
-      (Quantified true 0 (S n) r) ≅[rer] (Disjunction (Quantified true 1 n r) Epsilon).
-  Proof.
-    intros r n GROUPEMPT.
-    split. simpl. rewrite GROUPEMPT. auto.
-    intros inp gm t1 t2 TREE1 TREE2.
-    inversion TREE1; inversion TREE2; inversion ISTREE0; inversion ISTREE2; subst.
-    clear TREE1 TREE2 ISTREE0 ISTREE2. 
-    rename titer into t11. rename tskip into t12. rename t3 into t22. rename titer0 into t21.
-    rename ISTREE1 into TREE11. rename ISTREE into TREE22. rename ISTREE3 into TREE21. rename SKIP into TREE12.
-    unfold tree_equiv_tr_dir. simpl.
-    destruct plus; inversion H1. clear H1.
-    apply leaves_equiv_app. 
-    2:{ clear  TREE11 TREE21. revert inp gm t12 t22 TREE12 TREE22.
-       change (actions_equiv_dir rer dir [] []).
-       reflexivity.
-    } clear t12 t22 TREE12 TREE22. subst.
-    remember (GroupMap.reset (def_groups r) gm) as gm2.
-    eapply (check_not_stops_quantifier n inp gm2 r); eauto.
-  Qed.
-    
-  
-  Theorem non_greedy_quantifier_steps_opt:
-    forall r n,
-      def_groups r = [] ->
-      (Quantified false 0 (S n) r) ≅[rer] (Disjunction Epsilon (Quantified false 1 n r)).
-  Proof.
-    intros r n GROUPEMPT.
-    split. simpl. rewrite GROUPEMPT. auto.
-    intros inp gm t1 t2 TREE1 TREE2.
-    inversion TREE1; inversion TREE2; inversion ISTREE0; inversion ISTREE2; subst.
-    clear TREE1 TREE2 ISTREE0 ISTREE2. 
-    rename titer into t11. rename tskip into t12. rename t0 into t22. rename titer0 into t21.
-    rename ISTREE1 into TREE11. rename ISTREE into TREE22. rename ISTREE3 into TREE21. rename SKIP into TREE12.
-    unfold tree_equiv_tr_dir. simpl.
-    destruct plus; inversion H1. clear H1.
-    apply leaves_equiv_app. 
-    + clear  TREE11 TREE21. revert inp gm t12 t22 TREE12 TREE22.
-      change (actions_equiv_dir rer dir [] []).
-      reflexivity.
-    + subst. remember (GroupMap.reset (def_groups r) gm) as gm2. 
-      simpl in *. eapply (check_not_stops_quantifier n inp gm2 r); eauto.
-  Qed.
-      
-    
-  
 End Examples.
 
 
