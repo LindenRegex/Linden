@@ -924,60 +924,9 @@ Lemma concat_regs_ret_empt_group:
       assumption. inversion Inlp.
   Qed.
 
-  Lemma concat_regs_ret_empt_input:
-        forall r1 r2 inp1 inp2 inp3 gm1 gm2 dir t,
-          (forall  (gm1 gm2 : group_map) 
-             (dir : Direction) (t : tree),
-              is_tree rer [Areg r1] inp1 gm1 dir t ->
-              ~ StrictSuffix.strict_suffix inp2 inp1 dir ->
-              In (inp2, gm2) (tree_leaves t gm1 inp1 dir) -> inp1 = inp2) ->
-          (forall (gm1 gm2 : group_map) 
-             (dir : Direction) (t : tree),
-              is_tree rer [Areg r2] inp2 gm1 dir t ->
-              ~ StrictSuffix.strict_suffix inp3 inp2 dir ->
-              In (inp3, gm2) (tree_leaves t gm1 inp2 dir) 
-              -> inp2 = inp3) ->
-          is_tree rer [Areg r1; Areg r2] inp1 gm1 dir t ->
-          ~ StrictSuffix.strict_suffix inp3 inp1 dir -> 
-          In (inp3, gm2) (tree_leaves t gm1 inp1 dir) ->
-          inp1 = inp3.
-  Proof.
-    intros r1 r2 inp1 inp2 inp3 gm1 gm2 dir t IH1 IH2 TREE1 nnsuffix TLEAVES1.
-     specialize (is_tree_productivity rer [Areg r1] inp1 gm1 dir) as [t2 TREE2].
-      rewrite app_cons in TREE1. eapply leaves_concat with (act1:= [Areg r1]) in TREE1; eauto.
-      pose proof (act_from_leaf_determ rer [Areg r2] dir) as R2determ.
-      pose proof (In_FlatMap _  _  _ _  R2determ TREE1 TLEAVES1) as [lf [l0 [Inlf [act Inlp]]]].
-      destruct lf as [inp4 gm4].
-      etransitivity. eapply IH1; eauto.
-      Admitted.
 
-     
-  Lemma input_does_not_back:
-    forall r t gm gm2 inp1 inp2 dir,
-      is_tree rer [Areg r] inp1 gm dir t ->
-      In (inp2, gm2) (tree_leaves t gm inp1 dir) ->
-      ~ StrictSuffix.strict_suffix inp2 inp1 dir ->
-      inp1 = inp2.
-  Proof.
-    intros r. 
-    induction r; intros t gm1 gm2 inp1 inp2 dir  TREE TLEAVES nnsuffix; inversion TREE; subst; try discriminate; auto.
-    + inversion ISTREE; subst. inversion TLEAVES. inversion H; auto. contradiction.
-    + inversion TREECONT; subst. inversion TLEAVES; try contradiction.
-      inversion H; subst. remember (advance_input inp1 dir) as l.
-      specialize (symmetry Heql) as s. unfold advance_input' in nnsuffix.
-      destruct l. pose proof (StrictSuffix.ss_advance _ _ _ s). rewrite s in nnsuffix. contradiction.
-      unfold advance_input'. rewrite <- Heql. reflexivity.
-    + inversion TREE; subst; inversion TLEAVES.
-    + simpl in TLEAVES. specialize (in_app_or _ _ _ TLEAVES) as [ inT1 | inT2 ]. eapply IHr1; eauto. eapply IHr2; eauto.
-    + destruct dir; simpl in CONT.
-      eapply (concat_regs_ret_empt_input r1 r2 inp1 _  inp2 gm1 gm2 forward t); try assumption. intros. eapply IHr1; eauto. intros. eapply IHr2; eauto.
-      eapply (concat_regs_ret_empt_input r2 r1 inp1 _  inp2 gm1 gm2 backward t); try assumption. intros. eapply IHr2; eauto. intros. eapply IHr1; eauto.
-    + Admitted.
-      
-      
-    
 
-    
+
   Lemma undefgroup_is_imm:
     forall r inp inp2 gm gm2 dir t,
       def_groups r = [] ->
@@ -987,6 +936,32 @@ Lemma concat_regs_ret_empt_group:
   Proof.
     intros r.
     induction r; try discriminate; intros  inp inp2 gm gm2 dir t GROUPEMPT TREE1 TLEAVES; auto.
+    all: repeat match goal with
+           | [H: is_tree _ [Areg (Character ?x)] _ _ _ _ |- _ ] => (inversion H; subst; clear H)
+           | [H: is_tree _ [Areg Epsilon ] _ _ _ _ |- _ ] => (inversion H; subst; clear H)
+           | [H: is_tree _ [Areg (Disjunction _ _) ] _ _ _ _ |- _ ] => (inversion H; subst; clear H)
+           | [H: is_tree _ [Areg (Sequence _ _) ] _ _ ?dir _ |- _ ] => (inversion H; subst; clear H; destruct dir; simpl in CONT)
+           | [H: is_tree _ [Areg ?r1; Areg ?r2] ?inp ?gm ?dir ?t, H1: In (?inp2, ?gm2) _ |- _ ] => simpl in H; eapply (concat_regs_ret_empt_group); eauto
+           | [H: is_tree _ [] _ _ _ _ |- _ ] => inversion H; subst; clear H
+           | [H: In (_, _) (tree_leaves Match _ _ _) |- _ ] => inversion H; subst; clear H
+           | [H: In (_, _) (tree_leaves (Read _ Match) _ _ _) |- _ ] => inversion H; subst; clear H
+           | [H: In (_, _) (tree_leaves Mismatch _ _ _) |- _ ] => inversion H; subst; clear H
+           | [H: In (_, _) (tree_leaves (Choice _ _) _ _ _) |- _ ] => simpl in H
+           | [H: In (_, _) (?a ++ ?b) |- _ ] => specialize (in_app_or _ _ _ TLEAVES) as [ inT1 | inT2 ]; clear H
+           | [H: In (_, _) ([]) |- _ ] => contradiction
+           | [H: (?x1, ?y1) = (?x2, ?y2) |- _ ] => inversion H; clear H
+           | [ |- ?x = ?x] => reflexivity
+           | [H: def_groups (Disjunction _ _) = [] |- _ ] => simpl in H; specialize (app_eq_nil _ _ H) as [r1Nat r2Nat]; clear H
+           | [H: def_groups (Sequence _ _) = [] |- _ ] => simpl in H; specialize (app_eq_nil _ _ H) as [r1Nat r2Nat]; clear H                   
+           | [H: forall _ _ _ _ _ _, def_groups _ = [] -> is_tree _ [_] _ _ _ _ -> In _ (tree_leaves _ _ _ _) -> _ = _, H1: def_groups _ = [], H2: is_tree _ [_] _ _ _ _, H3: In _ (tree_leaves _ _ _ _) |- _ = _ ] => apply (H _ _ _ _ _ _ H1 H2 H3)
+           | [IHr: forall _ _ _ _ _ _, _ -> is_tree rer [Areg ?r1] _ _ _ _ -> _ -> _ = _ |- forall _ _ _ _ _ _, is_tree rer [Areg ?r1] _ _ _ _ -> _ -> _ = _] => intros p1 p2 p3 p5 p6 p7 p8 p9; eapply IHr; eauto 
+           | [H: ?A |- ?A] => assumption
+           | [H: is_tree _ [Areg (Quantified _ _ (NoI.N ?n) _ )] _ _ _ _ |- _ ] => induction n; inversion H; clear H
+           | [H: is_tree _ [Areg (Quantified _ _ _ _)] _ _ _ _ |- _ ] => destruct greedy; induction min; destruct delta
+           | [H: (match ?d with
+                  | _ => _ | _ => _ end )  = ?e |- _ ]  => destruct d
+           end.
+    intros p1 p2 p3 p5 p6 p7 p8 p9 
     (*C1*)
     inversion TREE1; inversion ISTREE; subst. 
     simpl in TLEAVES. destruct TLEAVES. inversion H; auto. contradiction.
@@ -1043,7 +1018,7 @@ Lemma concat_regs_ret_empt_group:
     }
     simpl in GROUPEMPT. revert t dir inp inp2 gm gm2 TREE1 TLEAVES.
     induction min.
-    2:{
+    2: {
       intros t dir inp inp2 gm gm2 TREE1 TLEAVES.
       inversion TREE1; subst. rewrite GROUPEMPT in *. simpl in *.
       apply (concat_regs_ret_empt_group r (Quantified greedy min delta r) inp inp2 gm gm2 dir titer); try assumption.
@@ -1068,12 +1043,74 @@ Lemma concat_regs_ret_empt_group:
       intros; eapply IHr; eauto.
       intros; eapply IHn; eauto.
     - intros. inversion TREE1; subst. destruct plus; inversion H1.
-      rewrite GROUPEMPT in TLEAVES, TREE1, ISTREE1.
-      destruct greedy; simpl in *; specialize (in_app_or _ _ _ TLEAVES) as [ inT1 | inT2 ].
-      Admitted.
+      destruct greedy. Search Quantified.
+      rewrite GROUPEMPT in ISTREE1, TLEAVES; simpl in *.
+      specialize (is_tree_productivity rer [Areg r] inp gm dir) as [t2 TREE2].
+      inversion SKIP; subst. destruct inp. induction next.
+      rewrite app_cons in ISTREE1. eapply leaves_concat with (act1:= [Areg r]) in ISTREE1; eauto.
+      pose proof (act_from_leaf_determ rer [Acheck (Input [] pref); Areg (Quantified true 0 +∞ r)] dir) as R2determ.
+      specialize (in_app_or _ _ _ TLEAVES) as [ inT1 | inT2 ].
+      
+
       
 
 
+  Lemma concat_regs_ret_empt_input:
+        forall r1 r2 inp1 inp3 gm1 gm2 dir t,
+          (forall (inp2: input) (gm1 gm2 : group_map) 
+             (dir : Direction) (t : tree),
+              is_tree rer [Areg r1] inp1 gm1 dir t ->
+              ~ StrictSuffix.strict_suffix inp2 inp1 dir ->
+              In (inp2, gm2) (tree_leaves t gm1 inp1 dir) -> inp1 = inp2) ->
+          (forall (inp2: input) (gm1 gm2 : group_map) 
+             (dir : Direction) (t : tree),
+              is_tree rer [Areg r2] inp2 gm1 dir t ->
+              ~ StrictSuffix.strict_suffix inp3 inp2 dir ->
+              In (inp3, gm2) (tree_leaves t gm1 inp2 dir) 
+              -> inp2 = inp3) ->
+          is_tree rer [Areg r1; Areg r2] inp1 gm1 dir t ->
+          ~ StrictSuffix.strict_suffix inp3 inp1 dir ->
+          In (inp3, gm2) (tree_leaves t gm1 inp1 dir) ->
+          inp1 = inp3.
+  Proof.
+    intros r1 r2 inp1 inp3 gm1 gm2 dir t IH1 IH2 TREE1  nnsuffix2 TLEAVES1.
+     specialize (is_tree_productivity rer [Areg r1] inp1 gm1 dir) as [t2 TREE2].
+      rewrite app_cons in TREE1. eapply leaves_concat with (act1:= [Areg r1]) in TREE1; eauto.
+      pose proof (act_from_leaf_determ rer [Areg r2] dir) as R2determ.
+      pose proof (In_FlatMap _  _  _ _  R2determ TREE1 TLEAVES1) as [lf [l0 [Inlf [act Inlp]]]].
+      destruct lf as [inp4 gm4].
+      Admitted.
+      
+      
+
+     
+  Lemma input_does_not_back:
+    forall r t gm gm2 inp1 inp2 dir,
+      is_tree rer [Areg r] inp1 gm dir t ->
+      In (inp2, gm2) (tree_leaves t gm inp1 dir) ->
+      ~ StrictSuffix.strict_suffix inp2 inp1 dir ->
+      inp1 = inp2.
+  Proof.
+    intros r. 
+    induction r; intros t gm1 gm2 inp1 inp2 dir  TREE TLEAVES nnsuffix; inversion TREE; subst; try discriminate; auto.
+    + inversion ISTREE; subst. inversion TLEAVES. inversion H; auto. contradiction.
+    + inversion TREECONT; subst. inversion TLEAVES; try contradiction.
+      inversion H; subst. remember (advance_input inp1 dir) as l.
+      specialize (symmetry Heql) as s. unfold advance_input' in nnsuffix.
+      destruct l. pose proof (StrictSuffix.ss_advance _ _ _ s). rewrite s in nnsuffix. contradiction.
+      unfold advance_input'. rewrite <- Heql. reflexivity.
+    + inversion TREE; subst; inversion TLEAVES.
+    + simpl in TLEAVES. specialize (in_app_or _ _ _ TLEAVES) as [ inT1 | inT2 ]. eapply IHr1; eauto. eapply IHr2; eauto.
+    + destruct dir; simpl in CONT.
+      eapply (concat_regs_ret_empt_input r1 r2 inp1 _  inp2 gm1 gm2 forward t); try assumption. intros. eapply IHr1; eauto. intros. eapply IHr2; eauto.
+      eapply (concat_regs_ret_empt_input r2 r1 inp1 _  inp2 gm1 gm2 backward t); try assumption. intros. eapply IHr2; eauto. intros. eapply IHr1; eauto.
+    + Admitted.
+      
+      
+    
+
+    
+  
     
   (* after check this only works with an unamb case *)
   Lemma check_not_stops_quantifier n:
