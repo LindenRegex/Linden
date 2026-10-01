@@ -187,6 +187,9 @@ Section Examples.
     specialize (EQSY _ _ _ _ ISTREE2 ISTREE3). auto.
   Qed.
 
+  
+
+
 End Examples.
 
 

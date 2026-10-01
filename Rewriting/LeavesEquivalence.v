@@ -358,16 +358,6 @@ Section Lemmas.
       intros x H. apply SUB. simpl. rewrite H.
       rewrite Bool.orb_true_r. auto.
   Qed.
-
-  Lemma leaves_equiv_tail:
-    forall l1 l2 seen,
-    leaves_equiv [] (l1 ++ seen) (l2 ++ seen) ->
-    leaves_equiv seen l1 l2.
-  Proof.
-    intros l1 l2 seen seenEnd.
-    induction l1.
-    simpl in seenEnd. leaves_equiv_step.
-
     
 End Lemmas.
 

@@ -1079,74 +1079,17 @@ Lemma concat_regs_ret_empt_group_check:
       contradiction.
   Qed.
 
-  Lemma input_only_forward:
-    forall r t gm gm2 inp1 inp2 dir,
-      is_tree rer [Areg r] inp1 gm dir t ->
-      In (inp2, gm2) (tree_leaves t gm inp1 dir) ->
-      inp1 = inp2 \/ StrictSuffix.strict_suffix inp2 inp1 dir.
-  Proof.
-    intros r.
-    induction r; intros t gm1 gm2 inp1 inp2 dir  TREE TLEAVES ; inversion TREE; subst; try discriminate; auto.
-    + inversion ISTREE; subst. inversion TLEAVES. inversion H; auto. contradiction.
-    + inversion TREECONT; subst. inversion TLEAVES; try contradiction.
-      remember (advance_input inp1 dir) as ai.
-      unfold advance_input' in H. destruct ai. Search (advance_input). right. apply StrictSuffix.ss_advance. rewrite <- Heqai in H. rewrite <- Heqai. inversion H; subst; reflexivity.
-      left. rewrite <- Heqai in H. inversion H; subst; reflexivity.
-    + inversion TREE; subst; inversion TLEAVES.
-    + simpl in TLEAVES. specialize (in_app_or _ _ _ TLEAVES) as [ inT1 | inT2 ]. eapply IHr1; eauto. eapply IHr2; eauto.
-    + destruct dir; simpl in CONT.
-    - specialize (is_tree_productivity rer [Areg r1] inp1 gm1 forward) as [t2 TREE2].
-      rewrite app_cons in CONT. eapply leaves_concat with (act1:= [Areg r1]) in CONT; eauto.
-      pose proof (act_from_leaf_determ rer [Areg r2] forward) as R2determ.
-      pose proof (In_FlatMap _  _  _ _  R2determ CONT TLEAVES) as [lf [l0 [Inlf [act Inlp]]]].
-      destruct lf as [inp3 gm3]. inversion act; subst. simpl in *.
-      assert (inp1 = inp3 \/ StrictSuffix.strict_suffix inp3 inp1 forward).
-      eapply IHr1; eauto.
-      assert (inp3 = inp2 \/ StrictSuffix.strict_suffix inp2 inp3 forward).
-      eapply IHr2; eauto.
-      destruct H, H0; subst.
-      left; reflexivity.
-      right. assumption.
-      right. assumption.
-      right; eapply StrictSuffix.strict_suffix_trans; eauto.
-    - specialize (is_tree_productivity rer [Areg r2] inp1 gm1 backward) as [t2 TREE2].
-      rewrite app_cons in CONT. eapply leaves_concat with (act1:= [Areg r2]) in CONT; eauto.
-      pose proof (act_from_leaf_determ rer [Areg r1] backward) as R2determ.
-      pose proof (In_FlatMap _  _  _ _  R2determ CONT TLEAVES) as [lf [l0 [Inlf [act Inlp]]]].
-      destruct lf as [inp3 gm3]. inversion act; subst. simpl in *.
-      assert (inp1 = inp3 \/ StrictSuffix.strict_suffix inp3 inp1 backward).
-      eapply IHr2; eauto.
-      assert (inp3 = inp2 \/ StrictSuffix.strict_suffix inp2 inp3 backward).
-      eapply IHr1; eauto.
-      destruct H, H0; subst.
-      left; reflexivity.
-      right. assumption.
-      right. assumption.
-      right; eapply StrictSuffix.strict_suffix_trans; eauto.
-      + Admitted.
         
-  Lemma input_does_not_back:
-    forall r t gm gm2 inp1 inp2 dir,
-      is_tree rer [Areg r] inp1 gm dir t ->
-      In (inp2, gm2) (tree_leaves t gm inp1 dir) ->
-      ~ StrictSuffix.strict_suffix inp2 inp1 dir ->
-      inp1 = inp2.
-  Proof.
-    intros.
-    destruct (input_only_forward _ _ _ _ _ _ _ H H0).
-    assumption. contradiction.
-  Qed.
-
 
  
-  Lemma input_only_forward_temp:
-    forall l t gm gm2 inp1 inp2 dir,
+  Lemma input_only_forward:
+    forall l t gm gm1 gm2 inp1 inp2 dir,
       is_tree rer l inp1 gm dir t ->
-      In (inp2, gm2) (tree_leaves t gm inp1 dir) ->
+      In (inp2, gm2) (tree_leaves t gm1 inp1 dir) ->
       inp1 = inp2 \/ StrictSuffix.strict_suffix inp2 inp1 dir.
   Proof.
-    intros acts.
-    induction acts; intros t g1 g2 i1 i2 d T1 I1.
+    intros acts. intros t gm gm1 gm2 inp1 inp2 d. revert t gm gm1 gm2 inp1 inp2.
+    induction acts; intros t g1 g3 g2 i1 i2 T1 I1.
     + inversion T1; subst. simpl in I1. inversion  I1. inversion H. auto. contradiction.
     + destruct a.
       2: {
@@ -1158,8 +1101,8 @@ Lemma concat_regs_ret_empt_group_check:
         inversion T1; subst. simpl in I1.
         eapply IHacts with (inp1 := i1) (inp2 := i2); eauto.
       }
-      revert acts IHacts t g1 g2 i1 i2 d T1 I1.
-      induction r; intros acts IHacts t g1 g2 i1 i2 d T1 I1.
+      revert acts t g1 g2 g3 i1 i2 d T1 I1  IHacts.
+      induction r; intros acts  t g1 g2 g3 i1 i2 d T1 I1 IHacts.
       1: inversion T1; eapply IHacts; eauto.
       1: {
         inversion T1; subst; simpl in I1.
@@ -1192,7 +1135,7 @@ Lemma concat_regs_ret_empt_group_check:
       }
       3: {
         inversion T1; subst; clear T1.
-        simpl in I1. Search read_backref. apply read_backref_success_advance in READ_BACKREF. rewrite <- READ_BACKREF in I1.
+        simpl in I1.  apply read_backref_success_advance in READ_BACKREF. rewrite <- READ_BACKREF in I1.
         assert (nextinp = i2 \/ StrictSuffix.strict_suffix i2 nextinp d) as [c1 | c2]. eapply IHacts; eauto.
         apply advance_input_n_suffix in READ_BACKREF as [p1 | p2].
         all: subst. left; reflexivity.
@@ -1204,18 +1147,97 @@ Lemma concat_regs_ret_empt_group_check:
         inversion I1.
       }
       2: {
-        inversion T1; subst.
-        unfold lk_result in RES_LK.
-        2: { inversion I1. }
-        remember (positivity lk) as plk.
-        remember (tree_leaves treelk g1 i1 (lk_dir lk)) as tlt.
-        simpl in I1. rewrite <- Heqplk in I1. rewrite <- Heqtlt in I1.
-        destruct plk, tlt; try inversion I1; auto.
-        destruct (tree_res treelk g1 i1 (lk_dir lk)).
-        destruct l0; destruct l. eapply IHacts; eauto.
-        inversion RES_LK; subst. 
-        Admitted.
-    
+        inversion T1; subst. simpl in I1. 2: inversion I1.
+        destruct (positivity lk), (tree_leaves treelk g3 i1 (lk_dir lk)); try inversion I1.
+        destruct l.
+        all: eapply IHacts; eauto.       
+      }
+      revert t g1 g2 g3 i1 i2 T1 I1.
+      (*induction on min*)
+      induction min.
+      2: {intros  t  g1 g2 g3 i1 i2  T1 I1. inversion T1; subst. eapply IHr with (acts:= Areg (Quantified greedy min delta r) :: acts); eauto.}
+      destruct delta.
+      (*induction*)
+      induction n; intros t  g1 g2 g3 i1 i2 T1 I1.  
+      (*case 0*)
+      inversion T1; subst. eapply IHacts ; eauto.
+      destruct plus; discriminate.
+      (*case n + 1*)
+      inversion T1. destruct plus. 2: discriminate.
+      inversion H1; subst.
+      destruct greedy; simpl in *.
+      (* greedy *)
+      apply in_app_or in I1 as [c1 | c2].
+      2: eapply IHacts; eauto.
+      eapply IHr with (acts := Acheck i1 :: Areg (Quantified true 0 (NoI.N n) r) :: acts); eauto.
+      intros. inversion H; subst.
+      2: inversion H0.
+      eapply IHn; eauto.
+      (* non greedy*)
+      apply in_app_or in I1 as [c1 | c2].
+      eapply IHacts; eauto.
+      eapply IHr with (acts := Acheck i1 :: Areg (Quantified false 0 (NoI.N n) r) :: acts); eauto.
+      intros. inversion H; subst.
+      2: inversion H0.
+      eapply IHn; eauto.
+      (* infinite *)
+      intros  t g1 g2 g3 i1 i2  T1 I1.  
+      remember (remaining_length i1 d) as l.
+      assert (Hlength_le: remaining_length i1 d <= l) by lia. clear Heql.
+      generalize dependent i1. revert g1 g2 g3 i2 t.
+      induction l; intros g1 g2 g3 i2  t i1 T1 I1 Hlength_le.
+      inversion T1; subst.
+      assert (NL: actions_no_leaves rer (Areg r :: Acheck i1 :: Areg (Quantified greedy 0 plus r) :: acts) d). {
+        apply actions_no_leaves_add_left with (a := [Areg r]).
+        apply actions_no_leaves_add_right with (a:=  [Acheck i1]) (b := Areg (Quantified greedy 0 plus r) :: acts).
+        apply check_end_no_leaves. lia.
+      }
+      destruct plus. discriminate.
+      destruct greedy; simpl in *.
+      apply in_app_or in I1 as [c1 | c2].  
+      specialize (NL _ _ _ ISTREE1).
+      apply leaves_indep with (gm2 := (GroupMap.reset (def_groups r) g3)) (inp2:= i1) (dir2:= d) in NL.
+      rewrite NL in c1. inversion c1.
+      eapply IHacts; eauto.
+      apply in_app_or in I1 as [c1 | c2].
+      eapply IHacts; eauto.
+      specialize (NL _ _ _ ISTREE1).
+      apply leaves_indep with (gm2 := (GroupMap.reset (def_groups r) g3)) (inp2:= i1) (dir2:= d) in NL.
+      rewrite NL in c2. inversion c2.
+      (*IH*)
+      apply GroupId.le_lteq in Hlength_le as [leq | eq].
+      eapply IHl; eauto. lia.
+      inversion T1; subst. destruct plus. discriminate.
+      destruct greedy; simpl in *.
+      apply in_app_or in I1 as [c1 | c2].
+      2: eapply IHacts; eauto.
+      eapply IHr with (acts := Acheck i1 :: Areg (Quantified true 0 +∞ r) :: acts); eauto.
+      intros. inversion H; subst. 2: inversion H0.
+      simpl in H0. eapply IHl; eauto. 
+      apply strict_suffix_remaining_length in PROGRESS.
+      lia.
+      apply in_app_or in I1 as [c1 | c2].
+      eapply IHacts; eauto.
+      eapply IHr with (acts := Acheck i1 :: Areg (Quantified false 0 +∞ r) :: acts); eauto.
+      intros. inversion H; subst. 2: inversion H0.
+      simpl in H0. eapply IHl; eauto. 
+      apply strict_suffix_remaining_length in PROGRESS.
+      lia.
+  Qed.
+      
+      Lemma input_does_not_back:
+    forall r t gm gm2 inp1 inp2 dir,
+      is_tree rer [Areg r] inp1 gm dir t ->
+      In (inp2, gm2) (tree_leaves t gm inp1 dir) ->
+      ~ StrictSuffix.strict_suffix inp2 inp1 dir ->
+      inp1 = inp2.
+  Proof.
+    intros.
+    destruct (input_only_forward _ _ _ _ _ _ _ _ H H0).
+    assumption. contradiction.
+  Qed.
+
+
   (* after check this only works with an unamb case *)
   Lemma check_not_stops_quantifier n:
     forall r1 inp gm dir t1 t2,
@@ -1378,7 +1400,7 @@ Lemma concat_regs_ret_empt_group_check:
           inversion CONT; subst.
           assert (remaining_length (fst el) backward <= 0).
           assert (el = (fst el, snd el) \/ False). left. destruct el. reflexivity.
-          specialize  (input_only_forward _ _ _ (snd el) _ (fst el) _  SKIP) as iforward. rewrite elList in iforward. simpl in iforward.
+          specialize  (input_only_forward _ _ _ g  (snd el) _  (fst el)  _ SKIP) as iforward. rewrite elList in iforward. simpl in iforward.
           specialize (iforward H) as [c1 | c2].
           subst. assumption.
           specialize (strict_suffix_remaining_length _ _ _ c2) as p. lia.
@@ -1419,7 +1441,7 @@ Lemma concat_regs_ret_empt_group_check:
            assert (i = i0). {
              assert (In (i0, g0) (tree_leaves tskip g i backward)) as inSKIP.
              rewrite elList. constructor. reflexivity.
-             specialize (input_only_forward_temp _ _ _ g0 _ i0 _ SKIP inSKIP ) as [c1 | c2].
+             specialize (input_only_forward _ _ _ g g0 _ i0 _ SKIP inSKIP ) as [c1 | c2].
              assumption. contradiction.
            }
            assert (g = g0). {
@@ -1442,7 +1464,7 @@ Lemma concat_regs_ret_empt_group_check:
      
 
 
-    Theorem unamb_quantifier_pops_right:
+  Theorem unamb_quantifier_pops_right:
     forall r m n,
       def_groups r = [] ->
       unamb [Areg r] ->
@@ -1538,7 +1560,7 @@ Lemma concat_regs_ret_empt_group_check:
           inversion CONT; subst.
           assert (remaining_length (fst el) forward <= 0).
           assert (el = (fst el, snd el) \/ False). left. destruct el. reflexivity.
-          specialize  (input_only_forward _ _ _ (snd el) _ (fst el) _  SKIP) as iforward. rewrite elList in iforward. simpl in iforward.
+          specialize  (input_only_forward _ _ _ g (snd el) _ (fst el) _  SKIP) as iforward. rewrite elList in iforward. simpl in iforward.
           specialize (iforward H) as [c1 | c2].
           subst. assumption.
           specialize (strict_suffix_remaining_length _ _ _ c2) as p. lia.
@@ -1579,7 +1601,7 @@ Lemma concat_regs_ret_empt_group_check:
            assert (i = i0). {
              assert (In (i0, g0) (tree_leaves tskip g i forward)) as inSKIP.
              rewrite elList. constructor. reflexivity.
-             specialize (input_only_forward_temp _ _ _ g0 _ i0 _ SKIP inSKIP ) as [c1 | c2].
+             specialize (input_only_forward _ _ _ g g0 _ i0 _ SKIP inSKIP ) as [c1 | c2].
              assumption. contradiction.
            }
            assert (g = g0). {
