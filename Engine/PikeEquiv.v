@@ -3,7 +3,7 @@
 From Stdlib Require Import List Lia.
 Import ListNotations.
 
-From Linden Require Import Regex Chars Groups.
+From Linden Require Import Regex Chars Groups LazyPrefix.
 From Linden Require Import Tree Semantics BooleanSemantics.
 From Linden Require Import NFA PikeTree PikeVM.
 From Linden Require Import PikeSubset.
