@@ -336,6 +336,17 @@ Section Chars.
       + rewrite skipn_skipn. f_equal. lia.
   Qed.
 
+  Lemma advance_input_n_end:
+    forall (n : nat) (inp : input) (dir : Direction),
+      advance_input inp dir = None -> 
+      advance_input_n inp n dir = inp.
+  Proof. 
+  intros n inp dir Hn. destruct inp. destruct dir. 
+  all: inversion Hn;destruct next;destruct pref;try congruence.
+  all: simpl; rewrite skipn_nil, firstn_nil;simpl.
+  all: reflexivity.
+  Qed.
+
   Lemma next_str_advance_is_skip_str:
     forall (inp : input) (n : nat),
       next_str (advance_input_n inp n forward) = skipn n (next_str inp).
