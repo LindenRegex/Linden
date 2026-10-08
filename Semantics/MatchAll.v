@@ -26,43 +26,43 @@ Section Semantics.
   (** [matchall_matches r inp l] means that l is the result of allmatch for 
   the regex r on the input inp *)
   Inductive matchall_matches : regex -> input -> list leaf -> Prop := 
-    | matchall_nil_end : 
+    | matchall_end_nomatch : 
       (* no match for the regex *)
-      forall (r : regex) (inp : input) t, 
-        is_tree [Areg r] inp GroupMap.empty forward t -> 
-        first_leaf t inp = None ->
-        advance_input inp forward = None ->
+      forall (r : regex) (inp : input) t
+        (TREE : is_tree [Areg r] inp GroupMap.empty forward t)
+        (NOMATCH : first_leaf t inp = None)
+        (END : advance_input inp forward = None),
         matchall_matches r inp []
-    | matchall_some_end : 
+    | matchall_end_emptymatch : 
       (* an empty match at the end of the string *)
-      forall (r : regex) (inp : input) t gm, 
-        is_tree [Areg r] inp GroupMap.empty forward t -> 
-        first_leaf t inp = Some (inp, gm) ->
-        advance_input inp forward = None -> 
+      forall (r : regex) (inp : input) t gm
+        (TREE : is_tree [Areg r] inp GroupMap.empty forward t)
+        (MATCH : first_leaf t inp = Some (inp, gm))
+        (END : advance_input inp forward = None),
         matchall_matches r inp [(inp,gm)]
-    | matchall_next : 
+    | matchall_mid_nomatch : 
       (* no match starting here, we look at the next position *)
-      forall (r : regex) (inp : input) t inp' res, 
-        is_tree [Areg r] inp GroupMap.empty forward t -> 
-        first_leaf t inp = None ->
-        advance_input inp forward = Some inp' ->  
-        matchall_matches r inp' res ->
+      forall (r : regex) (inp : input) t inp' res
+        (TREE : is_tree [Areg r] inp GroupMap.empty forward t)
+        (NOMATCH : first_leaf t inp = None)
+        (MID : advance_input inp forward = Some inp')
+        (REC : matchall_matches r inp' res),
         matchall_matches r inp res
-    | matchall_cons_some : 
+    | matchall_mid_nonempty : 
       (* we eat the top priority match and get the matches on the rest *)
-      forall (r : regex) (inp : input) t inp' gm res, 
-        is_tree [Areg r] inp GroupMap.empty forward t -> 
-        first_leaf t inp = Some (inp', gm) -> 
-        strict_suffix inp' inp forward -> (* progress condition *)
-        matchall_matches r inp' res -> 
+      forall (r : regex) (inp : input) t inp' gm res 
+        (TREE : is_tree [Areg r] inp GroupMap.empty forward t)
+        (MATCH : first_leaf t inp = Some (inp', gm))
+        (PROGRESS : strict_suffix inp' inp forward) (* progress condition *)
+        (REC : matchall_matches r inp' res), 
         matchall_matches r inp ((inp',gm)::res)
-    | matchall_cons_none : 
+    | matchall_mid_empty : 
       (* we have an empty match *)
-      forall (r : regex) (inp : input) t inp' gm res, 
-        is_tree [Areg r] inp GroupMap.empty forward t -> 
-        first_leaf t inp = Some (inp, gm) -> 
-        advance_input inp forward = Some inp' ->
-        matchall_matches r inp' res -> 
+      forall (r : regex) (inp : input) t inp' gm res
+        (TREE : is_tree [Areg r] inp GroupMap.empty forward t) 
+        (MATCH : first_leaf t inp = Some (inp, gm))
+        (MID : advance_input inp forward = Some inp')
+        (REC : matchall_matches r inp' res),
         matchall_matches r inp ((inp,gm)::res)
   .
 
@@ -92,13 +92,13 @@ Section Semantics.
   all: inversion Hm2;subst; clear Hm2.
   all: assert (t=t0) by eauto using is_tree_determ; subst. 
   all: try congruence.
-  - clear H2. assert (inp = inp') by eauto using end_of_match. subst.  exfalso. eapply ss_irreflexive. eassumption.
+  - assert (inp = inp') by eauto using end_of_match. subst.  exfalso. eapply ss_irreflexive. eassumption.
   - apply IHHm1. congruence.
-  - rewrite H3 in H0. inversion H0. subst. exfalso. eapply ss_irreflexive. eassumption.  
-  - rewrite H3 in H0. inversion H0. subst. f_equal. auto.
-  - rewrite H3 in H0. inversion H0. subst. exfalso. eapply ss_irreflexive. eassumption. 
-  - rewrite H3 in H0. inversion H0. subst. exfalso. eapply ss_irreflexive. eassumption. 
-  - rewrite H3 in H0. inversion H0. subst. f_equal. rewrite H4 in H1. inversion H1. subst. 
+  - rewrite MATCH0 in MATCH. inversion MATCH. subst. exfalso. eapply ss_irreflexive. eassumption.  
+  - rewrite MATCH0 in MATCH. inversion MATCH. subst. f_equal. auto.
+  - rewrite MATCH0 in MATCH. inversion MATCH. subst. exfalso. eapply ss_irreflexive. eassumption. 
+  - rewrite MATCH0 in MATCH. inversion MATCH. subst. exfalso. eapply ss_irreflexive. eassumption. 
+  - rewrite MATCH0 in MATCH. inversion MATCH. subst. f_equal. rewrite MID0 in MID. inversion MID. subst. 
     now apply IHHm1.
   Qed.
 
@@ -144,7 +144,7 @@ Section FunctionalSemantics.
   Lemma stsf_translate : forall inp inp', stsf inp inp' -> remaining_length inp forward < remaining_length inp' forward.
   Proof.
   intros inp inp' H. unfold stsf in H. remember forward as f eqn:Ef.
-  generalize Ef. induction H;intros He;subst. (* why is the dance around forward needed ? *)
+  generalize Ef. induction H;intros He;subst.
   - destruct inp, nextinp. inversion H. destruct next;try congruence.
     simpl. inversion H1. subst. lia.
   - transitivity (remaining_length inp2 forward);auto.
@@ -156,14 +156,14 @@ Section FunctionalSemantics.
     let t := compute_tr_dep rer [Areg r] inp GroupMap.empty forward in 
     match first_leaf t inp with 
       | None => match advance_input inp forward with 
-                    | None => []                        (* matchall_nil_end *)
-                    | Some inp' => matchall r inp'      (* matchall_next *)
+                    | None => []                        (* matchall_end_nomatch *)
+                    | Some inp' => matchall r inp'      (* matchall_mid_nomatch *)
                 end
       | Some (inp', gm) => match advance_input inp forward with 
-                    | None => [(inp',gm)]               (* matchall_some_end *)
+                    | None => [(inp',gm)]               (* matchall_end_emptymatch *)
                     | Some inp'' => if input_eq_dec inp' inp then (* is the match empty ? *)
-                                    (inp,gm)::matchall r inp'' (* matchall_cons_none *)
-                                else (inp',gm)::matchall r inp'(* matchall_cons_some *)
+                                    (inp,gm)::matchall r inp'' (* matchall_mid_empty *)
+                                else (inp',gm)::matchall r inp'(* matchall_mid_nonempty *)
                     end
     end.
     Proof.
@@ -176,13 +176,13 @@ Section FunctionalSemantics.
   Proof.
     intros r inp.
     apply matchall_ind;intros;subst.
-  - eapply matchall_nil_end;eauto.
+  - eapply matchall_end_nomatch;eauto.
     unfold t.
     apply (compute_tr_dep_is_tree rer). 
-  - eapply matchall_next; eauto. apply (compute_tr_dep_is_tree rer).
-  - assert (inp0=inp') by eauto using end_of_match. subst. eapply matchall_some_end;eauto. apply (compute_tr_dep_is_tree rer).
-  - eapply matchall_cons_none;eauto. apply (compute_tr_dep_is_tree rer).
-  - eapply matchall_cons_some;eauto. 
+  - eapply matchall_mid_nomatch; eauto. apply (compute_tr_dep_is_tree rer).
+  - assert (inp0=inp') by eauto using end_of_match. subst. eapply matchall_end_emptymatch;eauto. apply (compute_tr_dep_is_tree rer).
+  - eapply matchall_mid_empty;eauto. apply (compute_tr_dep_is_tree rer).
+  - eapply matchall_mid_nonempty;eauto. 
     + apply (compute_tr_dep_is_tree rer).
     + apply leaves_included in e. destruct e;try congruence. assumption.
   Qed.
@@ -228,10 +228,11 @@ Section RegexRewrite.
 
   Theorem transform_correct : 
     forall (r : regex) (inp : input) t l,
-    is_tree rer [Areg (transform_regex r)] inp GroupMap.empty forward t -> 
-    matchall_first_leaf t inp = l -> 
-    matchall_matches rer (parenthesize r) inp l.
+    is_tree rer [Areg (transform_regex r)] inp GroupMap.empty forward t ->     
+    matchall_matches rer (parenthesize r) inp l ->
+    matchall_first_leaf t inp = l. 
   Proof.
+
   Admitted.
 
 End RegexRewrite.

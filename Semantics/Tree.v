@@ -267,48 +267,44 @@ Section Tree.
   (** * Tree results - for Matchall  *)
   (* keeps all the matches of capture group 0 *)
 
-  Definition seql {A} (l1 : option (list A)) l2 := match l1 with None => l2 | Some _ => l1 end.
+  Definition seql {A} (l1 : (list A)) l2 := match l1 with [] => l2 |  _::_ => l1 end.
   Definition consop {A} (x:A) q := match q with Some q =>  Some (x::q) | None => None end.
 
   (* return the list of matches inside capture group 0 *)
-  Fixpoint matchall_res (t:tree) (gm:group_map) (inp:input) (dir: Direction):  option (list leaf) :=
+  Fixpoint matchall_res (t:tree) (gm:group_map) (inp:input) (dir: Direction) (acc: list leaf ) :  list leaf :=
     match t with
-    | Mismatch => None 
-    | Match =>  if GroupMap.eqb gm GroupMap.empty then Some [] else Some [(inp,gm)] (* TODO ugly *)
+    | Mismatch => [] 
+    | Match => acc 
     | Choice t1 t2 =>
-        seql (matchall_res t1 gm inp dir) (matchall_res t2 gm inp dir)
-    | Read c t1 => matchall_res t1 gm (advance_input' inp dir) dir
-    | Progress t1 => matchall_res t1 gm inp dir
+        seql (matchall_res t1 gm inp dir acc) (matchall_res t2 gm inp dir acc)
+    | Read c t1 => matchall_res t1 gm (advance_input' inp dir) dir acc
+    | Progress t1 => matchall_res t1 gm inp dir acc
     | GroupAction a t1 => match a with 
-                            | Close 0 => consop (inp,GroupMap.update (idx inp) a gm) (matchall_res t1 GroupMap.empty inp dir) (* special case, we finished a match *)
-                            | _ =>  matchall_res t1 (GroupMap.update (idx inp) a gm) inp dir
+                            | Close 0 =>  (matchall_res t1 GroupMap.empty inp dir ((inp,GroupMap.update (idx inp) a gm)::acc)) (* special case, we finished a match *)
+                            | _ =>  matchall_res t1 (GroupMap.update (idx inp) a gm) inp dir acc
                           end
     | LK lk tlk t1 =>
         match (positivity lk) with
         | true =>
-            match matchall_res tlk gm inp (lk_dir lk) with
-            | None => None
+            match tree_res tlk gm inp (lk_dir lk) with
+            | None => []
             (* using the captures defined in the first branch of the lookahead *)
-            | Some ((_,gm')::_)=> matchall_res t1 gm' inp dir
-            | Some [] => matchall_res t1 GroupMap.empty inp dir 
+            | Some (_,gm')=> matchall_res t1 gm' inp dir acc
             end
         | false =>
-            match matchall_res tlk gm inp (lk_dir lk) with
+            match tree_res tlk gm inp (lk_dir lk) with
             (* using previous captures *)
-            | None => matchall_res t1 gm inp dir
-            | Some _ => None
+            | None => matchall_res t1 gm inp dir acc
+            | Some _ => []
             end
         end
-    | LKFail _ _ => None
-    | AnchorPass _ t => matchall_res t gm inp dir
-    | ReadBackRef br_str t => matchall_res t gm (advance_input_n inp (length br_str) dir) dir
+    | LKFail _ _ => []
+    | AnchorPass _ t => matchall_res t gm inp dir acc
+    | ReadBackRef br_str t => matchall_res t gm (advance_input_n inp (length br_str) dir) dir acc 
     end.
 
   Definition matchall_first_leaf (t: tree) (inp : input) := 
-    match (matchall_res t GroupMap.empty inp forward) with 
-      | Some l => l 
-      | None => []
-    end.
+    matchall_res t GroupMap.empty inp forward []. 
 
   (** * No Result - argument irrelevance  *)
   (* finding no leaves in a tree does not depend on the initial group map, the initial input, and the initial direction *)
