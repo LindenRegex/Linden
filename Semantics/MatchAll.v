@@ -197,10 +197,11 @@ End FunctionalSemantics.
 
 Section RegexRewrite.
   Context {params: LindenParameters}.
+  Context (rer : RegExpRecord).
 
   (* (r) *)
   Definition parenthesize (r : regex) : regex := 
-    Group (S (max_group r)) r.
+    Group 0 r.
 
   (* (?:(r)|) *)
   Definition r_or_nil (r : regex) : regex :=
@@ -223,5 +224,14 @@ Section RegexRewrite.
             (greedy_star (lazy_postfix (parenthesize r)))
             negative_all)
             (r_or_nil r)).
+
+
+  Theorem transform_correct : 
+    forall (r : regex) (inp : input) t l,
+    is_tree rer [Areg (transform_regex r)] inp GroupMap.empty forward t -> 
+    matchall_first_leaf t inp = l -> 
+    matchall_matches rer (parenthesize r) inp l.
+  Proof.
+  Admitted.
 
 End RegexRewrite.
