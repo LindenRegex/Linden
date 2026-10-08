@@ -1221,13 +1221,26 @@ Section UnAmbiguity.
   Qed.
 
 
-  Lemma leaves_equiv_in_mid:
-      forall t1 t2 t3,
-      leaves_equiv [] (t1 ++ t2) t3 ->
-      leaves_equiv t1 t2 t3.
+  Lemma leaves_clone_double:
+    forall t2 seen,
+      (forall x, In x t2 -> In x seen) ->
+      leaves_equiv seen t2 [].
   Proof.
-    intros t1 t2 t3 lEq. revert t2 t3 lEq.
-    Admitted.
+    intros. induction t2. reflexivity.
+    destruct a. constructor.
+    apply is_seen_spec. apply H. constructor. reflexivity.
+    apply IHt2. intros. eapply H. right. assumption.
+  Qed.
+  
+  Lemma leaves_rep_eqs:
+    forall t2,
+      leaves_equiv [] t2 (t2 ++ t2).
+  Proof.
+    intros t2. symmetry. 
+    rewrite <- app_nil_r. eapply leaves_equiv_app2. reflexivity. simpl. rewrite app_nil_r.
+    eapply leaves_clone_double with (seen := t2). intros. assumption.
+  Qed.
+    
   (* t1 = t3 /\ t2 <= t3 -> t1 = t2 ++ t3
    peut etre changé en: t2 <= t3 -> t3 = t2 ++ t3*)
   Theorem leaves_incl2:
@@ -1238,15 +1251,15 @@ Section UnAmbiguity.
   Proof.
     intros t1 t2 t3  acts  lEq1 lEq2.
     rewrite <- lEq2 in lEq1. rewrite <- lEq2. clear t1 lEq2.
-    apply leaves_equiv_in_mid in lEq1.
-    eapply leaves_equiv_app2; eauto. reflexivity.  rewrite app_nil_r. assumption.
+    assert (leaves_equiv [] t2 t2) by reflexivity.
+    eapply leaves_equiv_app  with (p1 := t2) in lEq1. 2: reflexivity.
+    eapply leaves_equiv_trans; eauto.
+    rewrite app_assoc. apply leaves_equiv_app with (l1 := acts) (l2 := acts).
+    2: reflexivity.
+    eapply leaves_rep_eqs.
   Qed.
-  
-    
-
-  
- 
-    
+      
+      
   Lemma unamb_quantifier_invertible:
     forall r m n g,
       def_groups r = [] ->
@@ -1594,6 +1607,9 @@ Qed.
     apply unamb_equivalence_chain; try apply naive_unambiguity; auto.
   Qed.
 
+
+
+  
   
   
 End UnAmbiguity.
