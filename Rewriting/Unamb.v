@@ -311,152 +311,36 @@ Section UnAmbiguity.
 
   
 
-  
+  (* Inputs of leaves only make (non-strictly positive) progress in the direction of matching *)
   Lemma input_only_forward:
     forall l t gm gm1 gm2 inp1 inp2 dir,
       is_tree rer l inp1 gm dir t ->
       In (inp2, gm2) (tree_leaves t gm1 inp1 dir) ->
       inp1 = inp2 \/ StrictSuffix.strict_suffix inp2 inp1 dir.
   Proof.
-    intros acts. intros t gm gm1 gm2 inp1 inp2 d. revert t gm gm1 gm2 inp1 inp2.
-    induction acts; intros t g1 g3 g2 i1 i2 T1 I1.
-    + inversion T1; subst. simpl in I1. inversion  I1. inversion H. auto. contradiction.
-    + destruct a.
-      2: {
-        inversion T1; subst.
-        simpl in I1. eapply IHacts with (inp1 := i1) (inp2 := i2); eauto.
-        simpl in I1. contradiction.
-      }
-      2: {
-        inversion T1; subst. simpl in I1.
-        eapply IHacts with (inp1 := i1) (inp2 := i2); eauto.
-      }
-      revert acts t g1 g2 g3 i1 i2 d T1 I1  IHacts.
-      induction r; intros acts  t g1 g2 g3 i1 i2 d T1 I1 IHacts.
-      1: inversion T1; eapply IHacts; eauto.
-      1: {
-        inversion T1; subst; simpl in I1.
-        unfold advance_input' in I1.
-        apply read_char_success_advance in READ.
-        rewrite READ in I1.
-        eapply StrictSuffix.ss_advance in READ.
-        assert (nextinp = i2 \/ StrictSuffix.strict_suffix i2 nextinp d) as [c1 | c2].
-        eapply IHacts; eauto.
-        subst. right. assumption.
-        right. eapply StrictSuffix.strict_suffix_trans; eauto.
-        contradiction.
-      }
-      1: {
-        inversion T1; subst; simpl in I1. apply in_app_or in I1 as [c1 | c2].
-        eapply IHr1; eauto.
-        eapply IHr2; eauto.
-      }
-      1: {
-        inversion T1; destruct d; simpl in CONT.
-        eapply IHr1 with (acts:= Areg r2 :: acts); eauto.
-        eapply IHr2 with (acts:= Areg r1 :: acts); eauto.
-      }
-      3: {
-        inversion T1; subst. eapply (IHr (Aclose id :: acts)); eauto.
-        intros. inversion H; subst. eapply IHacts; eauto.
-      }
-      3: {
-        inversion T1; subst. eapply IHacts; eauto. inversion I1.
-      }
-      3: {
-        inversion T1; subst; clear T1.
-        simpl in I1.  apply read_backref_success_advance in READ_BACKREF. rewrite <- READ_BACKREF in I1.
-        assert (nextinp = i2 \/ StrictSuffix.strict_suffix i2 nextinp d) as [c1 | c2]. eapply IHacts; eauto.
-        apply advance_input_n_suffix in READ_BACKREF as [p1 | p2].
-        all: subst. left; reflexivity.
-        right; assumption.
-        remember (advance_input_n i1 (length br_str) d) as tip.
-        apply advance_input_n_suffix in Heqtip as [p1 | p2].
-        subst. right; assumption. right.
-        eapply StrictSuffix.strict_suffix_trans; eauto.
-        inversion I1.
-      }
-      2: {
-        inversion T1; subst. simpl in I1. 2: inversion I1.
-        destruct (positivity lk), (tree_leaves treelk g3 i1 (lk_dir lk)); try inversion I1.
-        destruct l.
-        all: eapply IHacts; eauto.       
-      }
-      revert t g1 g2 g3 i1 i2 T1 I1.
-      (*induction on min*)
-      induction min.
-      2: {
-        intros  t  g1 g2 g3 i1 i2  T1 I1. inversion T1; subst. eapply IHr with (acts:= Areg (Quantified greedy min delta r) :: acts); eauto.
-      }
-      destruct delta.
-      (*induction*)
-      induction n; intros t  g1 g2 g3 i1 i2 T1 I1.  
-      (*case 0*)
-      inversion T1; subst. eapply IHacts ; eauto.
-      destruct plus; discriminate.
-      (*case n + 1*)
-      inversion T1. destruct plus. 2: discriminate.
-      inversion H1; subst.
-      destruct greedy; simpl in *.
-      (* greedy *)
-      apply in_app_or in I1 as [c1 | c2].
-      2: eapply IHacts; eauto.
-      eapply IHr with (acts := Acheck i1 :: Areg (Quantified true 0 (NoI.N n) r) :: acts); eauto.
-      intros. inversion H; subst.
-      2: inversion H0.
-      eapply IHn; eauto.
-      (* non greedy*)
-      apply in_app_or in I1 as [c1 | c2].
-      eapply IHacts; eauto.
-      eapply IHr with (acts := Acheck i1 :: Areg (Quantified false 0 (NoI.N n) r) :: acts); eauto.
-      intros. inversion H; subst.
-      2: inversion H0.
-      eapply IHn; eauto.
-      (* infinite *)
-      intros  t g1 g2 g3 i1 i2  T1 I1.  
-      remember (remaining_length i1 d) as l.
-      assert (Hlength_le: remaining_length i1 d <= l) by lia. clear Heql.
-      generalize dependent i1. revert g1 g2 g3 i2 t.
-      induction l; intros g1 g2 g3 i2  t i1 T1 I1 Hlength_le.
-      inversion T1; subst.
-      assert (NL: actions_no_leaves rer (Areg r :: Acheck i1 :: Areg (Quantified greedy 0 plus r) :: acts) d). {
-        apply actions_no_leaves_add_left with (a := [Areg r]).
-        apply actions_no_leaves_add_right with (a:=  [Acheck i1]) (b := Areg (Quantified greedy 0 plus r) :: acts).
-        apply check_end_no_leaves. lia.
-      }
-      destruct plus. discriminate.
-      destruct greedy; simpl in *.
-      apply in_app_or in I1 as [c1 | c2].  
-      specialize (NL _ _ _ ISTREE1).
-      apply leaves_indep with (gm2 := (GroupMap.reset (def_groups r) g3)) (inp2:= i1) (dir2:= d) in NL.
-      rewrite NL in c1. inversion c1.
-      eapply IHacts; eauto.
-      apply in_app_or in I1 as [c1 | c2].
-      eapply IHacts; eauto.
-      specialize (NL _ _ _ ISTREE1).
-      apply leaves_indep with (gm2 := (GroupMap.reset (def_groups r) g3)) (inp2:= i1) (dir2:= d) in NL.
-      rewrite NL in c2. inversion c2.
-      (*IH*)
-      apply GroupId.le_lteq in Hlength_le as [leq | eq].
-      eapply IHl; eauto. lia.
-      inversion T1; subst. destruct plus. discriminate.
-      destruct greedy; simpl in *.
-      apply in_app_or in I1 as [c1 | c2].
-      2: eapply IHacts; eauto.
-      eapply IHr with (acts := Acheck i1 :: Areg (Quantified true 0 +∞ r) :: acts); eauto.
-      intros. inversion H; subst. 2: inversion H0.
-      simpl in H0. eapply IHl; eauto. 
-      apply strict_suffix_remaining_length in PROGRESS.
-      lia.
-      apply in_app_or in I1 as [c1 | c2].
-      eapply IHacts; eauto.
-      eapply IHr with (acts := Acheck i1 :: Areg (Quantified false 0 +∞ r) :: acts); eauto.
-      intros. inversion H; subst. 2: inversion H0.
-      simpl in H0. eapply IHl; eauto. 
-      apply strict_suffix_remaining_length in PROGRESS.
-      lia.
+    intros l t gm gm1 gm2 inp1 inp2 dir TREE IN.
+    generalize dependent gm2. generalize dependent gm1.
+    induction TREE; intros; simpl in IN; eauto; try contradiction.
+    - inversion IN; try contradiction. inversion H. auto.
+    - apply read_char_success_advance in READ.
+      unfold advance_input' in IN. rewrite READ in IN.
+      eapply StrictSuffix.ss_advance in READ.
+      apply IHTREE in IN. destruct IN; subst; auto.
+      right. eapply StrictSuffix.strict_suffix_trans; eauto.
+    - apply in_app_or in IN as [IN1 | IN2]; eauto.
+    - subst tquant. destruct greedy; simpl in IN;
+        apply in_app_or in IN as [IN1 | IN2]; eauto.
+    - destruct positivity eqn:POS;
+        destruct tree_leaves as [|[i gm']]; eauto; inversion IN.
+    - apply read_backref_success_advance in READ_BACKREF. rewrite <- READ_BACKREF in IN.
+      apply IHTREE in IN.
+      apply advance_input_n_suffix in READ_BACKREF as [p1 | p2]; subst; auto.
+      right. destruct IN; subst; eauto.
+      eapply StrictSuffix.strict_suffix_trans; eauto.
   Qed.
-  
+
+
+
   Lemma input_does_not_back:
     forall r t gm gm2 inp1 inp2 dir,
       is_tree rer [Areg r] inp1 gm dir t ->
