@@ -44,6 +44,7 @@ Definition dfa_state_contains (st: dfa_state) (i: internal_state) : bool :=
 Definition dfa_state_hasmatch (c:code) (st: dfa_state) : bool :=
 	List.existsb (fun '(l, b) => match (get_pc c l) with | Some Accept => true | _ => false end) st.
 
+(* could opti by doing range of bytes instead of having one line in the cache per character... *)
 Definition transition_table: Type := list (dfa_state * Character * dfa_state * bool). (* current state & char -> next state & found_match *)
 
 (* get next state if cached in table, given current state and what character we're reading *)
@@ -68,7 +69,6 @@ Inductive ldfa_epsilon_state : Type :=
 | LDFA_Eps_Running (inp: input) (out: dfa_state) (workqueue: dfa_state)
 | LDFA_Eps_Done (out: dfa_state).
 
-(* TODO gérer killthread ? afaik plutot dans next ? *)
 Definition is_epsilon_break (c:code) (curr: internal_state) : bool :=
 match get_pc c (fst curr) with
 | None | Some (Consume _) | Some (KillThread) | Some (Accept) => true
@@ -168,14 +168,14 @@ Qed.
 
 (* 
 Definition epsilon_closure (c: code) (start: internal_state) (inp: input) (out: dfa_state) : dfa_state :=
-if exists nex_out, (clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp out [start]) (LDFA_Eps_Done new_out)) then new_out else [].
+if exists new_out, (clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp out [start]) (LDFA_Eps_Done new_out)) then new_out else [].
 *)
 (* Definition epsilon_closure_rel (c : code) (start : internal_state) (inp : input) (out : dfa_state) : Prop :=
   clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp [] [start]) (LDFA_Eps_Done out). *)
 
 (* Definition initial_int_state : internal_state := (0, CanExit).
 Definition initial_dfa_state : dfa_state := epsilon_closure c inp [] [initial_int_state].
-Definition initial_ldfa_state (c: code) (inp: input) : ldfa_state := LDFA initial_dfa_state inp [] None []. *)
+Definition initial_ldfa_state (c: code) (inp: input) : ldfa_state := LDFA initial_dfa_state inp [] None. *)
 
 Inductive ldfa_nextloop_state : Type :=
 | LDFA_Next_Running (next: dfa_state) (current_pcs: dfa_state)
@@ -183,11 +183,10 @@ Inductive ldfa_nextloop_state : Type :=
 
 Definition is_nextloop_skip (c:code) (curr:internal_state) : bool :=
 match get_pc c (fst curr) with
-| Some (Consume _) | Some Accept => false
+| Some (Consume _) | Some Accept | Some KillThread => false
 | _ => true
 end.
 
-(* TODO handle killthread ? *)
 Inductive next_loop_rel (c:code) (i:input) : ldfa_nextloop_state -> ldfa_nextloop_state -> Prop :=
 | nlr_final : forall n,
 	next_loop_rel c i (LDFA_Next_Running n []) (LDFA_Next_Done n false)
@@ -202,12 +201,16 @@ Inductive next_loop_rel (c:code) (i:input) : ldfa_nextloop_state -> ldfa_nextloo
 		next_loop_rel c i (LDFA_Next_Running n (pc :: pcs)) (LDFA_Next_Running (n ++ out) pcs)
 | nlr_skip : forall n pc pcs
 	(SKIP_PCS: is_nextloop_skip c pc = true),
-		next_loop_rel c i (LDFA_Next_Running n (pc :: pcs)) (LDFA_Next_Running n pcs).
+		next_loop_rel c i (LDFA_Next_Running n (pc :: pcs)) (LDFA_Next_Running n pcs)
+| nlr_kill : forall n pc pcs
+	(KILL_PC: get_pc c (fst pc) = Some (KillThread)),
+		next_loop_rel c i (LDFA_Next_Running n (pc :: pcs)) (LDFA_Next_Done [] false).
 
 (* 
 | LDFA (curr: dfa_state) (inp: input) (ttab: transition_table) (best: option input) (next: dfa_state)
 | LDFA_final (res:option input). 
 assuming init_state : LDFA (curr = (epsilon_closure c i [] code@0)) (i) (ttab = []) (best = None) (next = [])
+assuming infinite cache for now : could late add non deterministic step that clears the cache
 *)
 Inductive ldfa_loop_rel (c:code) : ldfa_state -> ldfa_state -> Prop := 
 | ldfalr_final_match : forall i curr ttab best
@@ -247,44 +250,6 @@ Inductive ldfa_loop_rel (c:code) : ldfa_state -> ldfa_state -> Prop :=
 .
 
 (* 
-
-main_loop {
-	// nfa_start = get_pc c 0 (supposément)
-	current = epsilon_closure([nfa_start, true], input, []) // initial dfa state
-
-	for i=0 to str.length {
-		let c = str[i]
-		let next_state = trans_table[current][c] // could opti by doing range of bytes instead of having one line in the cache per character...
-	
-		if next_state == NULL {
-			// compute next state since its not cached	
-			next()
-			// then cache it (assuming infinite cache at first)
-			trans_table.add(pc, i, next_state, found_match)
-		}
-	
-		/* here next_state is all good : we have (and they're cached) the list of nfa states that happen after we consume and go as far as possible with our current char i */
-	
-		// check for match
-		if next_state.found_match {
-			best = i 
-		}
-	
-		// then update current for next loop
-		current = next_state
-		// then equiv to advance input by going to the next iter of loop
-	}
-	// here, we read all the input, current is the state after reading and exploring the epsilon_closure
-
-	// check if there was a match at the last char
-	if current.pcs.has_match {
-		best = i // meaning toute la string match, du coup
-	}
-
-	// and finally return the best match
-	return best 
-}
-
 (* input juste pour check les anchors 
 	version initiale avec une fonction *)
 Fixpoint epsilon_loop (c: code) (inp: input) (out: dfa_state) (workqueue: dfa_state) : dfa_state :=
@@ -332,39 +297,6 @@ Definition epsilon_closure (c: code) (start: internal_state) (inp: input) (out: 
 	if is_epsilon c start then
 		epsilon_loop c inp out [start] (* begin with just start state in workqueue *)
 	else (* opti to not go thru the algo if it's not epsilon state *)
-		[start]. (* just return out *) *)
+		[start]. (* just return out *) 
 
-(* esquisses des idées pour next() et main loop, mais maintenant transformé en la for_loop relation etc
-(* found_match devrait tt le temps etre false sauf quand on le return direct en true en fait? *)
-Fixpoint next_pcs (c: code) (inp: input) (curr: dfa_state) (next: dfa_state) (*found_match: bool*) : dfa_state * bool :=
-	match curr with
-	| (pc, b) :: tail =>
-		match get_pc c pc with (* sachant que les pcs sont dans l'ordre de prio *)
-		| Some Accept =>
-			(next, true)
-			(* stop going through current pcs : we don't explore the states of lower priority *)
-		| Some Consume(cd) (*our specific current c*) => 
-			if cd == c then
-			(* read a char -> put bool to true 
-			// also, we give the current list of next states, to be used as a "seen" set which is shared by all nfa states in the current dfa state *)
-				next_pcs c inp tail (epsilon_closure (pc+1, true) inp next) (* found_match *)
-			else 
-				next_pcs c inp tail next
-			
-		| Some KillThread => (* TODO idk how to handle it here ? *)
-			(Dead, false)		
-		| _ => next_pcs c inp tail next
-		end
-	| [] =>
-		(next, false)
-	end.
-		
-
-Definition next (c:code) (current_ldfa: ldfa_state) : ldfa_state :=
-	match current_ldfa with
-	| LDFA_final res => (* error ?? *) current_ldfa
-	| LDFA (curr: dfa_state) (inp: input) (ttab: transition_table) (best: option input) (next: dfa_state) =>
-		next = next_pcs c inp curr [] false
-		(*  then cache it (assuming infinite cache at first) *)
-		trans_table.add(pc, i, next_state, found_match)
- *)
+*)
