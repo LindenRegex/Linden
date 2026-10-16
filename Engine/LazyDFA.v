@@ -166,16 +166,17 @@ Proof.
   	end; try discriminate; try congruence.		  
 Qed.
 
-(* 
-Definition epsilon_closure (c: code) (start: internal_state) (inp: input) (out: dfa_state) : dfa_state :=
-if exists new_out, (clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp out [start]) (LDFA_Eps_Done new_out)) then new_out else [].
-*)
-(* Definition epsilon_closure_rel (c : code) (start : internal_state) (inp : input) (out : dfa_state) : Prop :=
-  clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp [] [start]) (LDFA_Eps_Done out). *)
 
-(* Definition initial_int_state : internal_state := (0, CanExit).
-Definition initial_dfa_state : dfa_state := epsilon_closure c inp [] [initial_int_state].
-Definition initial_ldfa_state (c: code) (inp: input) : ldfa_state := LDFA initial_dfa_state inp [] None. *)
+Definition initial_int_state : internal_state := (0, CanExit).
+Definition initial_epsilon_state (inp: input) : ldfa_epsilon_state := LDFA_Eps_Running inp [] [initial_int_state].
+
+Definition epsilon_closure_rel (c : code) (start : internal_state) (inp : input) (out : dfa_state) : Prop :=
+  clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp [] [start]) (LDFA_Eps_Done out).
+
+(* tells if given "st" state is an initial ldfa state *)
+Definition initial_ldfa_rel (c : code) (inp : input) (st : ldfa_state) : Prop :=
+  exists initial_dfa_state, epsilon_closure_rel c initial_int_state inp initial_dfa_state 
+  							/\ st = LDFA initial_dfa_state inp [] None.
 
 Inductive ldfa_nextloop_state : Type :=
 | LDFA_Next_Running (next: dfa_state) (current_pcs: dfa_state)
@@ -209,7 +210,7 @@ Inductive next_loop_rel (c:code) (i:input) : ldfa_nextloop_state -> ldfa_nextloo
 (* 
 | LDFA (curr: dfa_state) (inp: input) (ttab: transition_table) (best: option input) (next: dfa_state)
 | LDFA_final (res:option input). 
-assuming init_state : LDFA (curr = (epsilon_closure c i [] code@0)) (i) (ttab = []) (best = None) (next = [])
+assuming init_state : LDFA (curr = (epsilon_closure c i [] code@0)) (i) (ttab = []) (best = None)
 assuming infinite cache for now : could late add non deterministic step that clears the cache
 *)
 Inductive ldfa_loop_rel (c:code) : ldfa_state -> ldfa_state -> Prop := 
