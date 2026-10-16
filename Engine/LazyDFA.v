@@ -150,6 +150,22 @@ Inductive epsilon_loop_rel (c: code): ldfa_epsilon_state -> ldfa_epsilon_state -
 		epsilon_loop_rel c (LDFA_Eps_Running inp out (curr :: tail)) (LDFA_Eps_Running inp (out ++ [curr]) ((next_step curr) :: tail)).
 
 
+Theorem ldfa_epsilon_deterministic:
+  forall c epso eps1 eps2
+    (STEP1: epsilon_loop_rel c epso eps1)
+    (STEP2: epsilon_loop_rel c epso eps2),
+    eps1 = eps2.
+Proof.
+	intros. 
+	inversion STEP1 ; subst; inversion STEP2; subst;
+	unfold is_epsilon_break, is_epsilon_skip in *;
+	repeat match goal with
+	| H : get_pc ?c ?l = Some _ |- _ =>  rewrite H in *
+	| H : context [match get_pc ?c ?l with _ => _ end] |- _ =>
+      destruct (get_pc c l) as [ instr | ]; [ destruct instr | ]
+  	end; try discriminate; try congruence.		  
+Qed.
+
 (* 
 Definition epsilon_closure (c: code) (start: internal_state) (inp: input) (out: dfa_state) : dfa_state :=
 if exists nex_out, (clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp out [start]) (LDFA_Eps_Done new_out)) then new_out else [].
