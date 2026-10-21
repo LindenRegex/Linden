@@ -63,7 +63,8 @@ Inductive ldfa_state : Type :=
 | LDFA_final (res:option input). (* seulement à la toute fin de la main loop *)
 (* assuming that we have an anchored search, we just need to report the input, since we have no capture group *)
 
-(* epsilon-exploration  *)
+
+(********** epsilon-exploration **********)
 
 Inductive ldfa_epsilon_state : Type :=
 | LDFA_Eps_Running (inp: input) (out: dfa_state) (workqueue: dfa_state)
@@ -150,33 +151,8 @@ Inductive epsilon_loop_rel (c: code): ldfa_epsilon_state -> ldfa_epsilon_state -
 		epsilon_loop_rel c (LDFA_Eps_Running inp out (curr :: tail)) (LDFA_Eps_Running inp (out ++ [curr]) ((next_step curr) :: tail)).
 
 
-Theorem ldfa_epsilon_deterministic:
-  forall c epso eps1 eps2
-    (STEP1: epsilon_loop_rel c epso eps1)
-    (STEP2: epsilon_loop_rel c epso eps2),
-    eps1 = eps2.
-Proof.
-	intros. 
-	inversion STEP1 ; subst; inversion STEP2; subst;
-	unfold is_epsilon_break, is_epsilon_skip in *;
-	repeat match goal with
-	| H : get_pc ?c ?l = Some _ |- _ =>  rewrite H in *
-	| H : context [match get_pc ?c ?l with _ => _ end] |- _ =>
-      destruct (get_pc c l) as [ instr | ]; [ destruct instr | ]
-  	end; try discriminate; try congruence.		  
-Qed.
+(********** compute next nfa states **********)
 
-
-Definition initial_int_state : internal_state := (0, CanExit).
-Definition initial_epsilon_state (inp: input) : ldfa_epsilon_state := LDFA_Eps_Running inp [] [initial_int_state].
-
-Definition epsilon_closure_rel (c : code) (start : internal_state) (inp : input) (out : dfa_state) : Prop :=
-  clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp [] [start]) (LDFA_Eps_Done out).
-
-(* tells if given "st" state is an initial ldfa state *)
-Definition initial_ldfa_rel (c : code) (inp : input) (st : ldfa_state) : Prop :=
-  exists initial_dfa_state, epsilon_closure_rel c initial_int_state inp initial_dfa_state 
-  							/\ st = LDFA initial_dfa_state inp [] None.
 
 Inductive ldfa_nextloop_state : Type :=
 | LDFA_Next_Running (next: dfa_state) (current_pcs: dfa_state)
@@ -206,6 +182,9 @@ Inductive next_loop_rel (c:code) (i:input) : ldfa_nextloop_state -> ldfa_nextloo
 | nlr_kill : forall n pc pcs
 	(KILL_PC: get_pc c (fst pc) = Some (KillThread)),
 		next_loop_rel c i (LDFA_Next_Running n (pc :: pcs)) (LDFA_Next_Done [] false).
+
+
+(********** main loop **********)
 
 (* 
 | LDFA (curr: dfa_state) (inp: input) (ttab: transition_table) (best: option input) (next: dfa_state)
@@ -249,6 +228,173 @@ Inductive ldfa_loop_rel (c:code) : ldfa_state -> ldfa_state -> Prop :=
 		let next_ttab := (add_trans ttab curr char next false) in
 		ldfa_loop_rel c (LDFA curr i ttab best) (LDFA next next_i next_ttab best) (* update curr, inp, table *)
 .
+
+
+(********** initial state **********)
+
+Definition initial_int_state : internal_state := (0, CanExit).
+Definition initial_epsilon_state (inp: input) : ldfa_epsilon_state := LDFA_Eps_Running inp [] [initial_int_state].
+
+Definition epsilon_closure_rel (c : code) (start : internal_state) (inp : input) (out : dfa_state) : Prop :=
+  clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp [] [start]) (LDFA_Eps_Done out).
+
+(* tells if given "st" state is an initial ldfa state *)
+Definition initial_ldfa_rel (c : code) (inp : input) (st : ldfa_state) : Prop :=
+  exists initial_dfa_state, epsilon_closure_rel c initial_int_state inp initial_dfa_state 
+  							/\ st = LDFA initial_dfa_state inp [] None.
+
+
+(********** determinism of the relations **********)
+
+(* The epsilon step relation is deterministic *)
+Theorem ldfa_epsilon_deterministic:
+  forall c epso eps1 eps2
+    (STEP1: epsilon_loop_rel c epso eps1)
+    (STEP2: epsilon_loop_rel c epso eps2),
+    eps1 = eps2.
+Proof.
+	intros. 
+	inversion STEP1 ; subst; inversion STEP2; subst;
+	unfold is_epsilon_break, is_epsilon_skip in *;
+	repeat match goal with
+	| H : get_pc ?c ?l = Some _ |- _ =>  rewrite H in *
+	| H : context [match get_pc ?c ?l with _ => _ end] |- _ =>
+      destruct (get_pc c l) as [ instr | ]; [ destruct instr | ]
+  	end; try discriminate; try congruence.		  
+Qed.
+
+(* a done state can't eps-step to anything *)
+Lemma eps_done_terminal : forall c out s,
+  ~ epsilon_loop_rel c (LDFA_Eps_Done out) s.
+Proof. intros c out s H. inversion H. Qed.
+
+(* a done state can only eps-star to itself *)
+Lemma rtc_eps_done : forall c out next,
+  clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Done out) next ->
+  next = LDFA_Eps_Done out.
+Proof.
+  intros.
+  remember (LDFA_Eps_Done out) as out_state.
+  induction (H); subst.
+  - pose proof (eps_done_terminal _ _ _ H0) as Hdone. contradiction.
+  - reflexivity.
+  - specialize (IHc0_1 eq_refl c0_1). subst.
+  apply IHc0_2. reflexivity. apply H.
+Qed.
+
+(* 
+	x -> y & x -*> b means 
+	either x->y was the first (deter) step towards b and thus we can continue y-*>b 
+	or it already is b
+*)
+Lemma rtc_eps_step : forall c x y b,
+  epsilon_loop_rel c x y ->
+  clos_refl_trans _ (epsilon_loop_rel c) x b ->
+  clos_refl_trans _ (epsilon_loop_rel c) y b \/ b = x.
+Proof.
+  intros c x y b H_step H.
+  revert y H_step.
+  induction H as [x b Hb | | x m b H1 IH1 H2 IH2]; intros y H_step.
+  - (* x -> b, and x -> y, so y = b & b -*> b *)
+    assert (y = b) by (eapply ldfa_epsilon_deterministic; eauto).
+    subst. left. apply rt_refl.
+  - (* b = x *)
+    right. reflexivity.
+  - (* x ->* m ->* b *)
+    destruct (IH1 _ H_step) as [Hym | Hmx].
+    + (* y -*> m -*> b *) left. eapply rt_trans; eauto.
+    + subst. apply IH2. exact H_step.
+Qed.
+
+Lemma rtc_reach_done : forall c start mid o
+  (STARsm: clos_refl_trans _ (epsilon_loop_rel c) start mid)
+  (STARsd: clos_refl_trans _ (epsilon_loop_rel c) start (LDFA_Eps_Done o)),
+  clos_refl_trans _ (epsilon_loop_rel c) mid (LDFA_Eps_Done o).
+Proof.
+  intros.
+  induction STARsm; intros.
+  - destruct (rtc_eps_step _ _ _ _ H STARsd).
+    + exact H0.
+    + subst. exfalso. eapply eps_done_terminal; eauto.
+  - assumption.
+  - apply IHSTARsm2. apply IHSTARsm1. assumption.
+Qed.
+
+Lemma epsilon_rtc_deterministic : 
+	forall c s out1 out2
+		(CLOS1: clos_refl_trans _ (epsilon_loop_rel c) s (LDFA_Eps_Done out1)) 
+		(CLOS2: clos_refl_trans _ (epsilon_loop_rel c) s (LDFA_Eps_Done out2)),
+		out1 = out2.
+Proof.
+	intros.
+	remember (LDFA_Eps_Done out1) as end1 eqn:Hend1.
+	remember (LDFA_Eps_Done out2) as end2 eqn:Hend2.
+  	revert out1 Hend1 (* out2 Hend2 *).
+	induction (CLOS1) as [ | | start mid fin STEP1 IH1 STEP2 IH2]; intros; subst.
+	- inversion CLOS2; subst.
+		+ assert (LDFA_Eps_Done out1 = LDFA_Eps_Done out2).
+		eapply (ldfa_epsilon_deterministic c x _ _ H H0). 
+		congruence.
+		+ pose proof (eps_done_terminal _ _ _ H) as Hdone. contradiction.
+		+ destruct (rtc_eps_step _ _ _ _ H CLOS2) as [Hd | Hx].
+		* apply rtc_eps_done in Hd; congruence.
+		* subst. exfalso. eapply eps_done_terminal; eauto.
+	- pose proof (rtc_eps_done _ _ _ CLOS2 ). congruence.
+	- specialize (IH1 STEP1 CLOS2 ) ; specialize (IH2 STEP2).
+	(* can prove [mid = Done out1] or [mid -*> Done out2]
+		mid could be step(s) before Done out1, so no?
+	*)
+	pose proof (rtc_reach_done _ _ _ _ STEP1 CLOS2) as Hmid.
+	eapply (IH2 Hmid out1 eq_refl). 
+Qed.
+
+Theorem ldfa_next_deterministic:
+  forall c i nexto next1 next2
+    (STEP1: next_loop_rel c i nexto next1)
+    (STEP2: next_loop_rel c i nexto next2),
+    next1 = next2.
+Proof.
+	intros.
+	inversion STEP1 ; subst; inversion STEP2; try reflexivity; unfold is_nextloop_skip in *;
+	repeat match goal with
+	| H : get_pc ?c ?l = Some _ |- _ =>  rewrite H in *
+	end; try congruence.
+	subst.
+	assert (out = out0) by (eapply epsilon_rtc_deterministic; eauto).
+	congruence.
+Qed.
+
+Theorem ldfa_deterministic:
+  forall c ldfao ldfa1 ldfa2
+    (STEP1: ldfa_loop_rel c ldfao ldfa1)
+    (STEP2: ldfa_loop_rel c ldfao ldfa2),
+    ldfa1 = ldfa2.
+Proof.
+	intros.
+	inversion STEP1 ; subst; inversion STEP2; subst; try reflexivity;
+	repeat match goal with
+	| H : advance_input ?i ?forward = _ |- _ =>  rewrite H in *
+	| H : dfa_state_hasmatch ?c ?curr = _ |- _ =>  rewrite H in *
+	end; try congruence; inversion ADVANCE.
+	- inversion ADVANCE.
+	assert (Hnext: next = next0).
+	admit.
+	assert (Hntab: next_ttab = next_ttab0).
+	admit.
+	congruence.
+	- admit.
+Admitted.
+
+
+
+
+
+
+
+
+
+
+
 
 (* 
 (* input juste pour check les anchors 
