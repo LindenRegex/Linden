@@ -110,6 +110,44 @@ Qed.
 
 End TreeExample.
 
+Section Modifier.
+
+(* I - Backreference behavior: from issue https://github.com/tc39/proposal-regexp-modifiers/issues/7 *)
+
+Definition F := $ "F".
+Definition F_char := Regex.Character (CdSingle F).
+Definition f := $ "f".
+Definition f_char := Regex.Character (CdSingle f).
+
+Definition add_i : modifier := mod DAdd DSame DSame.
+Definition remove_i : modifier := mod DRemove DSame DSame.
+
+Definition irer_of (r : regex) : RegExpRecord :=
+  apply_mod (rer_of r) add_i.
+
+Example FF := Input [F; F] [].
+Example Ff := Input [F; f] [].
+
+(* Example 1.1: no i in rer, add it in the group. /((?i:f))\1/ *)
+Example add_re : regex := Sequence (Group 1 (Modifiers add_i f_char)) (Backreference 1).
+Definition add_match (inp : input) := compute_tr [Areg add_re] inp (rer_of add_re) GroupMap.empty forward.
+
+(* succeeds on "FF" *)
+Compute add_match FF.
+(* fails on "Ff" *)
+Compute add_match Ff.
+
+(* Example 1.2: i in rer, remove it in the group. /((?i:f))\1/ *)
+Example remove_re : regex := Sequence (Modifiers remove_i (Group 1 F_char)) (Backreference 1).
+Definition remove_match (inp : input) := compute_tr [Areg remove_re] inp (irer_of remove_re) GroupMap.empty forward.
+
+(* succeeds on "FF" *)
+Compute remove_match FF.
+(* succeeds on "Ff"! *)
+Compute remove_match Ff.
+
+End Modifier.
+
 Section FailRegex.
   Context (rer: RegExpRecord).
   (* a regex that always fails to match *)
