@@ -8,7 +8,7 @@ Section Utilities.
   Context (rer: RegExpRecord).
 
 
-    
+  
 
   Lemma sequence_assoc_equiv r0 r1 r2:
     Sequence r0 (Sequence r1 r2) ≅[rer] Sequence (Sequence r0 r1) r2.
@@ -42,7 +42,7 @@ Section Utilities.
     intros dir.
     pose proof (sequence_assoc_equiv r0 r1 r2 dir) as SEQASSOC. assumption.
   Qed.
-    
+  
 
   Create HintDb is_tree.
   Hint Constructors is_tree: is_tree.
@@ -54,7 +54,7 @@ Section Utilities.
     rewrite <- app_assoc in IHis_tree; eauto with is_tree.
   Qed.
 
-    Lemma is_tree_skip_zero_r a i gm dir tr r b:
+  Lemma is_tree_skip_zero_r a i gm dir tr r b:
     is_tree rer a i gm dir tr ->
     is_tree rer (a ++ [Areg (Quantified b 0 (NoI.N 0) r)]) i gm dir tr.
   Proof.
@@ -68,7 +68,7 @@ Section Utilities.
     intros x x' y y' [] EQUIV_x EQUIV_y.
     - destruct EQUIV_x as [DEF_GROUPS_x EQUIV_x]. destruct EQUIV_y as [DEF_GROUPS_y EQUIV_y].
       split. 1: { simpl. rewrite <- DEF_GROUPS_x, DEF_GROUPS_y. reflexivity. }
-      intros i gm tr1 tr2 TREE1 TREE2.
+           intros i gm tr1 tr2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst. simpl in *. clear TREE1 TREE2.
       revert i gm tr1 tr2 CONT CONT0.
       change (actions_equiv_dir rer forward [Areg x; Areg y] [Areg x'; Areg y']).
@@ -77,7 +77,7 @@ Section Utilities.
       apply app_eq_both with (a1 := [Areg x]) (a2 := [Areg x']) (b1 := [Areg y]) (b2 := [Areg y']) (dir := forward); auto.
     - destruct EQUIV_x as [DEF_GROUPS_x EQUIV_x]. destruct EQUIV_y as [DEF_GROUPS_y EQUIV_y].
       split. 1: { simpl. rewrite <- DEF_GROUPS_x, DEF_GROUPS_y. reflexivity. }
-      intros i gm tr1 tr2 TREE1 TREE2.
+           intros i gm tr1 tr2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst. simpl in *. clear TREE1 TREE2.
       revert i gm tr1 tr2 CONT CONT0.
       change (actions_equiv_dir rer backward [Areg y; Areg x] [Areg y'; Areg x']).
@@ -128,7 +128,7 @@ Section Examples.
         ≅[rer][forward] (Sequence (Quantified greedy 1 (NoI.N 0) r) (Quantified greedy n delta r)).
   Proof.
     split. 1: { simpl. rewrite H. reflexivity. }
-    intros i gm tr1 tr2 TREE1 TREE2.
+         intros i gm tr1 tr2 TREE1 TREE2.
     inversion TREE1; subst. inversion TREE2; subst. simpl in CONT. inversion CONT; subst.
     clear TREE1 TREE2 CONT.
     unfold tree_equiv_tr_dir. simpl.
@@ -150,7 +150,7 @@ Section Examples.
         ≅[rer][backward] (Sequence (Quantified greedy n delta r) (Quantified greedy 1 (NoI.N 0) r)).
   Proof.
     split. 1: { simpl. rewrite H. reflexivity. }
-    intros i gm tr1 tr2 TREE1 TREE2.
+         intros i gm tr1 tr2 TREE1 TREE2.
     inversion TREE1; subst. inversion TREE2; subst. simpl in CONT. inversion CONT; subst.
     clear TREE1 TREE2 CONT.
     unfold tree_equiv_tr_dir. simpl.
@@ -177,21 +177,89 @@ Section Examples.
   
   
 
-  Theorem disj_equiv_dir: forall x x' y y' dir, x ≅[rer][dir] x' -> y ≅[rer][dir] y' -> Disjunction x y ≅[rer][dir] Disjunction x' y'.
+  Lemma disj_equiv_dir: forall x x' y y' dir, x ≅[rer][dir] x' -> y ≅[rer][dir] y' -> Disjunction x y ≅[rer][dir] Disjunction x' y'.
   Proof.
     intros x x' y y' dir [GRPX EQSX] [GRPY EQSY]; split; simpl; try rewrite GRPX; try rewrite GRPY; try reflexivity.
     intros i gm t1 t2 TREE1 TREE2.
     inversion TREE1; inversion TREE2; subst. clear TREE1 TREE2. simpl.
-    unfold tree_equiv_tr_dir. simpl. Search leaves_equiv. apply leaves_equiv_app.
+    unfold tree_equiv_tr_dir. simpl. apply leaves_equiv_app.
     specialize (EQSX _ _ _ _ ISTREE1 ISTREE0). auto.
     specialize (EQSY _ _ _ _ ISTREE2 ISTREE3). auto.
   Qed.
 
+
+  (* INFINITY: Here are lemmas to simplify the work with *)
+
+  (* If the remaining length is 0, and we have a regex followed by a check,
+   then the leaves of the corresponding tree is empty*)
+  Lemma null_length_fails:
+    forall i g dir r t acts,
+      remaining_length i dir <= 0 ->
+      is_tree rer ([Areg r; Acheck i] ++ acts) i g dir t ->
+      tree_leaves t g i dir = [].
+  Proof.
+    intros i g d r t acts l.
+    assert (NL1: actions_no_leaves rer ([Areg r; Acheck i] ++ acts) d). {
+      apply actions_no_leaves_add_left with (a:= [Areg r]).
+      apply actions_no_leaves_add_right with (a := [Acheck i]) (b := acts).
+      apply check_end_no_leaves. auto. lia.
+    }
+    unfold actions_no_leaves in NL1. eapply NL1; eauto. 
+  Qed.
+
   
+  Lemma quantifier_null_length_skip:
+    forall i d g dir acts r t1 t2 greedy,
+      remaining_length i dir <= 0 ->
+      is_tree rer ([Areg (Quantified greedy 0 d r)] ++ acts) i g dir t1 ->
+      is_tree rer acts i g dir t2 ->
+      tree_leaves t1 g i dir = tree_leaves t2 g i dir.
+  Proof.
+    intros i d g dir acts r t1 t2  greedy l T1 T2. Search leaves_equiv.
+    inversion T1; subst. eapply is_tree_determ with (t1 := t1) (t2 := t2) in SKIP; eauto.
+    subst; reflexivity.
+    specialize (null_length_fails _ _ _ _ _ _ l ISTREE1) as nlf.
+    pose proof (is_tree_determ _ _ _ _ _ _ _  T2 SKIP). subst.
+    destruct greedy; simpl; rewrite nlf; try rewrite app_nil_r; auto.
+  Qed.
+
+  Lemma quantifier_null_length:
+    forall i d g dir r t1 greedy,
+      remaining_length i dir <= 0 ->
+      is_tree rer ([Areg (Quantified greedy 0 d r)]) i g dir t1 ->
+      tree_leaves t1 g i dir = [(i, g)].
+  Proof.
+    intros.
+    pose proof (is_tree_productivity rer [] i g dir) as [t2 T2].
+    pose proof (quantifier_null_length_skip _ _ _ _ _ _ _  _ _ H H0 T2).
+    inversion T2; subst. rewrite H1; reflexivity.
+  Qed.
+
+  Lemma quantifier_inf_step_advances:
+    forall i r  n dir acts1 acts2 g t1 t2, remaining_length i dir = n ->
+         is_tree rer ([Areg r; Acheck i] ++ acts1) i g dir t1 ->
+         is_tree rer ([Areg r; Acheck i] ++ acts2) i g dir t2 ->
+         (forall i,
+             remaining_length i dir < n ->
+             forall (gm : group_map) (t1 t2 : tree),
+               is_tree rer acts1 i gm dir t1 ->
+               is_tree rer acts2 i gm dir t2 -> leaves_equiv [] (tree_leaves t1 gm i dir) (tree_leaves t2 gm i dir)) ->
+         leaves_equiv [] (tree_leaves t1 g i dir) (tree_leaves t2 g i dir).
+  Proof.
+    intros i r n dir acts1 acts2 g t1 t2 HeqL T1 T2 IH.
+    specialize (is_tree_productivity rer [Areg r] i g dir) as [t3 T3].
+    rewrite app_cons in T1, T2. eapply leaves_concat with (act1 := [Areg r]) in T1, T2; eauto.
+    remember (tree_leaves t3 g i dir) as l2.
+    induction l2. inversion T2; inversion T1; subst. reflexivity.
+    eapply flatmap_leaves_equiv_r; eauto. unfold equiv_leaffuncts. intros.
+    inversion H; inversion H0; subst. 
+    inversion TREE; inversion TREE0; subst; try contradiction. destruct a; simpl in *.
+    2: reflexivity.
+    eapply IH; eauto. eapply strict_suffix_remaining_length; eauto.
+  Qed.
+
+End Examples. 
 
 
-End Examples.
 
 
-
-                      

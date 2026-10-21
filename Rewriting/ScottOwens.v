@@ -161,8 +161,8 @@ Section ScottOwens.
     
 
                       
-    Lemma quantified_quantified_eq_quantified:
-    forall  r,
+  Lemma quantified_true_quantified_eq_quantified:
+    forall r,
       def_groups r = [] ->
       (Quantified true 0 +∞ r) ≅[rer] (Quantified true 0 +∞ ((Quantified true 0 +∞ r))).
   Proof.
@@ -187,7 +187,7 @@ Section ScottOwens.
       clear CHECKFAIL SKIP1 H17 SKIP T1 T2 ISTREE0.
       pose proof (is_tree_productivity rer [Areg r; Acheck i; Areg (Quantified true 0 +∞ r); Areg (Quantified true 0 +∞ (Quantified true 0 +∞ r))] i (GroupMap.reset (def_groups r) (GroupMap.reset (def_groups r) g)) dir) as [t3 T3].
       pose proof (skip_check i  [Areg (Quantified true 0 +∞ r)] [Areg (Quantified true 0 +∞ (Quantified true 0 +∞ r))] dir).
-      eapply app_eq_left with (acts := [Areg r])in H.
+      eapply app_eq_left with (acts := [Areg r]) in H.
       simpl in H.
       etransitivity. 2: symmetry; eapply H; eauto. clear H.
       rewrite GROUPEMPT in *. simpl in *.
@@ -204,5 +204,45 @@ Section ScottOwens.
       eapply input_only_forward in H0; eauto. destruct H0. 
       subst. lia. Search StrictSuffix.strict_suffix. apply strict_suffix_remaining_length in H0. lia.
   Qed.
-  
+
+  Lemma quantified_false_quantified_eq_quantified:
+    forall r,
+      def_groups r = [] ->
+      (Quantified true 0 +∞ r) ≅[rer] (Quantified true 0 +∞ ((Quantified false 0 +∞ r))).
+  Proof.
+    intros r GROUPEMPT dir.
+    split. simpl. reflexivity.
+    intros i.
+    unfold tree_equiv_tr_dir.
+    remember (remaining_length i dir) as l.
+    assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql. generalize dependent i.
+    induction l; intros i IL g t1 t2 T1 T2.
+    - eapply quantifier_null_length in T1, T2; eauto.
+      rewrite T1, T2; reflexivity.
+    - apply Nat.lt_eq_cases in IL as [c1 | c2]. eapply IHl; eauto. lia.
+      inversion T1; inversion T2; inversion ISTREE0; subst.
+      destruct plus0; discriminate.
+      destruct plus, plus0, plus1; try discriminate.
+      simpl in *.  inversion SKIP1. exfalso. eapply StrictSuffix.ss_irreflexive; eauto.
+      subst. simpl in *. eapply leaves_equiv_app.
+      2: inversion SKIP; inversion SKIP0; subst; reflexivity.
+      clear T1 T2 SKIP1 ISTREE0 CHECKFAIL H17 H1 H9 SKIP SKIP0.
+      pose proof (is_tree_productivity rer [Areg r; Acheck i; Areg (Quantified false 0 +∞ r); Areg (Quantified true 0 +∞ (Quantified false 0 +∞ r))] i g dir) as [t3 T3].
+      pose proof (skip_check i  [Areg (Quantified false 0 +∞ r)] [Areg (Quantified true 0 +∞ (Quantified false 0 +∞ r))] dir). eapply app_eq_left with (acts := [Areg r]) in H.
+      simpl in H. rewrite GROUPEMPT in *. simpl in *. etransitivity.
+      2: symmetry; eapply H; auto. 2: exact T3.
+      eapply quantifier_inf_step_advances with (r := r); eauto.
+      exact ISTREE1. exact T3. intros.
+      pose proof (is_tree_productivity rer [Areg (Quantified false 0 +∞  r); Areg (Quantified true 0 +∞ r)] i0 gm dir) as [t4 T4]. etransitivity.
+      symmetry. eapply atmost_atmost_equiv_actions_false_trueinf; eauto.
+      pose proof (is_tree_productivity rer [Areg (Quantified false 0 +∞  r)] i0 gm dir) as [t5 T5]. 
+      rewrite app_cons in H2, T4. eapply leaves_concat with (act1 := [Areg (Quantified false 0 +∞ r)]) in H2, T4; eauto. Search FlatMap.
+      eapply flatmap_leaves_equiv_r_prop with (l := (tree_leaves t5 gm i0 dir)) (P := (fun (leaf: leaf) => let (i', g') := leaf in remaining_length i' dir < S l)); eauto.
+      intros le P l1 l2 a1 a2. inversion a1; inversion a2; subst.
+      destruct le; simpl in *. eapply IHl; eauto. lia.
+      apply Forall_forall. intros x inX. destruct x.
+      eapply input_only_forward in T5; eauto. destruct T5. 
+      subst. lia. Search StrictSuffix.strict_suffix. apply strict_suffix_remaining_length in H3. lia.
+  Qed.
+      
 End ScottOwens.
