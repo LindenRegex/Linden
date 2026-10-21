@@ -306,7 +306,7 @@ Proof.
     + subst. apply IH2. exact H_step.
 Qed.
 
-Lemma rtc_reach_done : forall c start mid o
+Lemma rtc_eps_to_done : forall c start mid o
   (STARsm: clos_refl_trans _ (epsilon_loop_rel c) start mid)
   (STARsd: clos_refl_trans _ (epsilon_loop_rel c) start (LDFA_Eps_Done o)),
   clos_refl_trans _ (epsilon_loop_rel c) mid (LDFA_Eps_Done o).
@@ -344,7 +344,7 @@ Proof.
 	(* can prove [mid = Done out1] or [mid -*> Done out2]
 		mid could be step(s) before Done out1, so no?
 	*)
-	pose proof (rtc_reach_done _ _ _ _ STEP1 CLOS2) as Hmid.
+	pose proof (rtc_eps_to_done _ _ _ _ STEP1 CLOS2) as Hmid.
 	eapply (IH2 Hmid out1 eq_refl). 
 Qed.
 
@@ -364,6 +364,101 @@ Proof.
 	congruence.
 Qed.
 
+(****************)
+
+(* a done state can't next-step to anything *)
+Lemma next_done_terminal : forall c i out b s,
+  ~ next_loop_rel c i (LDFA_Next_Done out b) s.
+Proof. intros until 1. inversion H. Qed.
+
+(* a done state can only next-star to itself *)
+Lemma rtc_next_done : forall c i out b next,
+  clos_refl_trans _ (next_loop_rel c i) (LDFA_Next_Done out b) next ->
+  next = LDFA_Next_Done out b.
+Proof.
+  intros.
+  remember (LDFA_Next_Done out b) as out_state.
+  induction (H); subst.
+  - pose proof (next_done_terminal _ _ _ _ _ H0) as Hdone. contradiction.
+  - reflexivity.
+  - specialize (IHc0_1 eq_refl c0_1). subst.
+  apply IHc0_2. reflexivity. apply H.
+Qed.
+
+(* 
+	x -> y & x -*> b means 
+	either x->y was the first (deter) step towards b and thus we can continue y-*>b 
+	or it already is b
+*)
+Lemma rtc_next_step : forall c i x y b,
+  next_loop_rel c i x y ->
+  clos_refl_trans _ (next_loop_rel c i) x b ->
+  clos_refl_trans _ (next_loop_rel c i) y b \/ b = x.
+Proof.
+  intros c i x y b H_step H.
+  revert y H_step.
+  induction H as [x b Hb | | x m b H1 IH1 H2 IH2]; intros y H_step.
+  - (* x -> b, and x -> y, so y = b & b -*> b *)
+    assert (y = b) by (eapply ldfa_next_deterministic; eauto).
+    subst. left. apply rt_refl.
+  - (* b = x *)
+    right. reflexivity.
+  - (* x ->* m ->* b *)
+    destruct (IH1 _ H_step) as [Hym | Hmx].
+    + (* y -*> m -*> b *) left. eapply rt_trans; eauto.
+    + subst. apply IH2. exact H_step.
+Qed.
+
+Lemma rtc_next_to_done : forall c i start mid o b
+  (STARsm: clos_refl_trans _ (next_loop_rel c i) start mid)
+  (STARsd: clos_refl_trans _ (next_loop_rel c i) start (LDFA_Next_Done o b)),
+  clos_refl_trans _ (next_loop_rel c i) mid (LDFA_Next_Done o b).
+Proof.
+  intros.
+  induction STARsm; intros.
+  - destruct (rtc_next_step _ _ _ _ _ H STARsd).
+    + exact H0.
+    + subst. exfalso. eapply next_done_terminal; eauto.
+  - assumption.
+  - apply IHSTARsm2. apply IHSTARsm1. assumption.
+Qed.
+
+Lemma next_rtc_deterministic : 
+	forall c i s out1 b1 out2 b2
+		(CLOS1: clos_refl_trans _ (next_loop_rel c i) s (LDFA_Next_Done out1 b1)) 
+		(CLOS2: clos_refl_trans _ (next_loop_rel c i) s (LDFA_Next_Done out2 b2)),
+		out1 = out2 /\ b1 = b2.
+Proof.
+	intros.
+	remember (LDFA_Next_Done out1 b1) as end1 eqn:Hend1.
+	remember (LDFA_Next_Done out2 b2) as end2 eqn:Hend2.
+  	revert out1 b1 Hend1 (* out2 Hend2 *).
+	induction (CLOS1) as [ | | start mid fin STEP1 IH1 STEP2 IH2]; intros; subst.
+	- inversion CLOS2; subst.
+		+ assert (LDFA_Next_Done out1 b1 = LDFA_Next_Done out2 b2).
+		eapply (ldfa_next_deterministic c i x _ _ H H0). constructor; congruence.
+		+ pose proof (next_done_terminal _ _ _ _ _ H) as Hdone. contradiction.
+		+ destruct (rtc_next_step _ _ _ _ _ H CLOS2) as [Hd | Hx].
+		* apply rtc_next_done in Hd; constructor; congruence.
+		* subst. exfalso. eapply next_done_terminal; eauto.
+	- pose proof (rtc_next_done _ _ _ _ _ CLOS2 ). constructor; congruence.
+	- specialize (IH1 STEP1 CLOS2 ) ; specialize (IH2 STEP2).
+	pose proof (rtc_next_to_done _ _ _ _ _ _ STEP1 CLOS2) as Hmid.
+	constructor;
+	eapply (IH2 Hmid out1 _ eq_refl). 
+Qed.
+
+(* todo bouger dans chars aussi? *)
+Theorem next_char_deterministic:
+  forall i char1 char2
+    (NC1: next_char i = Some char1)
+    (NC2: next_char i = Some char2),
+    char1 = char2.
+Proof.
+	intros. unfold next_char in *. unfold next_str in *.
+	congruence.
+Qed.
+
 Theorem ldfa_deterministic:
   forall c ldfao ldfa1 ldfa2
     (STEP1: ldfa_loop_rel c ldfao ldfa1)
@@ -375,15 +470,10 @@ Proof.
 	repeat match goal with
 	| H : advance_input ?i ?forward = _ |- _ =>  rewrite H in *
 	| H : dfa_state_hasmatch ?c ?curr = _ |- _ =>  rewrite H in *
-	end; try congruence; inversion ADVANCE.
-	- inversion ADVANCE.
-	assert (Hnext: next = next0).
-	admit.
-	assert (Hntab: next_ttab = next_ttab0).
-	admit.
-	congruence.
-	- admit.
-Admitted.
+	end; try congruence; inversion ADVANCE; 
+	destruct (next_rtc_deterministic _ _ _ _ _ _ _ COMP_NEXT COMP_NEXT0) as [NEXT_DETER_O NEXT_DETER_B]; 
+	subst; try congruence; unfold add_trans in *; epose proof (next_char_deterministic _ _ _ NEXT_CHAR NEXT_CHAR0 ); subst; reflexivity.
+Qed.
 
 
 
