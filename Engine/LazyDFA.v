@@ -176,6 +176,10 @@ Inductive next_loop_rel (c:code) (i:input) : ldfa_nextloop_state -> ldfa_nextloo
 	(* have to pass current n as the "out" since it's shared between current threads *)
 	(EPSI: clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running i n ([next_step pc])) (LDFA_Eps_Done out)),
 		next_loop_rel c i (LDFA_Next_Running n (pc :: pcs)) (LDFA_Next_Running (n ++ out) pcs)
+| nlr_noconsume : forall n pc pcs cd (* if we can't read, we skip *)
+	(CONSUME_PC: get_pc c (fst pc) = Some (Consume cd))
+	(CANT_READ_CHAR: check_read rer cd i forward = CannotRead),
+		next_loop_rel c i (LDFA_Next_Running n (pc :: pcs)) (LDFA_Next_Running n pcs)
 | nlr_skip : forall n pc pcs
 	(SKIP_PCS: is_nextloop_skip c pc = true),
 		next_loop_rel c i (LDFA_Next_Running n (pc :: pcs)) (LDFA_Next_Running n pcs)
@@ -476,14 +480,86 @@ Proof.
 Qed.
 
 
+(********** progress of the relations **********)
+
+(* Definition is_epsilon_break (c:code) (curr: internal_state) : bool :=
+match get_pc c (fst curr) with
+| None | Some (Consume _) | Some (KillThread) | Some (Accept) => true
+| _ => false
+end.
+
+Definition is_epsilon_skip (c:code) (curr:internal_state) : bool :=
+match get_pc c (fst curr) with
+| Some (SetRegOpen _) | Some (SetRegClose _) | Some (ResetRegs _) => true
+| _ => false
+end. *)
+
+Theorem ldfa_eps_progress:
+  forall c inp out wq,
+  exists eps_next,
+    epsilon_loop_rel c (LDFA_Eps_Running inp out wq) eps_next.
+Proof.
+	intros.
+	destruct wq as [| curr wq].
+	- eexists. apply elr_final.
+	- destruct (dfa_state_contains out curr) eqn:SEEN.
+		+ eexists. apply elr_seen. eauto.
+		+ destruct (get_pc c (fst curr)) eqn:CURR_PC.
+			* 
+			assert (IS_BREAK : is_epsilon_break c curr =
+				match b with
+				| Consume _ | KillThread | Accept => true
+				| _ => false
+				end)
+				by (unfold is_epsilon_break; rewrite CURR_PC; reflexivity).
+			assert (IS_SKIP : is_epsilon_skip c curr =
+				match b with
+				| SetRegOpen _ | SetRegClose _ | ResetRegs _ => true
+				| _ => false
+				end)
+				by (unfold is_epsilon_skip; rewrite CURR_PC; reflexivity).
+			
+			destruct b; simpl in *;
+			repeat match goal with
+			| H : is_epsilon_break ?c ?curr = true |- _ => eexists; apply elr_break; eauto
+			| H : is_epsilon_skip ?c ?curr = true |- _ => eexists; apply elr_reg_skip; eauto
+			end.
+			-- destruct (anchor_satisfied rer a inp) eqn:SAT_ANC; eexists; [eapply elr_anc_sat | eapply elr_anc_unsat]; eauto.
+			-- eexists; apply elr_jmp; eauto.
+			-- eexists; apply elr_fork; eauto.
+			-- eexists; apply elr_bgnloop; eauto.
+			-- destruct (snd curr) eqn:EXIT; eexists; [apply elr_endloop_sat | eapply elr_endloop_unsat]; eauto.			
+			* eexists. apply elr_break. eauto. unfold is_epsilon_break. rewrite CURR_PC. reflexivity.
+
+Qed.
 
 
-
-
-
-
-
-
+Theorem ldfa_next_progress:
+  forall c inp next current_pcs,
+  exists next_state,
+    next_loop_rel c inp (LDFA_Next_Running next current_pcs) next_state.
+Proof.
+	intros.
+	destruct (current_pcs).
+	- eexists; apply nlr_final; eauto.
+	- set (get_curr := get_pc c (fst i)).
+	destruct (get_pc c (fst i)) eqn:CURR_PC ;
+	assert (IS_SKIP : is_nextloop_skip c i =
+				match get_curr with
+				| Some (Consume _) | Some Accept | Some KillThread => false
+				| _ => true
+				end)
+				by (unfold is_nextloop_skip; rewrite CURR_PC; reflexivity); 
+	try destruct b;			
+	simpl in *; try match goal with
+	| H : is_nextloop_skip ?c ?i = true |- _ => eexists; apply nlr_skip; eauto
+	| H : get_pc _ _ = Some Accept |- _ => eexists; apply nlr_accept; eauto
+	| H : get_pc _ _ = Some KillThread |- _ => eexists; apply nlr_kill; eauto
+	| H : get_pc _ _ = Some (Consume ?cd) |- _ => destruct (check_read rer cd inp forward) eqn:H_READ
+	end.
+		+ eexists. eapply nlr_consume; eauto. admit.	
+		+ eexists; eapply nlr_noconsume; eauto.
+Admitted.
 
 
 (* 
