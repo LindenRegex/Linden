@@ -201,7 +201,7 @@ Inductive ldfa_loop_rel (c:code) : ldfa_state -> ldfa_state -> Prop :=
 	(* if we're at the end of the input, we check if there was a match at the last char then return the best match *)
 	(EOI: advance_input i forward = None)
 	(HAS_MATCH: dfa_state_hasmatch c curr = true),
-			ldfa_loop_rel c (LDFA curr i ttab best) (LDFA_final (Some i))
+		ldfa_loop_rel c (LDFA curr i ttab best) (LDFA_final (Some i))
 | ldfalr_final_nomatch : forall i curr ttab best
 	(* if we're at the end of the input, we check if there was a match at the last char then return the best match *)
 	(EOI: advance_input i forward = None)
@@ -560,6 +560,43 @@ Proof.
 		+ eexists. eapply nlr_consume; eauto. admit.	
 		+ eexists; eapply nlr_noconsume; eauto.
 Admitted.
+
+(* 
+	if advance input = some
+	then exists next_char 
+*)
+Lemma advance_next_char: forall i next_i
+	(ADVANCE: advance_input i forward = Some next_i),
+		exists char, next_char i = Some char.
+Proof.
+	intros.
+	unfold advance_input, next_char, next_str in *.
+	destruct i eqn:hi. destruct next eqn:hn; try congruence.
+	eexists; eauto.
+Qed.
+
+
+Theorem ldfa_progress:
+  forall c i curr ttab best,
+  exists next_state,
+    ldfa_loop_rel c (LDFA curr i ttab best) next_state.
+Proof.
+	intros.
+	destruct (advance_input i forward) eqn:ADV.
+	2: {
+		destruct (dfa_state_hasmatch c curr) eqn:HASMATCH;
+		eexists;
+		[eapply ldfalr_final_match | apply ldfalr_final_nomatch];
+		eauto.
+	}
+	pose proof (advance_next_char _ _ ADV) as H_NC.
+	destruct H_NC as [ch].
+	destruct (get_trans ttab curr ch) eqn:CACHE.
+	- destruct p, b; eexists; [eapply ldfalr_cached_match | eapply ldfalr_cached_nomatch]; eauto.
+	- admit.
+Admitted.
+
+
 
 
 (* 
