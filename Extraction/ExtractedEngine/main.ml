@@ -110,10 +110,24 @@ let vmseen : SeenSets.coq_VMSeen =
 
 (** * Printing *)
 
-let char_of_coq (c : Parameters.Character.coq_type) : char = Char.chr (Obj.obj c)
+(* Results are printed as in RegElk: one line #i:<slice> per capture group *)
 
-let string_of_chars (l : Parameters.Character.coq_type list) : string =
-  Stdlib.String.of_seq (Stdlib.List.to_seq (Stdlib.List.map char_of_coq l))
+(* The slice of [str] between two indices.
+   Groups defined in lookbehinds have their indices reversed. *)
+let slice (str : string) (i : int) (j : int) : string =
+  Stdlib.String.sub str (min i j) (abs (j - i))
+
+let string_of_range (str : string) (r : Groups.GroupMap.range option) : string =
+  match r with
+  | Some { startIdx; endIdx = Some endIdx } -> slice str startIdx endIdx
+  | _ -> "Undefined"
+
+(* Group 0 is the entire match: matches start at index 0 and end at [end_idx] *)
+let print_groups (str : string) (max_group : int) (end_idx : int) (gm : Groups.GroupMap.t) : unit =
+  Printf.printf "#0:%s\n" (slice str 0 end_idx);
+  for i = 1 to max_group do
+    Printf.printf "#%d:%s\n" i (string_of_range str (Groups.GroupMap.find i gm))
+  done
 
 (** * Running the engine *)
 
@@ -137,30 +151,32 @@ let rer_of (r : Regex.regex) : RegExpRecord.RegExpRecord.coq_type =
 (* Runs the PikeVM with [regex] on [str] and prints the result *)
 let run (regex : Regex.regex) (str : string) : unit =
   if not (PikeSubset.is_pike_regex params regex) then
-    prerr_endline "Error: the regex is not in the subset supported by the PikeVM"
+    prerr_endline "Error: unsupported by the PikeVM"
   else
   let input = Chars.Input (chars_of_string str, []) in
   let rer = rer_of regex in
   match FunctionalPikeVM.pike_vm_match params vmseen rer regex input with
   | FunctionalPikeVM.OutOfFuel -> print_endline "Out of fuel"
-  | Finished None -> Printf.printf "No match on %S\n" str
-  | Finished (Some (Chars.Input (next, pref), _)) ->
-    Printf.printf "Match on %S: consumed %S, remaining %S\n" str
-      (string_of_chars (Stdlib.List.rev pref))
-      (string_of_chars next)
+  | Finished None -> print_endline "NoMatch"
+  | Finished (Some (inp, gm)) -> print_groups str rer.capturingGroupsCount (Chars.idx params inp) gm
 
-(** * Example regex /a|b/ *)
+(** * Asking the user for a regex and a string *)
 
-let example_regex : Regex.regex =
-  Regex.Disjunction
-    (Regex.Character (Chars.CdSingle (coq_of_char 'a')),
-     Regex.Character (Chars.CdSingle (coq_of_char 'b')))
+let read_input (prompt : string) : string option =
+  print_string prompt;
+  flush stdout;
+  try Some (read_line ()) with End_of_file -> None
 
 let () =
-  print_string "Input string: ";
-  flush stdout;
-  match read_line () with
-  | exception End_of_file -> print_endline "\nNo input given"
-  | str ->
-    try run example_regex str
-    with Invalid_argument _ -> prerr_endline "Error: the input must only contain ASCII characters"
+  match read_input "Regex: " with
+  | None -> print_endline "\nEnd of input, no regex given"
+  | Some re ->
+    match Parser.Parse.parse coq_of_char re with
+    | exception Parser.Parse.Parse_error msg -> prerr_endline ("Error: cannot parse the regex: " ^ msg)
+    | exception Invalid_argument _ -> prerr_endline "Error: the regex should be ASCII"
+    | regex ->
+      match read_input "Input string: " with
+      | None -> print_endline "\nNo string given"
+      | Some str ->
+        try run regex str
+        with Invalid_argument _ -> prerr_endline "Error: the input should be ASCII"

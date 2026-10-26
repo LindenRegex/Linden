@@ -12,6 +12,7 @@ depends: [
   "rocq-stdlib" {>= "9.0.0"}
   "warblre" {= "0.1.0"}
   "strict-order-solver" {>= "1.0.0"}
+  "menhir" {build}
   "odoc" {with-doc}
 ]
 build: [
