@@ -1,0 +1,4 @@
+(rocq.extraction
+ (prelude Extract)
+ (extracted_modules Base BooleanSemantics Chars Coercions Complexity Datatypes Errors FunctionalPikeVM Groups ListDef List LWParameters Nat NFA Numeric OrderedType Orders Parameters0 Parameters PeanoNat PikeVM Prefix Regex RegExpRecord Result SeenSets Semantics0 Semantics Specif Tree Typeclasses Utils)
+ (theories Stdlib Linden Warblre Ltac2 StrictOrderSolver))
