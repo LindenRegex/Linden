@@ -81,8 +81,8 @@ Module GroupMap.
       | None => gm
       end.
 
-    Definition reset : group_set -> t -> t :=
-      List.fold_left (fun s gid => MapS.remove gid s).
+    Definition reset (gs : group_set) (gm : t) : t :=
+      List.fold_left (fun s gid => MapS.remove gid s) gs gm.
 
     Definition update (op : groupaction) : t -> t :=
       match op with
