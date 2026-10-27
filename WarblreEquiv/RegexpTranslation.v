@@ -16,6 +16,14 @@ and translation from Warblre to Linden regexes *)
 Section RegexpTranslation.
   Context {params: LindenParameters}.
 
+  (* Modifier rewriting *)
+  Definition remods_to_del (add remove : RegularExpressionModifiers) : modifier :=
+    let d (f : RegularExpressionModifiers -> bool) : diff :=
+      if f remove then DRemove else if f add then DAdd else DSame in
+    Modifier.make_mod (d RegularExpressionModifiers.i)
+                      (d RegularExpressionModifiers.m)
+                      (d RegularExpressionModifiers.s).
+
   (* NamedMap: relating named groups to indices  *)
 
   Definition patname_eq_dec : forall (x y : Patterns.GroupName), { x = y } + { x <> y }.
@@ -37,7 +45,7 @@ Section RegexpTranslation.
                                        buildnm' wr2 nm1 n1
     | Patterns.Lookahead wr1 | Patterns.NegativeLookahead wr1
     | Patterns.Lookbehind wr1 | Patterns.NegativeLookbehind wr1
-    | Patterns.Quantified wr1 _ => buildnm' wr1 nm n
+    | Patterns.Quantified wr1 _ | Patterns.Modifiers _ _ wr1 => buildnm' wr1 nm n
     | Patterns.Group None wr1 => buildnm' wr1 nm (S n)
     | Patterns.Group (Some name) wr1 => buildnm' wr1 ((name,S n)::nm) (S n)
     end.
@@ -52,6 +60,7 @@ Section RegexpTranslation.
     | Disjunction r1 r2 => num_groups r1 + num_groups r2
     | Sequence r1 r2 => num_groups r1 + num_groups r2
     | Quantified _ _ _ r1 => num_groups r1
+    | Modifiers _ r1 => num_groups r1
     | Group _ r1 => S (num_groups r1)
     | Lookaround _ r1 => num_groups r1
     | Anchor _ | Backreference _ => 0
@@ -204,6 +213,10 @@ Section RegexpTranslation.
       equiv_regex' wr lr n nm ->
       equiv_quantifier wquant lquant -> equiv_greedylazy wgreedylazy greedy ->
       equiv_regex' (Patterns.Quantified wr (wgreedylazy wquant)) (lquant greedy lr) n nm
+  | Equiv_mod: forall n wr lr add remove del nm,
+      equiv_regex' wr lr n nm ->
+      del = remods_to_del add remove ->
+      equiv_regex' (Patterns.Modifiers add remove wr) (Modifiers del lr) n nm
   | Equiv_group: forall n wr lr nm,
       equiv_regex' wr lr (S n) nm ->
       equiv_regex' (Patterns.Group None wr) (Group (S n) lr) n nm
@@ -241,6 +254,7 @@ Section RegexpTranslation.
         n wr1 wr2 lr1 lr2 Hequiv1 IH1 Hequiv2 IH2 |
         n wr1 wr2 lr1 lr2 Hequiv1 IH1 Hequiv2 IH2 |
         n wr lr wquant lquant wgreedylazy greedy Hequiv IH Hequivquant Hequivgreedy |
+        n |
         name n wr lr Hequiv IH |
         name n wr lr Hequiv IH |
         n nm wr lr wlk llk Hequiv IH Hequivlk |
@@ -274,6 +288,10 @@ Section RegexpTranslation.
     Proof.
       intros nm wr. revert nm.
       induction wr; simpl; try solve[intros; rewrite Nat.add_0_r; reflexivity].
+      - intros nm ctx n Heqn.
+        rewrite IHwr with (ctx := (Node.Modifiers_inner add remove :: ctx)).
+        2: { simpl; unfold StaticSemantics.countLeftCapturingParensBefore in *; lia. }
+        reflexivity.
       - intros nm ctx n Heqn. rewrite IHwr1 with (ctx := Node.Disjunction_left wr2 :: ctx).
         2: { simpl. unfold StaticSemantics.countLeftCapturingParensBefore in *. lia. }
         rewrite IHwr2 with (ctx := Node.Disjunction_right wr1 :: ctx).
@@ -593,6 +611,10 @@ Section RegexpTranslation.
           let! quant =<< wquantpref_to_linden qp in
           let! lr =<< warblre_to_linden wr n nm in
           Success (quant false lr)
+      | Patterns.Modifiers add remove wr1 =>
+          let! lr1 =<< warblre_to_linden wr1 n nm in
+          let del := remods_to_del add remove in
+          Success (Modifiers del lr1)
       | Patterns.Seq wr1 wr2 =>
           let! lr1 =<< warblre_to_linden wr1 n nm in
           let! lr2 =<< warblre_to_linden wr2 (num_groups lr1 + n) nm in
@@ -812,6 +834,10 @@ Section RegexpTranslation.
         intro H. injection H as <-. constructor. apply charclass_to_linden_sound. auto.
       - simpl. intros lr n nm.
         destruct warblre_to_linden as [lr1|] eqn:Hwl1; try discriminate. simpl.
+        intro H. injection H as <-.
+        apply Equiv_mod; auto.
+      - simpl. intros lr n nm.
+        destruct warblre_to_linden as [lr1|] eqn:Hwl1; try discriminate. simpl.
         destruct (warblre_to_linden wr2 _) as [lr2|] eqn:Hwl2; try discriminate. simpl.
         intro H. injection H as <-.
         apply Equiv_disj; auto.
@@ -983,6 +1009,12 @@ Section RegexpTranslation.
           rewrite CRS_SUCC. eexists. reflexivity.
         + simpl. apply earlyErrors_pass_translation_crs in H0. destruct H0 as [cd CRS_SUCC].
           rewrite CRS_SUCC. eexists. reflexivity.
+      - intros ctx Hroot.
+        specialize (IHwr (Node.Modifiers_inner add remove :: ctx)).
+        specialize_prove IHwr by eauto using NodeProps.Zipper.Down_Modifiers_inner.
+        destruct IHwr as [lr IHwr].
+        simpl in *. rewrite Nat.add_0_r in IHwr. setoid_rewrite IHwr. simpl.
+        eexists. reflexivity.
       - intros ctx Hroot.
         specialize (IHwr1 (Node.Disjunction_left wr2 :: ctx)).
         specialize_prove IHwr1 by eauto using NodeProps.Zipper.Down.same_root_down0, NodeProps.Zipper.Down_Disjunction_left.

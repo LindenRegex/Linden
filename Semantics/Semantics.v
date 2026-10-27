@@ -16,10 +16,9 @@ From Stdlib Require Import Lia.
 
 Section Semantics.
   Context {params: LindenParameters}.
-  Context (rer: RegExpRecord).
 
   (* Reading a substring from a group map *)
-  Definition read_backref (gm: group_map) (gid: group_id) (inp: input) (dir: Direction): option (string * input) :=
+  Definition read_backref (rer: RegExpRecord) (gm: group_map) (gid: group_id) (inp: input) (dir: Direction): option (string * input) :=
     match GroupMap.find gid gm with
     | None | Some (GroupMap.Range _ None) => Some ([], inp)
     | Some (GroupMap.Range startIdx (Some endIdx)) =>
@@ -51,11 +50,11 @@ Section Semantics.
     end.
 
   Lemma read_backref_success_advance:
-    forall gm gid inp dir br_str nextinp,
-      read_backref gm gid inp dir = Some (br_str, nextinp) ->
+    forall rer gm gid inp dir br_str nextinp,
+      read_backref rer gm gid inp dir = Some (br_str, nextinp) ->
       nextinp = advance_input_n inp (length br_str) dir.
   Proof.
-    intros gm gid inp dir br_str nextinp H.
+    intros rer gm gid inp dir br_str nextinp H.
     unfold read_backref in H. unfold advance_input_n.
     destruct GroupMap.find as [[startIdx [endIdx|]]|].
     - destruct inp as [next pref]. destruct dir.
@@ -99,10 +98,40 @@ Section Semantics.
         | None => Some gm        (* negative lookarounds keep the gm unchanged *)
         end
     end.
+  
+  (** * Modifiers *)
+  Definition apply_diff (d : diff) (f : bool) : bool :=
+    match d with
+    | DAdd => true
+    | DRemove => false
+    | DSame => f
+    end.
+  
+  Definition compose_diff (d1 d2 : diff) : diff :=
+    match d2 with
+    | DSame => d1
+    | _ => d2
+    end.
 
+  Definition apply_mod (rer : RegExpRecord) (del : modifier) : RegExpRecord :=
+  {|
+    RegExpRecord.ignoreCase := apply_diff (Modifier.i del) (RegExpRecord.ignoreCase rer);
+    RegExpRecord.multiline  := apply_diff (Modifier.m del) (RegExpRecord.multiline rer);
+    RegExpRecord.dotAll     := apply_diff (Modifier.s del) (RegExpRecord.dotAll rer);
+    RegExpRecord.unicode    := RegExpRecord.unicode rer;
+    RegExpRecord.capturingGroupsCount := RegExpRecord.capturingGroupsCount rer;
+  |}.
+
+  Definition compose_mods (del1 del2 : modifier) : modifier :=
+  {|
+    Modifier.i := (compose_diff (Modifier.i del1) (Modifier.i del2));
+    Modifier.m := (compose_diff (Modifier.m del1) (Modifier.m del2));
+    Modifier.s := (compose_diff (Modifier.s del1) (Modifier.s del2))
+  |}.
+    
   (** * Anchor semantics *)
 
-  Definition is_boundary (i:input) : bool :=
+  Definition is_boundary (rer: RegExpRecord) (i:input) : bool :=
     match i with
     | Input next pref =>
         match next, pref with
@@ -122,7 +151,7 @@ Section Semantics.
     end.
 
   (* independent of the direction *)
-  Definition anchor_satisfied (a:anchor) (i:input) : bool :=
+  Definition anchor_satisfied (rer:RegExpRecord) (a:anchor) (i:input) : bool :=
     match i with
     | Input next pref =>
         match a with
@@ -131,9 +160,9 @@ Section Semantics.
         | EndInput =>
             is_input_boundary (RegExpRecord.multiline rer) next
         | WordBoundary =>
-            is_boundary i
+            is_boundary rer i
         | NonWordBoundary =>
-            negb (is_boundary i)
+            negb (is_boundary rer i)
         | BeginBuffer =>
             match pref with | [] => true | _ => false end
         | EndBuffer =>
@@ -157,6 +186,7 @@ Section Semantics.
   Inductive action: Type :=
   | Areg: regex -> action
   | Acheck: input -> action
+  | Areset: RegExpRecord -> action
   | Aclose: group_id -> action.
 
   Definition actions: Type := list action.
@@ -169,128 +199,133 @@ Section Semantics.
     end.
 
   (* `is_tree actions inp t` means that `t` is a correct backtracking tree for all `actions` on `inp` *)
-  Inductive is_tree: actions -> input -> group_map -> Direction -> tree -> Prop :=
+  Inductive is_tree (rer : RegExpRecord) : actions -> input -> group_map -> Direction -> tree -> Prop :=
   | tree_match:
     (* nothing to do on an empty list of actions *)
     forall inp gm dir,
-      is_tree [] inp gm dir Match
+      is_tree rer [] inp gm dir Match
   | tree_check:
   (* pops a successful check from the action list *)
     forall inp gm dir strcheck cont treecont
       (PROGRESS: strict_suffix inp strcheck dir)
-      (TREECONT: is_tree cont inp gm dir treecont),
-      is_tree (Acheck strcheck :: cont) inp gm dir (Progress treecont)
+      (TREECONT: is_tree rer cont inp gm dir treecont),
+      is_tree rer (Acheck strcheck :: cont) inp gm dir (Progress treecont)
   | tree_check_fail:
   (* pops a failing check from the action list *)
     forall inp gm dir strcheck cont
       (CHECKFAIL: ~strict_suffix inp strcheck dir),
-      is_tree (Acheck strcheck :: cont) inp gm dir Mismatch
+      is_tree rer (Acheck strcheck :: cont) inp gm dir Mismatch
   | tree_close:
   (* pops the closing of a group from the action list *)
     forall inp gm dir cont treecont gid
-      (TREECONT: is_tree cont inp (GroupMap.close (idx inp) gid gm) dir treecont),
-      is_tree (Aclose gid :: cont) inp gm dir (GroupAction (Close gid) treecont)
+      (TREECONT: is_tree rer cont inp (GroupMap.close (idx inp) gid gm) dir treecont),
+      is_tree rer (Aclose gid :: cont) inp gm dir (GroupAction (Close gid) treecont)
   | tree_epsilon:
     forall inp gm dir cont tcont
-      (ISTREE: is_tree cont inp gm dir tcont),
-      is_tree ((Areg Epsilon)::cont) inp gm dir tcont
+      (ISTREE: is_tree rer cont inp gm dir tcont),
+      is_tree rer ((Areg Epsilon)::cont) inp gm dir tcont
   | tree_char:
     forall c cd inp gm nextinp dir cont tcont
       (READ: read_char rer cd inp dir = Some (c, nextinp))
-      (TREECONT: is_tree cont nextinp gm dir tcont),
-      is_tree (Areg (Regex.Character cd) :: cont) inp gm dir (Read c tcont)
+      (TREECONT: is_tree rer cont nextinp gm dir tcont),
+      is_tree rer (Areg (Regex.Character cd) :: cont) inp gm dir (Read c tcont)
   | tree_char_fail:
     forall cd inp gm dir cont
       (READ: read_char rer cd inp dir = None),
-      is_tree (Areg (Regex.Character cd) :: cont) inp gm dir Mismatch
+      is_tree rer (Areg (Regex.Character cd) :: cont) inp gm dir Mismatch
   | tree_disj:
     forall r1 r2 cont t1 t2 inp gm dir
-      (ISTREE1: is_tree (Areg r1 :: cont) inp gm dir t1)
-      (ISTREE2: is_tree (Areg r2 :: cont) inp gm dir t2),
-      is_tree (Areg (Disjunction r1 r2) :: cont) inp gm dir (Choice t1 t2)
+      (ISTREE1: is_tree rer (Areg r1 :: cont) inp gm dir t1)
+      (ISTREE2: is_tree rer (Areg r2 :: cont) inp gm dir t2),
+      is_tree rer (Areg (Disjunction r1 r2) :: cont) inp gm dir (Choice t1 t2)
   | tree_sequence:
     (* adding next regex to the continuation *)
     forall r1 r2 cont t inp gm dir
-      (CONT: is_tree (seq_list r1 r2 dir ++ cont) inp gm dir t),
-      is_tree (Areg (Sequence r1 r2) :: cont) inp gm dir t
+      (CONT: is_tree rer (seq_list r1 r2 dir ++ cont) inp gm dir t),
+      is_tree rer (Areg (Sequence r1 r2) :: cont) inp gm dir t
   | tree_quant_forced:
     (* the quantifier is forced to iterate, because there is a strictly positive minimum *)
     forall r1 greedy min plus cont titer inp gm dir gidl
       (* the list of capture groups to reset *)
       (RESET: gidl = def_groups r1)
       (* doing one iteration *)
-      (ISTREE1: is_tree (Areg r1 :: Areg (Quantified greedy min plus r1) :: cont) inp (GroupMap.reset gidl gm) dir titer),
-      is_tree (Areg (Quantified greedy (S min) plus r1) :: cont) inp gm dir (GroupAction (Reset gidl) titer)
+      (ISTREE1: is_tree rer (Areg r1 :: Areg (Quantified greedy min plus r1) :: cont) inp (GroupMap.reset gidl gm) dir titer),
+      is_tree rer (Areg (Quantified greedy (S min) plus r1) :: cont) inp gm dir (GroupAction (Reset gidl) titer)
   | tree_quant_done:
     (* the quantifier is done iterating, because min and max are zero *)
     forall r1 greedy cont tskip inp gm dir
-      (SKIP: is_tree cont inp gm dir tskip),
-      is_tree (Areg (Quantified greedy 0 (NoI.N 0) r1) :: cont) inp gm dir tskip
+      (SKIP: is_tree rer cont inp gm dir tskip),
+      is_tree rer (Areg (Quantified greedy 0 (NoI.N 0) r1) :: cont) inp gm dir tskip
   | tree_quant_free:
     (* the quantifier is free to iterate or stop *)
     forall r1 greedy plus cont titer tskip tquant inp gm dir gidl
       (* the list of capture groups to reset *)
       (RESET: gidl = def_groups r1)
       (* doing one iteration, then a check, then executing the next quantifier *)
-      (ISTREE1: is_tree (Areg r1 :: Acheck inp :: Areg (Quantified greedy 0 plus r1) :: cont) inp (GroupMap.reset gidl gm) dir titer)
+      (ISTREE1: is_tree rer (Areg r1 :: Acheck inp :: Areg (Quantified greedy 0 plus r1) :: cont) inp (GroupMap.reset gidl gm) dir titer)
       (* skipping the quantifier entirely *)
-      (SKIP: is_tree cont inp gm dir tskip)
+      (SKIP: is_tree rer cont inp gm dir tskip)
       (CHOICE: tquant = greedy_choice greedy (GroupAction (Reset gidl) titer) tskip),
-      is_tree (Areg (Quantified greedy 0 (NoI.N 1 + plus)%NoI r1) :: cont) inp gm dir tquant
+      is_tree rer (Areg (Quantified greedy 0 (NoI.N 1 + plus)%NoI r1) :: cont) inp gm dir tquant
+  | tree_mod_open: 
+    forall r1 del cont inp gm dir t,
+      is_tree (apply_mod rer del) (Areg r1 :: Areset rer :: cont) inp gm dir t ->      
+      is_tree rer (Areg (Modifiers del r1) :: cont) inp gm dir t
+  | tree_mod_close:
+    forall rer' cont inp gm dir t,
+      is_tree rer' cont inp gm dir t ->
+      is_tree rer (Areset rer' :: cont) inp gm dir t
   | tree_group:
     forall r1 cont treecont inp gm dir gid
-      (TREECONT: is_tree (Areg r1 :: Aclose gid :: cont) inp (GroupMap.open (idx inp) gid gm) dir treecont),
-      is_tree (Areg (Group gid r1) :: cont) inp gm dir (GroupAction (Open gid) treecont)
+      (TREECONT: is_tree rer (Areg r1 :: Aclose gid :: cont) inp (GroupMap.open (idx inp) gid gm) dir treecont),
+      is_tree rer (Areg (Group gid r1) :: cont) inp gm dir (GroupAction (Open gid) treecont)
   | tree_lk:
     forall lk r1 cont treecont treelk inp gm gmlk dir
       (* there is a tree for the lookaround *)
-      (TREELK: is_tree [Areg r1] inp gm (lk_dir lk) treelk)
+      (TREELK: is_tree rer [Areg r1] inp gm (lk_dir lk) treelk)
       (* the lookaround tree has the expected result, resulting in a new group map gmlk *)
       (RES_LK: lk_result lk treelk gm inp = Some gmlk)
-      (TREECONT: is_tree cont inp gmlk dir treecont),
-      is_tree (Areg (Lookaround lk r1) :: cont) inp gm dir (LK lk treelk treecont)
+      (TREECONT: is_tree rer cont inp gmlk dir treecont),
+      is_tree rer (Areg (Lookaround lk r1) :: cont) inp gm dir (LK lk treelk treecont)
   | tree_lk_fail:
     forall lk r1 cont treelk inp gm dir
-      (TREELK: is_tree [Areg r1] inp gm (lk_dir lk) treelk)
+      (TREELK: is_tree rer [Areg r1] inp gm (lk_dir lk) treelk)
       (* the lookaround tree does not have the expected result *)
       (FAIL_LK: lk_result lk treelk gm inp = None),
-      is_tree (Areg (Lookaround lk r1) :: cont) inp gm dir (LKFail lk treelk)
+      is_tree rer (Areg (Lookaround lk r1) :: cont) inp gm dir (LKFail lk treelk)
   | tree_anchor:
     forall a cont treecont inp gm dir
-      (ANCHOR: anchor_satisfied a inp = true)
-      (TREECONT: is_tree cont inp gm dir treecont),
-      is_tree (Areg (Anchor a) :: cont) inp gm dir (AnchorPass a treecont)
+      (ANCHOR: anchor_satisfied rer a inp = true)
+      (TREECONT: is_tree rer cont inp gm dir treecont),
+      is_tree rer (Areg (Anchor a) :: cont) inp gm dir (AnchorPass a treecont)
   | tree_anchor_fail:
     forall a cont inp gm dir
-      (ANCHOR: anchor_satisfied a inp = false),
-      is_tree (Areg (Anchor a) :: cont) inp gm dir Mismatch
+      (ANCHOR: anchor_satisfied rer a inp = false),
+      is_tree rer (Areg (Anchor a) :: cont) inp gm dir Mismatch
   | tree_backref:
     forall gid inp gm nextinp dir cont tcont br_str
-      (READ_BACKREF: read_backref gm gid inp dir = Some (br_str, nextinp))
-      (TREECONT: is_tree cont nextinp gm dir tcont),
-      is_tree (Areg (Backreference gid) :: cont) inp gm dir (ReadBackRef br_str tcont)
+      (READ_BACKREF: read_backref rer gm gid inp dir = Some (br_str, nextinp))
+      (TREECONT: is_tree rer cont nextinp gm dir tcont),
+      is_tree rer (Areg (Backreference gid) :: cont) inp gm dir (ReadBackRef br_str tcont)
   | tree_backref_fail:
     forall gid inp gm dir cont
-      (READ_BACKREF: read_backref gm gid inp dir = None),
-      is_tree (Areg (Backreference gid) :: cont) inp gm dir Mismatch.
+      (READ_BACKREF: read_backref rer gm gid inp dir = None),
+      is_tree rer (Areg (Backreference gid) :: cont) inp gm dir Mismatch.
 
+  Definition priotree (rer: RegExpRecord) (r:regex) (str:string) (t:tree): Prop :=
+    is_tree rer [Areg r] (init_input str) GroupMap.empty forward t.
 
-
-  Definition priotree (r:regex) (str:string) (t:tree): Prop :=
-    is_tree [Areg r] (init_input str) GroupMap.empty forward t.
-
-  Definition priotree_inp (r:regex) (inp:input) (t:tree): Prop :=
-    is_tree [Areg r] inp GroupMap.empty forward t.
-
+  Definition priotree_inp (rer: RegExpRecord) (r:regex) (inp:input) (t:tree): Prop :=
+    is_tree rer [Areg r] inp GroupMap.empty forward t.
 
   (** * Determinism  *)
   Theorem is_tree_determ:
-    forall actions i gm dir t1 t2,
-      is_tree actions i gm dir t1 ->
-      is_tree actions i gm dir t2 ->
+    forall rer actions i gm dir t1 t2,
+      is_tree rer actions i gm dir t1 ->
+      is_tree rer actions i gm dir t2 ->
       t1 = t2.
   Proof.
-    intros actions i gm dir t1 t2 H.
+    intros rer' actions i gm dir t1 t2 H.
     generalize dependent t2.
     induction H; intros.
     - inversion H; subst; auto.
@@ -319,6 +354,8 @@ Section Semantics.
       + apply plus_one_inj in H4. subst plus0.
         apply IHis_tree1 in ISTREE1. apply IHis_tree2 in SKIP. subst. auto.
     - inversion H0; subst; auto.
+    - inversion H0; subst; auto.
+    - inversion H0; subst; auto. 
       apply IHis_tree in TREECONT. subst. auto.
     - inversion H1; subst; auto.
       2: { apply IHis_tree1 in TREELK. subst. rewrite RES_LK in FAIL_LK. inversion FAIL_LK. }
@@ -337,21 +374,21 @@ Section Semantics.
   Qed.
 
   Corollary priotree_determ:
-    forall r s t1 t2,
-      priotree r s t1 ->
-      priotree r s t2 ->
+    forall rer r s t1 t2,
+      priotree rer r s t1 ->
+      priotree rer r s t2 ->
       t1 = t2.
   Proof.
-    unfold priotree. intros r s t1 t2 H H0. eapply is_tree_determ; eauto.
+    unfold priotree. intros rer r s t1 t2 H H0. eapply is_tree_determ; eauto.
   Qed.
 
   Corollary priotree_inp_determ:
-    forall r inp t1 t2,
-      priotree_inp r inp t1 ->
-      priotree_inp r inp t2 ->
+    forall rer r inp t1 t2,
+      priotree_inp rer r inp t1 ->
+      priotree_inp rer r inp t2 ->
       t1 = t2.
   Proof.
-    unfold priotree_inp. intros r inp t1 t2 H H0. eapply is_tree_determ; eauto.
+    unfold priotree_inp. intros rer r inp t1 t2 H H0. eapply is_tree_determ; eauto.
   Qed.
 
   (* We could also prove that there always exists a priotree for any regexes and string,
@@ -361,39 +398,39 @@ Section Semantics.
   (** * Highest priority result  *)
   (* the highest priority result is just the first branch of the corresponding tree *)
 
-  Inductive highestprio_result: regex -> string -> option leaf -> Prop :=
+  Inductive highestprio_result: RegExpRecord -> regex -> string -> option leaf -> Prop :=
   | bt_result:
-    forall r str res tree
-      (TREE: priotree r str tree)
+    forall rer r str res tree
+      (TREE: priotree rer r str tree)
       (FIRST: first_branch tree str = res),
-      highestprio_result r str res.
+      highestprio_result rer r str res.
 
-  Inductive highestprio_result_inp: regex -> input -> option leaf -> Prop :=
+  Inductive highestprio_result_inp: RegExpRecord -> regex -> input -> option leaf -> Prop :=
   | hp_result_inp:
-    forall r inp res tree
-      (TREE: priotree_inp r inp tree)
+    forall rer r inp res tree
+      (TREE: priotree_inp rer r inp tree)
       (FIRST: first_leaf tree inp = res),
-      highestprio_result_inp r inp res.
+      highestprio_result_inp rer r inp res.
 
   Lemma highestprio_determ:
-    forall r str res1 res2,
-      highestprio_result r str res1 ->
-      highestprio_result r str res2 ->
+    forall rer r str res1 res2,
+      highestprio_result rer r str res1 ->
+      highestprio_result rer r str res2 ->
       res1 = res2.
   Proof.
-    intros r str res1 res2 H H0. inversion H. subst.
+    intros rer r str res1 res2 H H0. inversion H. subst.
     inversion H0. subst.
-    specialize (priotree_determ _ _ _ _ TREE TREE0). intros. subst. auto.
+    specialize (priotree_determ _ _ _ _ _ TREE TREE0). intros. subst. auto.
   Qed.
 
   Lemma highestprio_inp_determ:
-    forall r inp res1 res2,
-      highestprio_result r inp res1 ->
-      highestprio_result r inp res2 ->
+    forall rer r inp res1 res2,
+      highestprio_result rer r inp res1 ->
+      highestprio_result rer r inp res2 ->
       res1 = res2.
   Proof.
-    intros r inp res1 res2 H H0. inversion H. subst.
+    intros rer r inp res1 res2 H H0. inversion H. subst.
     inversion H0. subst.
-    specialize (priotree_determ _ _ _ _ TREE TREE0). intros. subst. auto.
+    specialize (priotree_determ _ _ _ _ _ TREE TREE0). intros. subst. auto.
   Qed.
 End Semantics.

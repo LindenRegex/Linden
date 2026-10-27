@@ -16,7 +16,6 @@ Local Open Scope result_flow.
 
 Section EquivLemmas.
   Context {params: LindenParameters}.
-  Context (rer: RegExpRecord).
 
 
   (* Lemma to determine the list of defined groups of a Linden regex. *)
@@ -43,6 +42,7 @@ Section EquivLemmas.
       n wr1 wr2 lr1 lr2 nm Hequiv1 IH1 Hequiv2 IH2 |
       n wr1 wr2 lr1 lr2 nm Hequiv1 IH1 Hequiv2 IH2 |
       n wr lr wquant lquant wgreedylazy greedy nm Hequiv IH Hequivquant Hequivgreedy |
+      n  wr lr add remove del nm Hequiv IHHequiv Hdel |
       n wr lr nm Hequiv IH |
       name n wr lr nm CHKNAME Hequiv IH |
       n wr lr wlk llk nm Hequiv IH Hequivlk |
@@ -71,6 +71,9 @@ Section EquivLemmas.
       apply List.seq_app.
     - intros parenCount ctx Hcount. simpl in *.
       inversion Hequivquant; inversion Hequivgreedy; simpl in *; eapply IH; eassumption.
+    - intros parenCount ctx Hcount. simpl in *.
+      specialize (IHHequiv (countLeftCapturingParensWithin wr ctx) ctx eq_refl).
+      subst parenCount. apply IHHequiv.
     - intros parenCount ctx Hcount. simpl in *.
       specialize (IH (countLeftCapturingParensWithin wr ctx) ctx eq_refl). rewrite IH.
       subst parenCount.
@@ -101,7 +104,7 @@ Section EquivLemmas.
 
   (* Lemma linking the character matching conditions of Linden and Warblre. *)
   Lemma char_match_warblre:
-    forall chr cd charset,
+    forall rer chr cd charset,
       (* Let cd and charset be equivalent. *)
       equiv_cd_charset rer cd charset ->
       (* If chr corresponds to charset in the Warblre sense, *)
@@ -109,13 +112,13 @@ Section EquivLemmas.
       (* then chr corresponds to cd in the Linden sense. *)
       char_match rer chr cd = true.
   Proof.
-    intros chr cd charset Hequiv Hexist_canon.
+    intros rer chr cd charset Hequiv Hexist_canon.
     unfold equiv_cd_charset in Hequiv. rewrite Hequiv. assumption.
   Qed.
 
   (* Same, but for inverted character descriptors. *)
   Lemma char_match_warblre_inv:
-    forall chr cd charset,
+    forall rer chr cd charset,
       (* Let cd and charset be equivalent. *)
       equiv_cd_charset rer cd charset ->
       (* If chr corresponds to charset in the Warblre sense, *)
@@ -123,7 +126,7 @@ Section EquivLemmas.
       (* then chr does not correspond to CdInv cd in the Linden sense. *)
       char_match rer chr (CdInv cd) = false.
   Proof.
-    intros chr cd charset Hequiv Hexist_canon.
+    intros rer chr cd charset Hequiv Hexist_canon.
     unfold char_match. simpl.
     apply <- Bool.negb_false_iff. eapply char_match_warblre; eauto.
   Qed.
@@ -131,7 +134,7 @@ Section EquivLemmas.
 
   (* If reading a character succeeds in the Warblre sense, then it succeeds in the Linden sense as well. *)
   Lemma read_char_success:
-    forall ms inp chr cd charset dir inp_adv,
+    forall rer ms inp chr cd charset dir inp_adv,
       (* Let cd and charset be equivalent. *)
       equiv_cd_charset rer cd charset ->
       (* Then for any match state and corresponding Linden input, *)
@@ -145,7 +148,7 @@ Section EquivLemmas.
       read_char rer cd inp dir = Some (chr, inp_adv) /\
         read_char rer (CdInv cd) inp dir = None.
   Proof.
-    intros ms inp chr cd charset dir inp_adv Hequiv Hms_inp Hreadsuccess Hcharcorresp Hadv.
+    intros rer ms inp chr cd charset dir inp_adv Hequiv Hms_inp Hreadsuccess Hcharcorresp Hadv.
     destruct inp as [next pref].
     destruct dir.
     - destruct next as [|x next']. 1: discriminate.
@@ -182,7 +185,7 @@ Section EquivLemmas.
 
   (* Same as above, but with another definition of the next end index. *)
   Lemma read_char_success':
-    forall ms inp chr cd charset dir inp_adv nextend,
+    forall rer ms inp chr cd charset dir inp_adv nextend,
       (* Let cd and charset be equivalent. *)
       equiv_cd_charset rer cd charset ->
       (* Then for any match state and corresponding Linden input, *)
@@ -196,7 +199,7 @@ Section EquivLemmas.
       read_char rer cd inp dir = Some (chr, inp_adv) /\
         read_char rer (CdInv cd) inp dir = None.
   Proof.
-    intros ms inp chr cd charset dir inp_adv nextend Hequivcd Hmsinp Heqnextend Hreadsuccess Hexist_canon Hinp_adv. destruct dir; simpl in *.
+    intros rer ms inp chr cd charset dir inp_adv nextend Hequivcd Hmsinp Heqnextend Hreadsuccess Hexist_canon Hinp_adv. destruct dir; simpl in *.
     - replace (Z.min (MatchState.endIndex ms) nextend) with (MatchState.endIndex ms) in Hreadsuccess by lia. eapply read_char_success; eauto.
     - replace (Z.min (MatchState.endIndex ms) nextend) with nextend in Hreadsuccess by lia. eapply read_char_success; eauto. subst nextend. apply Hreadsuccess.
   Qed.
@@ -204,23 +207,23 @@ Section EquivLemmas.
 
   (* Same as char_match_warblre, but in the mismatching case. *)
   Lemma char_mismatch_warblre:
-    forall chr cd charset,
+    forall rer chr cd charset,
       equiv_cd_charset rer cd charset ->
       CharSet.exist_canonicalized rer charset (Character.canonicalize rer chr) = false ->
       char_match rer chr cd = false.
   Proof.
-    intros chr cd charset Hequiv Hexist_false.
+    intros rer chr cd charset Hequiv Hexist_false.
     specialize (Hequiv chr). congruence.
   Qed.
 
   (* Same as above, but with inverted character descriptors. *)
   Lemma char_mismatch_warblre_inv:
-    forall chr cd charset,
+    forall rer chr cd charset,
       equiv_cd_charset rer cd charset ->
       CharSet.exist_canonicalized rer charset (Character.canonicalize rer chr) = false ->
       char_match rer chr (CdInv cd) = true.
   Proof.
-    intros chr cd charset Hequiv Hexist_false. unfold char_match. simpl.
+    intros rer chr cd charset Hequiv Hexist_false. unfold char_match. simpl.
     apply <- Bool.negb_true_iff. eapply char_mismatch_warblre; eauto.
   Qed.
 
@@ -228,7 +231,7 @@ Section EquivLemmas.
 
   (* Same as read_char_success, but in the mismatching case. *)
   Lemma read_char_fail:
-    forall ms chr inp inp_adv dir cd charset,
+    forall rer ms chr inp inp_adv dir cd charset,
       equiv_cd_charset rer cd charset ->
       ms_matches_inp ms inp ->
       List.Indexing.Int.indexing (MatchState.input ms) (
@@ -238,7 +241,7 @@ Section EquivLemmas.
       read_char rer cd inp dir = None /\
         read_char rer (CdInv cd) inp dir = Some (chr, inp_adv).
   Proof.
-    intros ms chr inp inp_adv dir cd charset Hequiv Hms_inp Hreadsuccess Hnocorresp Hadv.
+    intros rer ms chr inp inp_adv dir cd charset Hequiv Hms_inp Hreadsuccess Hnocorresp Hadv.
     destruct inp as [next pref].
     destruct ms as [str0 endInd cap].
     inversion Hms_inp as [s end_ind cap0 next0 pref0 Hlenpref Hmatches Heqs Heqend_ind].
@@ -275,7 +278,7 @@ Section EquivLemmas.
 
   (* Same as read_char_fail, but with another definition of the next end index. *)
   Lemma read_char_fail':
-    forall ms chr inp inp_adv dir cd charset nextend,
+    forall rer ms chr inp inp_adv dir cd charset nextend,
       equiv_cd_charset rer cd charset ->
       ms_matches_inp ms inp ->
       nextend = (if (dir ==? forward)%wt then (MatchState.endIndex ms + 1)%Z else (MatchState.endIndex ms - 1)%Z) ->
@@ -285,7 +288,7 @@ Section EquivLemmas.
       read_char rer cd inp dir = None /\
         read_char rer (CdInv cd) inp dir = Some (chr, inp_adv).
   Proof.
-    intros ms chr inp inp_adv dir cd charset nextend Hequivcd Hmsinp Heqnextend Hgetchr Hexist_canon Hinp_adv.
+    intros rer ms chr inp inp_adv dir cd charset nextend Hequivcd Hmsinp Heqnextend Hgetchr Hexist_canon Hinp_adv.
     destruct dir; simpl in *.
     - replace (Z.min (MatchState.endIndex ms) nextend) with (MatchState.endIndex ms) in Hgetchr by lia. eauto using read_char_fail.
     - replace (Z.min (MatchState.endIndex ms) nextend) with nextend in Hgetchr by lia. subst nextend. eauto using read_char_fail.
@@ -487,12 +490,12 @@ Section EquivLemmas.
 
   (* If we try to read forward out of bounds in the Warblre sense, then reading a character forward in the Linden sense fails. *)
   Lemma read_oob_fail_end_bool:
-    forall (ms: MatchState) (inp: Chars.input),
+    forall rer (ms: MatchState) (inp: Chars.input),
       ms_matches_inp ms inp ->
       ((MatchState.endIndex ms + 1 <? 0)%Z || (MatchState.endIndex ms + 1 >? Z.of_nat (length (MatchState.input ms)))%Z)%bool = true ->
       forall cd: char_descr, read_char rer cd inp forward = None.
   Proof.
-    intros ms inp Hmatches Hoob.
+    intros rer ms inp Hmatches Hoob.
     apply Bool.orb_true_elim in Hoob.
     destruct Hoob as [Hoob|Hoob].
     - exfalso. rewrite Z.ltb_lt in Hoob. apply (endInd_neg_abs _ _ Hmatches Hoob).
@@ -505,12 +508,12 @@ Section EquivLemmas.
   (* If we try to read backwards out of bounds in the Warblre sense, then reading a
   character backwards in the Linden sense fails. *)
   Lemma read_oob_fail_begin_bool:
-    forall (ms: MatchState) (inp: Chars.input),
+    forall rer (ms: MatchState) (inp: Chars.input),
       ms_matches_inp ms inp ->
       ((MatchState.endIndex ms - 1 <? 0)%Z || (MatchState.endIndex ms - 1 >? Z.of_nat (length (MatchState.input ms)))%Z)%bool = true ->
       forall cd: char_descr, read_char rer cd inp backward = None.
   Proof.
-    intros ms inp Hmatches Hoob.
+    intros rer ms inp Hmatches Hoob.
     apply Bool.orb_true_elim in Hoob.
     destruct Hoob as [Hoob | Hoob].
     - rewrite Z.ltb_lt in Hoob.
@@ -522,13 +525,13 @@ Section EquivLemmas.
   (* Combining the two above lemmas: if we try to read out of bounds in the Warblre
   sense, then reading a character in the Linden sense fails. *)
   Lemma read_oob_fail_bool:
-    forall (ms: MatchState) (inp: Chars.input) (dir: Direction) (nextend: Z),
+    forall rer (ms: MatchState) (inp: Chars.input) (dir: Direction) (nextend: Z),
       ms_matches_inp ms inp ->
       nextend = (if (dir ==? forward)%wt then (MatchState.endIndex ms + 1)%Z else (MatchState.endIndex ms - 1)%Z) ->
       ((nextend <? 0)%Z || (nextend >? Z.of_nat (length (MatchState.input ms)))%Z)%bool = true ->
       forall cd: char_descr, read_char rer cd inp dir = None.
   Proof.
-    intros ms inp dir nextend Hmsinp -> Hoob.
+    intros rer ms inp dir nextend Hmsinp -> Hoob.
     destruct dir; simpl in *; eauto using read_oob_fail_begin_bool, read_oob_fail_end_bool.
   Qed.
 
@@ -594,13 +597,13 @@ Section EquivLemmas.
   Qed.
 
   Lemma is_boundary_xorb:
-    forall inp ms a b,
+    forall rer inp ms a b,
       ms_matches_inp ms inp ->
       Semantics.isWordChar rer (MatchState.input ms) (MatchState.endIndex ms - 1)%Z = Success a ->
       Semantics.isWordChar rer (MatchState.input ms) (MatchState.endIndex ms) = Success b ->
       xorb a b = Semantics.is_boundary rer inp.
   Proof.
-    intros inp ms a b Hmatches Ha Hb.
+    intros rer inp ms a b Hmatches Ha Hb.
     unfold Semantics.isWordChar in *. simpl in *.
     inversion Hmatches as [str0 end_ind cap next pref Hlenpref Hstr0 Heqms Heqinp].
     subst ms inp. simpl in *.
@@ -689,27 +692,28 @@ Section EquivLemmas.
     | nil => nil
     | Areg r :: q => def_groups r ++ actions_def_groups q
     | Acheck _ :: q => actions_def_groups q
+    | Areset _ :: q => actions_def_groups q
     | Aclose gid :: q => gid :: actions_def_groups q
     end.
 
   (* Lemma for a list of actions *)
   Lemma actions_tree_no_outside_groups:
-    forall acts gm0 inp0 dir0 fuel t,
+    forall rer acts gm0 inp0 dir0 fuel t,
       compute_tree rer acts inp0 gm0 dir0 fuel = Some t ->
       forall gm1 gm2 inp1 inp2 dir,
         Tree.tree_res t gm1 inp1 dir = Some (inp2, gm2) ->
         forall gid, ~In gid (actions_def_groups acts) -> GroupMap.find gid gm2 = GroupMap.find gid gm1.
   Proof.
-    intros acts gm0 inp0 dir0 fuel. revert acts gm0 inp0 dir0.
+    intros rer acts gm0 inp0 dir0 fuel. revert rer acts gm0 inp0 dir0.
     induction fuel as [|fuel IHfuel]. { discriminate. }
-    intros acts gm0 inp0 dir0 t. simpl.
-    destruct acts as [|[reg | inpcheck | gid] acts].
+    intros rer acts gm0 inp0 dir0 t. simpl.
+    destruct acts as [|[reg | inpcheck | rer' | gid] acts].
     - (* No action *)
       intro H. injection H as <-. simpl.
       intros gm1 gm2 inp1 inp2 dir H. now injection H as <- <-.
 
     - (* Areg *)
-      destruct reg as [ | cd | r1 r2 | r1 r2 | greedy min delta r | lk r | gid r | a | gid].
+      destruct reg as [ | cd | r1 r2 | r1 r2 | greedy min delta r | del r | lk r | gid r | a | gid].
 
       + (* Epsilon *)
         simpl. apply IHfuel.
@@ -717,7 +721,7 @@ Section EquivLemmas.
       + (* Character *)
         simpl. destruct read_char as [[c nextinp]|].
         2: { intro H. injection H as <-. discriminate. }
-        specialize (IHfuel acts gm0 nextinp dir0).
+        specialize (IHfuel rer acts gm0 nextinp dir0).
         destruct compute_tree as [treecont|]; simpl; try discriminate.
         intro H. injection H as <-. intros gm1 gm2 inp1 inp2 dir.
         simpl. intro Hrescont. specialize (IHfuel treecont eq_refl gm1 gm2 (advance_input' inp1 dir) inp2 dir Hrescont).
@@ -732,16 +736,16 @@ Section EquivLemmas.
         unfold seqop in Hres. destruct (tree_res t1 gm1 inp1 dir) as [[inpres1 gmres1]|] eqn:Hres1; simpl in *.
         * (* First branch succeeds *)
           injection Hres as <- <-.
-          apply (IHfuel _ _ _ _ _ Heqt1 _ _ _ _ _ Hres1). simpl. rewrite in_app_iff. tauto.
+          apply (IHfuel _ _ _ _ _ _ Heqt1 _ _ _ _ _ Hres1). simpl. rewrite in_app_iff. tauto.
         * eapply IHfuel; eauto. simpl. rewrite in_app_iff. tauto.
 
       + (* Sequence *)
         destruct dir0.
         * simpl.
-          intro Htreecomp. specialize (IHfuel (Areg r1 :: Areg r2 :: acts) gm0 inp0 forward t Htreecomp).
+          intro Htreecomp. specialize (IHfuel rer (Areg r1 :: Areg r2 :: acts) gm0 inp0 forward t Htreecomp).
           simpl in IHfuel. rewrite <- app_assoc. exact IHfuel.
         * simpl.
-          intro Htreecomp. specialize (IHfuel (Areg r2 :: Areg r1 :: acts) gm0 inp0 backward t Htreecomp).
+          intro Htreecomp. specialize (IHfuel rer (Areg r2 :: Areg r1 :: acts) gm0 inp0 backward t Htreecomp).
           simpl in IHfuel. rewrite <- app_assoc. intros. eapply IHfuel; eauto.
           do 2 rewrite in_app_iff. do 2 rewrite in_app_iff in H0. tauto.
 
@@ -759,8 +763,8 @@ Section EquivLemmas.
           destruct (compute_tree rer acts inp0 gm0 dir0 fuel) as [tskip|] eqn:Hskip; simpl; try discriminate.
           intro H. injection H as <-.
           intros gm1 gm2 inp1 inp2 dir.
-          pose proof IHfuel _ _ _ _ _ Hiter (GroupMap.reset (def_groups r) gm1) as IHiter.
-          pose proof IHfuel _ _ _ _ _ Hskip gm1 as IHskip.
+          pose proof IHfuel _ _ _ _ _ _ Hiter (GroupMap.reset (def_groups r) gm1) as IHiter.
+          pose proof IHfuel _ _ _ _ _ _ Hskip gm1 as IHskip.
           destruct greedy; simpl.
           -- (* Greedy *)
              destruct (tree_res titer _ inp1 dir) as [[inpiter gmiter]|] eqn:Hiterres; simpl.
@@ -787,10 +791,12 @@ Section EquivLemmas.
           destruct compute_tree as [titer|] eqn:Hiter; try discriminate.
           intro H. injection H as <-.
           simpl. intros gm1 gm2 inp1 inp2 dir Heqgm2 gid Hnotin. rewrite in_app_iff in Hnotin.
-          rewrite (IHfuel _ _ _ _ _ Hiter _ _ _ _ _ Heqgm2).
+          rewrite (IHfuel _ _ _ _ _ _ Hiter _ _ _ _ _ Heqgm2).
           2: { simpl. do 2 rewrite in_app_iff. tauto. }
           assert (~In gid (def_groups r)) by tauto. now apply gm_reset_find_other.
-
+      + (* Modifiers *)
+        intros Ht gm1 gm2 inp1 inp2 dir Hres gid Hnotin.
+        eapply IHfuel; eauto.
       + (* Lookaround *)
         destruct compute_tree as [treelk|] eqn:Hcomputelk; try discriminate.
         destruct lk_result eqn:LKRES.
@@ -801,8 +807,8 @@ Section EquivLemmas.
           ++ intros gm1 gm2 inp1 inp2 dir. destruct tree_res as [[inpafterlk gmafterlk]|] eqn:Heqgmafterlk; try discriminate.
              intros Heqgm2 gid Hnotin.
              rewrite in_app_iff in Hnotin.
-             rewrite (IHfuel _ _ _ _ _ Htreecont _ _ _ _ _ Heqgm2) by tauto.
-             rewrite (IHfuel _ _ _ _ _ Hcomputelk _ _ _ _ _ Heqgmafterlk).
+             rewrite (IHfuel _ _ _ _ _ _ Htreecont _ _ _ _ _ Heqgm2) by tauto.
+             rewrite (IHfuel _ _ _ _ _ _ Hcomputelk _ _ _ _ _ Heqgmafterlk).
              2: { simpl. rewrite app_nil_r. tauto. }
              reflexivity.
           ++ intros gm1 gm2 inp1 inp2 dir.
@@ -816,7 +822,7 @@ Section EquivLemmas.
         destruct compute_tree as [treecont|] eqn:Hcomputecont; try discriminate.
         intro H. injection H as <-. simpl.
         intros gm1 gm2 inp1 inp2 dir Heqgm2 gid' Hnotin.
-        rewrite (IHfuel _ _ _ _ _ Hcomputecont _ _ _ _ _ Heqgm2).
+        rewrite (IHfuel _ _ _ _ _ _ Hcomputecont _ _ _ _ _ Heqgm2).
         2: { simpl. rewrite in_app_iff in *. simpl. tauto. }
         assert (gid <> gid') by tauto.
         now apply group_map_open_find_other.
@@ -836,16 +842,20 @@ Section EquivLemmas.
     - (* Acheck *)
       destruct is_strict_suffix.
       + (* Check passes *)
-        specialize (IHfuel acts gm0 inp0 dir0).
+        specialize (IHfuel rer acts gm0 inp0 dir0).
         destruct compute_tree as [treecont|]; simpl; try discriminate.
         intro H. injection H as <-. intros gm1 gm2 inp1 inp2 dir. simpl.
         intro Hrescont. specialize (IHfuel treecont eq_refl gm1 gm2 inp1 inp2 dir Hrescont).
         exact IHfuel.
       + (* Check fails *)
         intro H. injection H as <-. discriminate.
+      
+    - (* Areset *)
+      specialize (IHfuel rer' acts gm0 inp0 dir0 t).
+      apply IHfuel.
 
     - (* Aclose *)
-      specialize (IHfuel acts (GroupMap.close (idx inp0) gid gm0) inp0 dir0).
+      specialize (IHfuel rer acts (GroupMap.close (idx inp0) gid gm0) inp0 dir0).
       destruct compute_tree as [treecont|]; simpl; try discriminate.
       specialize (IHfuel treecont eq_refl).
       intro H. injection H as <-.
@@ -858,14 +868,14 @@ Section EquivLemmas.
   Qed.
 
   Corollary reg_tree_no_outside_groups:
-    forall reg gm0 inp0 dir0 fuel t,
+    forall rer reg gm0 inp0 dir0 fuel t,
       compute_tree rer [Areg reg] inp0 gm0 dir0 fuel = Some t ->
       forall gm1 gm2 inp1 inp2 dir,
         Tree.tree_res t gm1 inp1 dir = Some (inp2, gm2) ->
         forall gid, ~In gid (def_groups reg) -> GroupMap.find gid gm2 = GroupMap.find gid gm1.
   Proof.
     intros.
-    apply actions_tree_no_outside_groups with (acts := [Areg reg]) (inp0 := inp0) (dir := dir) (fuel := fuel) (t := t) (inp1 := inp1) (inp2 := inp2) (gm0 := gm0) (dir0 := dir0); auto.
+    apply actions_tree_no_outside_groups with (rer := rer) (acts := [Areg reg]) (inp0 := inp0) (dir := dir) (fuel := fuel) (t := t) (inp1 := inp1) (inp2 := inp2) (gm0 := gm0) (dir0 := dir0); auto.
     simpl. rewrite app_nil_r. assumption.
   Qed.
 
@@ -887,8 +897,17 @@ Section EquivLemmas.
     rewrite H. tauto.
   Qed.
 
+  Lemma Areset_Aclose_disappear:
+    forall rer gid P,
+      (Areset rer = Aclose gid \/ P) <-> P.
+  Proof.
+    intros rer gid P.
+    assert (Areset rer = Aclose gid <-> False). { split; [discriminate|intros []]. }
+    rewrite H. tauto.
+  Qed.
+
   Lemma actions_tree_no_open_groups:
-    forall acts gm0 inp0 dir0 fuel t,
+    forall rer acts gm0 inp0 dir0 fuel t,
       compute_tree rer acts inp0 gm0 dir0 fuel = Some t ->
       forall gm1 gm2 inp1 inp2 dir,
         Tree.tree_res t gm1 inp1 dir = Some (inp2, gm2) ->
@@ -897,11 +916,11 @@ Section EquivLemmas.
           GroupMap.find gid gm1 = Some (GroupMap.Range idx None) /\
           ~In (Aclose gid) acts.
   Proof. (* Some variable names do not make sense because this lemma was strengthened wrt a previous version of the lemma *)
-    intros acts gm0 inp dir0 fuel. revert acts gm0 inp dir0.
+    intros rer acts gm0 inp dir0 fuel. revert rer acts gm0 inp dir0.
     induction fuel as [|fuel IHfuel]; try discriminate.
 
-    intro acts. destruct acts as [|[reg | strcheck | gid]].
-    2: destruct reg as [ | cd | r1 r2 | r1 r2 | greedy min delta r | lk r | gid r | a | gid].
+    intros rer acts. destruct acts as [|[reg | strcheck | rer' | gid]].
+    2: destruct reg as [ | cd | r1 r2 | r1 r2 | greedy min delta r | del r | lk r | gid r | a | gid].
     - (* No action *)
       simpl. intros _ _ _ t H. injection H as <-. simpl.
       intros gm1 gm2 inp1 inp2 _ H. injection H as <- <-. auto.
@@ -931,16 +950,16 @@ Section EquivLemmas.
       destruct (tree_res t1 gm1 inp1 dir) as [[inpres1 res1]|] eqn:Hres1; simpl.
       + (* First branch succeeds *)
         intro H. injection H as <- <-. intros gid idx' Hopenres.
-        pose proof IHfuel _ _ _ _ _ Hcompute1 _ _ _ _ _ Hres1 _ _ Hopenres.
+        pose proof IHfuel _ _ _ _ _ _ Hcompute1 _ _ _ _ _ Hres1 _ _ Hopenres.
         simpl in H. rewrite Areg_Aclose_disappear in *. auto.
       + (* First branch fails *)
         intros Hres2 gid idx' Hopen2.
-        pose proof IHfuel _ _ _ _ _ Hcompute2 _ _ _ _ _ Hres2 _ _ Hopen2.
+        pose proof IHfuel _ _ _ _ _ _ Hcompute2 _ _ _ _ _ Hres2 _ _ Hopen2.
         simpl in H. rewrite Areg_Aclose_disappear in *. auto.
 
     - (* Sequence *)
       simpl. intros gm0 inp dir0 t Hcomputesucc gm1 gm2 inp1 inp2 dir Heqgm2 gid idx' Hopen2.
-      pose proof IHfuel _ _ _ _ _ Hcomputesucc _ _ _ _ _ Heqgm2 _ _ Hopen2.
+      pose proof IHfuel _ _ _ _ _ _ Hcomputesucc _ _ _ _ _ Heqgm2 _ _ Hopen2.
       destruct dir0; simpl in H.
       + do 2 rewrite Areg_Aclose_disappear in H. rewrite Areg_Aclose_disappear. auto.
       + do 2 rewrite Areg_Aclose_disappear in H. rewrite Areg_Aclose_disappear. auto.
@@ -967,14 +986,14 @@ Section EquivLemmas.
           -- (* Iterating succeeds *)
              intro H. injection H as <- <-. intros gid idx' Hopeniter.
              rewrite Areg_Aclose_disappear.
-             pose proof IHfuel _ _ _ _ _ Htiter _ _ _ _ _ Hresiter _ _ Hopeniter.
+             pose proof IHfuel _ _ _ _ _ _ Htiter _ _ _ _ _ Hresiter _ _ Hopeniter.
              simpl in H. rewrite Areg_Aclose_disappear, Acheck_Aclose_disappear, Areg_Aclose_disappear in H.
              destruct (in_dec Nat.eq_dec gid (def_groups r)) as [Hreset | Hnotreset].
              ++ rewrite gm_reset_find in H by assumption. destruct H. inversion H. (* gid was reset *)
              ++ rewrite gm_reset_find_other in H by assumption. auto.
           -- (* Iterating fails *)
              intros Heqgm2 gid idx' Hopen2.
-             pose proof IHfuel _ _ _ _ _ Htskip _ _ _ _ _ Heqgm2 _ _ Hopen2.
+             pose proof IHfuel _ _ _ _ _ _ Htskip _ _ _ _ _ Heqgm2 _ _ Hopen2.
              rewrite Areg_Aclose_disappear. auto.
         * (* Lazy *)
           destruct (tree_res tskip gm1 inp1 dir) as [[inpskip gmskip]|] eqn:Hresskip; simpl.
@@ -984,7 +1003,7 @@ Section EquivLemmas.
           -- (* Skipping fails *)
              intros Heqgm2 gid idx' Hopen2.
              rewrite Areg_Aclose_disappear.
-             pose proof IHfuel _ _ _ _ _ Htiter _ _ _ _ _ Heqgm2 _ _ Hopen2. simpl in H.
+             pose proof IHfuel _ _ _ _ _ _ Htiter _ _ _ _ _ Heqgm2 _ _ Hopen2. simpl in H.
              rewrite Areg_Aclose_disappear, Acheck_Aclose_disappear, Areg_Aclose_disappear in H.
              destruct (in_dec Nat.eq_dec gid (def_groups r)) as [Hreset | Hnotreset].
              ++ rewrite gm_reset_find in H by assumption. destruct H. inversion H. (* gid was reset *)
@@ -994,12 +1013,18 @@ Section EquivLemmas.
         intro H. injection H as <-.
         intros gm1 gm2 inp1 inp2 dir Heqgm2 gid idx' Hopen2.
         rewrite Areg_Aclose_disappear.
-        pose proof IHfuel _ _ _ _ _ Htiter _ _ _ _ _ Heqgm2 _ _ Hopen2. simpl in H.
+        pose proof IHfuel _ _ _ _ _ _ Htiter _ _ _ _ _ Heqgm2 _ _ Hopen2. simpl in H.
         do 2 rewrite Areg_Aclose_disappear in H.
         destruct (in_dec Nat.eq_dec gid (def_groups r)) as [Hreset | Hnotreset].
         ++ rewrite gm_reset_find in H by assumption. destruct H. inversion H. (* gid was reset *)
         ++ rewrite gm_reset_find_other in H by assumption. auto.
-
+    - (* Modifiers *)
+      intros gm' inp dir0 t. simpl.
+      destruct compute_tree as [treecont|] eqn:Htreecont; try discriminate.
+      intro H. injection H as <-. intros gm1 gm2 inp1 inp2 dir. simpl.
+      intros Hres gid idx Heqgm2; rewrite Areg_Aclose_disappear.
+      pose proof IHfuel _ _ _ _ _ _ Htreecont _ _ _ _ _ Hres _ _ Heqgm2.
+      simpl in H; tauto.
     - (* Lookaround *)
       intros gm0 inp dir0 t. simpl.
       destruct compute_tree as [treelk|] eqn:Hcomputelk; try discriminate.
@@ -1013,8 +1038,8 @@ Section EquivLemmas.
         -- destruct tree_res as [[inpafterlk gmafterlk]|] eqn:Hgmafterlk; try discriminate.
            intros Heqgm2 gid idx' Hopen2.
            rewrite Areg_Aclose_disappear.
-           pose proof IHfuel _ _ _ _ _ Htreecont _ _ _ _ _ Heqgm2 _ _ Hopen2 as [].
-           pose proof IHfuel _ _ _ _ _ Hcomputelk _ _ _ _ _ Hgmafterlk _ _ H as []. auto.
+           pose proof IHfuel _ _ _ _ _ _ Htreecont _ _ _ _ _ Heqgm2 _ _ Hopen2 as [].
+           pose proof IHfuel _ _ _ _ _ _ Hcomputelk _ _ _ _ _ Hgmafterlk _ _ H as []. auto.
         -- destruct tree_res as [gmafterlk|] eqn:Hgmafterlk; try discriminate.
            intros Heqgm2 gid Hopen2.
            rewrite Areg_Aclose_disappear.
@@ -1028,7 +1053,7 @@ Section EquivLemmas.
       intro H. injection H as <-.
       intros gm1 gm2 inp1 inp2 dir Heqgm2 gid0 idx' Hopen2.
       simpl in Heqgm2.
-      pose proof IHfuel _ _ _ _ _ Htreecont _ _ _ _ _ Heqgm2 _ _ Hopen2 as [].
+      pose proof IHfuel _ _ _ _ _ _ Htreecont _ _ _ _ _ Heqgm2 _ _ Hopen2 as [].
       simpl in H0.
       rewrite Areg_Aclose_disappear in *.
       apply Decidable.not_or in H0. destruct H0.
@@ -1064,11 +1089,19 @@ Section EquivLemmas.
       + (* Is not strict suffix *)
         intro H. injection H as <-. discriminate.
 
+    - (* Reset *)
+      intros gm0 inp dir0 t. simpl.
+      destruct compute_tree as [treecont|] eqn:Htreecont; try discriminate.
+      intro H. injection H as <-. simpl. intros gm1 gm2 inp1 inp2 dir Heqgm1 gid idx Hopen2.
+      pose proof IHfuel _ _ _ _ _ _ Htreecont _ _ _ _ _ Heqgm1 _ _ Hopen2.
+      rewrite Areset_Aclose_disappear.
+      tauto.
+
     - (* Close *)
       intros gm0 inp dir0 t. simpl.
       destruct compute_tree as [treecont|] eqn:Htreecont; try discriminate.
       intro H. injection H as <-. simpl. intros gm1 gm2 inp1 inp2 dir Heqgm2 gid' idx' Hopen2.
-      pose proof IHfuel _ _ _ _ _ Htreecont _ _ _ _ _ Heqgm2 _ _ Hopen2.
+      pose proof IHfuel _ _ _ _ _ _ Htreecont _ _ _ _ _ Heqgm2 _ _ Hopen2.
       destruct (Nat.eq_dec gid gid') as [Heq | Hnoteq].
       + subst gid'.
         pose proof group_map_close_find_notopen gm1 (idx inp1) gid as Hnotopen. destruct H. exfalso. apply Hnotopen.
@@ -1243,8 +1276,10 @@ Section EquivLemmas.
   | Child_Sequence_left: forall r1 r2, ChildRegex r1 (Sequence r1 r2)
   | Child_Sequence_right: forall r1 r2, ChildRegex r2 (Sequence r1 r2)
   | Child_Quantified: forall greedy min delta r, ChildRegex r (Quantified greedy min delta r)
+  | Child_Modifiers: forall del r, ChildRegex r (Modifiers del r)
   | Child_Lookaround: forall lk r, ChildRegex r (Lookaround lk r)
-  | Child_Group: forall id r, ChildRegex r (Group id r).
+  | Child_Group: forall id r, ChildRegex r (Group id r)
+  .
 
   Definition is_quantifier (r: regex): Prop :=
     exists greedy min delta rsub, r = Quantified greedy min delta rsub.
@@ -1440,18 +1475,18 @@ Section EquivLemmas.
 
   (* Lemma used in lookarounds *)
   Lemma noforb_lk:
-    forall lr gm gmafterlk forbgroups tlk inp inpafterlk fuel dir,
+    forall rer lr gm gmafterlk forbgroups tlk inp inpafterlk fuel dir,
       no_forbidden_groups gm (forbidden_groups (Lookaround (LKFactorization.to_lookaround dir true) lr) ++ forbgroups) ->
       compute_tree rer [Areg lr] inp gm dir fuel = Some tlk ->
       tree_res tlk gm inp dir = Some (inpafterlk, gmafterlk) ->
       List.Disjoint (def_groups (Lookaround LookAhead lr)) forbgroups ->
       no_forbidden_groups gmafterlk forbgroups.
   Proof.
-    intros lr gm gmafterlk forbgroups tlk inp inpafterlk fuel dir Hnoforb Heqtlk Heqgmafterlk Hdef_forbid_disj.
+    intros rer lr gm gmafterlk forbgroups tlk inp inpafterlk fuel dir Hnoforb Heqtlk Heqgmafterlk Hdef_forbid_disj.
     unfold no_forbidden_groups. intros gid Hinforb.
     destruct (in_dec Nat.eq_dec gid (def_groups lr)) as [Hinlr | Hnotinlr].
     - exfalso. unfold List.Disjoint, not in Hdef_forbid_disj. simpl in Hdef_forbid_disj. eauto.
-    - rewrite (reg_tree_no_outside_groups _ _ _ _ _ _ Heqtlk _ _ _ _ _ Heqgmafterlk) by assumption.
+    - rewrite (reg_tree_no_outside_groups _ _ _ _ _ _ _ Heqtlk _ _ _ _ _ Heqgmafterlk) by assumption.
       unfold no_forbidden_groups in Hnoforb. apply Hnoforb. apply in_or_app. now right.
   Qed.
 
@@ -1539,21 +1574,21 @@ Section EquivLemmas.
 
   (* Lemma used in lookarounds as well *)
   Lemma equiv_open_groups_lk:
-    forall gm gl gmafterlk lr inp inpafterlk fuel tlk forbgroups dir,
+    forall rer gm gl gmafterlk lr inp inpafterlk fuel tlk forbgroups dir,
       group_map_equiv_open_groups gm gl ->
       compute_tree rer [Areg lr] inp gm dir fuel = Some tlk ->
       tree_res tlk gm inp dir = Some (inpafterlk, gmafterlk) ->
       no_forbidden_groups gm (forbidden_groups (Lookaround LookAhead lr) ++ forbgroups) ->
       group_map_equiv_open_groups gmafterlk gl.
   Proof.
-    intros gm gl gmafterlk lr inp inpafterlk fuel tlk forbgroups dir Hgmgl Heqtlk Heqgmafterlk Hnoforb.
+    intros rer gm gl gmafterlk lr inp inpafterlk fuel tlk forbgroups dir Hgmgl Heqtlk Heqgmafterlk Hnoforb.
     unfold group_map_equiv_open_groups. intros gid idx.
     split.
     - intro Hfind.
-      apply (actions_tree_no_open_groups _ _ _ _ _ _ Heqtlk _ _ _ _ _ Heqgmafterlk) in Hfind.
+      apply (actions_tree_no_open_groups _ _ _ _ _ _ _ Heqtlk _ _ _ _ _ Heqgmafterlk) in Hfind.
       destruct Hfind as [Hfind _]. apply Hgmgl. auto.
     - intro Hin.
-      rewrite (reg_tree_no_outside_groups _ _ _ _ _ _ Heqtlk _ _ _ _ _ Heqgmafterlk).
+      rewrite (reg_tree_no_outside_groups _ _ _ _ _ _ _ Heqtlk _ _ _ _ _ Heqgmafterlk).
       + apply Hgmgl. auto.
       + intro Habs. specialize (Hnoforb gid). apply Hgmgl in Hin. rewrite in_app_iff in Hnoforb.
         simpl in Hnoforb. specialize (Hnoforb (or_introl Habs)). congruence.
@@ -2059,7 +2094,7 @@ Section EquivLemmas.
 
   (* The lemmas *)
   Lemma exists_diff_iff:
-    forall ms next pref startIdx endIdx endMatch rlen existsdiff,
+    forall rer ms next pref startIdx endIdx endMatch rlen existsdiff,
       (rlen >= 0)%Z ->
       endMatch = (MatchState.endIndex ms + rlen)%Z ->
       ms_matches_inp ms (Input next pref) ->
@@ -2072,7 +2107,7 @@ Section EquivLemmas.
           Coercions.wrap_bool Errors.MatchError.type (Character.canonicalize rer rsi !=? Character.canonicalize rer gi)%wt) = Success existsdiff ->
       existsdiff = true <-> (List.map (Character.canonicalize rer) (List.firstn (Z.to_nat rlen) next) ==? List.map (Character.canonicalize rer) (substr (Input next pref) (Z.to_nat startIdx) (Z.to_nat endIdx)))%wt = false.
   Proof.
-    intros ms next pref startIdx endIdx endMatch rlen existsdiff Hrlennneg HeqendMatch Hmsinp Heqrlen HstartIdxnneg HendIdxnneg Heqexistsdiff.
+    intros rer ms next pref startIdx endIdx endMatch rlen existsdiff Hrlennneg HeqendMatch Hmsinp Heqrlen HstartIdxnneg HendIdxnneg Heqexistsdiff.
     destruct existsdiff.
     - (* There exists some different character *)
       apply List.Exists.true_to_prop in Heqexistsdiff.
@@ -2119,7 +2154,7 @@ Section EquivLemmas.
 
   (* Backward direction; mostly copy-pasting forward proof *)
   Lemma exists_diff_iff_bwd:
-    forall ms next pref startIdx endIdx beginMatch rlen existsdiff,
+    forall rer ms next pref startIdx endIdx beginMatch rlen existsdiff,
       (rlen >= 0)%Z ->
       beginMatch = (MatchState.endIndex ms - rlen)%Z ->
       (beginMatch >= 0)%Z ->
@@ -2133,7 +2168,7 @@ Section EquivLemmas.
           Coercions.wrap_bool Errors.MatchError.type (Character.canonicalize rer rsi !=? Character.canonicalize rer gi)%wt) = Success existsdiff ->
       existsdiff = true <-> (List.map (Character.canonicalize rer) (List.rev (List.firstn (Z.to_nat rlen) pref)) ==? List.map (Character.canonicalize rer) (substr (Input next pref) (Z.to_nat startIdx) (Z.to_nat endIdx)))%wt = false.
   Proof.
-    intros ms next pref startIdx endIdx beginMatch rlen existsdiff
+    intros rer ms next pref startIdx endIdx beginMatch rlen existsdiff
       Hrlennneg HeqbeginMatch HbeginMatchinb Hmsinp Heqrlen
       HstartIdxnneg HendIdxnneg Heqexistsdiff.
     destruct existsdiff.

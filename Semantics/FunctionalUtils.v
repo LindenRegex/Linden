@@ -7,16 +7,15 @@ Import ListNotations.
 
 Section Utilities.
   Context {params: LindenParameters}.
-  Context (rer: RegExpRecord).
 
-  Definition compute_tr (act: actions) (inp: input) (gm: group_map) (dir: Direction): tree :=
+  Definition compute_tr (act: actions) (inp: input) (rer: RegExpRecord) (gm: group_map) (dir: Direction): tree :=
     match compute_tree rer act inp gm dir (S (actions_fuel act inp dir)) with
     | Some tr => tr
     | None => Mismatch
     end.
 
-  Lemma compute_tr_is_tree {actions i gm dir} :
-    is_tree rer actions i gm dir (compute_tr actions i gm dir).
+  Lemma compute_tr_is_tree {actions i rer gm dir} :
+    is_tree rer actions i gm dir (compute_tr actions i rer gm dir).
   Proof.
     unfold compute_tr.
     pose proof functional_terminates rer actions i gm dir _ (PeanoNat.Nat.lt_succ_diag_r _).
@@ -24,30 +23,30 @@ Section Utilities.
     eauto using compute_is_tree.
   Qed.
 
-  Lemma compute_tr_reg_is_tree {r i gm dir} :
-    is_tree rer [Areg r] i gm dir (compute_tr [Areg r] i gm dir).
+  Lemma compute_tr_reg_is_tree {r i rer gm dir} :
+    is_tree rer [Areg r] i gm dir (compute_tr [Areg r] i rer gm dir).
   Proof.
     eauto using compute_tr_is_tree.
   Qed.
 
-  Theorem is_tree_productivity: forall acts inp gm dir,
+  Theorem is_tree_productivity: forall acts inp rer gm dir,
     exists tree, is_tree rer acts inp gm dir tree.
   Proof. eexists. apply compute_tr_is_tree. Qed.
 
-  Lemma is_tree_eq_compute_tr {actions i gm dir} :
-    forall {tr}, is_tree rer actions i gm dir tr -> tr = compute_tr actions i gm dir.
+  Lemma is_tree_eq_compute_tr {actions i rer gm dir} :
+    forall {tr}, is_tree rer actions i gm dir tr -> tr = compute_tr actions i rer gm dir.
   Proof.
     eauto using is_tree_determ, compute_tr_is_tree.
   Qed.
 
-  Lemma compute_tr_eq_is_tree {actions i gm dir} :
-    forall {tr}, tr = compute_tr actions i gm dir -> is_tree rer actions i gm dir tr.
+  Lemma compute_tr_eq_is_tree {actions i rer gm dir} :
+    forall {tr}, tr = compute_tr actions i rer gm dir -> is_tree rer actions i gm dir tr.
   Proof.
     intros. subst. apply compute_tr_is_tree.
   Qed.
 
-  Lemma compute_tr_ind {actions i gm dir P} :
-    P (compute_tr actions i gm dir) ->
+  Lemma compute_tr_ind {actions i rer gm dir P} :
+    P (compute_tr actions i rer gm dir) ->
     forall {tr}, is_tree rer actions i gm dir tr -> P tr.
   Proof.
     intros HP tr Htr.
@@ -55,76 +54,83 @@ Section Utilities.
     assumption.
   Qed.
 
-  Lemma compute_tr_reg_ind {r i gm dir P} :
-    P (compute_tr [Areg r] i gm dir) ->
+  Lemma compute_tr_reg_ind {r i rer gm dir P} :
+    P (compute_tr [Areg r] i rer gm dir) ->
     forall {tr}, is_tree rer [Areg r] i gm dir tr -> P tr.
   Proof.
     intros; eapply compute_tr_ind; eauto.
   Qed.
 
-  Definition compute_tr_unfold act inp gm dir :=
+  Definition compute_tr_unfold act inp rer gm dir :=
     match act with
     (* tree_done *)
     | [] => Match
     (* tree_check, tree_check_fail *)
     | Acheck strcheck :: cont =>
         if StrictSuffix.is_strict_suffix inp strcheck dir then
-          let treecont := compute_tr cont inp gm dir in
+          let treecont := compute_tr cont inp rer gm dir in
           Progress treecont
         else Mismatch
     (* tree_close *)
     | Aclose gid :: cont =>
-        let treecont := compute_tr cont inp (GroupMap.close (idx inp) gid gm) dir in
+        let treecont := compute_tr cont inp rer (GroupMap.close (idx inp) gid gm) dir in
         GroupAction (Close gid) treecont
+    (* tree_mod_close *)
+    | Areset rer' :: cont =>
+        compute_tr cont inp rer' gm dir
     (* tree_epsilon *)
-    | Areg Epsilon::cont => compute_tr cont inp gm dir
+    | Areg Epsilon::cont => compute_tr cont inp rer gm dir
     (* tree_char, tree_char_fail *)
     | Areg (Regex.Character cd)::cont =>
         match read_char rer cd inp dir with
         | Some (c, nextinp) =>
-            let treecont := compute_tr cont nextinp gm dir in
+            let treecont := compute_tr cont nextinp rer gm dir in
             Read c treecont
         | None => Mismatch
         end
     (* tree_disj *)
     | Areg (Disjunction r1 r2)::cont =>
-        let t1 := compute_tr (Areg r1 :: cont) inp gm dir in
-        let t2 := compute_tr (Areg r2 :: cont) inp gm dir in
+        let t1 := compute_tr (Areg r1 :: cont) inp rer gm dir in
+        let t2 := compute_tr (Areg r2 :: cont) inp rer gm dir in
         Choice t1 t2
     (* tree_sequence *)
     | Areg (Sequence r1 r2)::cont =>
-        compute_tr (seq_list r1 r2 dir ++ cont) inp gm dir
+        compute_tr (seq_list r1 r2 dir ++ cont) inp rer gm dir
     (* tree_quant_forced *)
     | Areg (Quantified greedy (S min) delta r1)::cont =>
         let gidl := def_groups r1 in
-        let titer := compute_tr (Areg r1 :: Areg (Quantified greedy min delta r1) :: cont) inp (GroupMap.reset gidl gm) dir in
+        let titer := compute_tr (Areg r1 :: Areg (Quantified greedy min delta r1) :: cont) inp rer (GroupMap.reset gidl gm) dir in
         GroupAction (Reset gidl) titer
     (* tree_quant_done *)
     | Areg (Quantified greedy 0 (NoI.N 0) r1)::cont =>
-        compute_tr cont inp gm dir
+        compute_tr cont inp rer gm dir
     (* tree_quant_free *)
     | Areg (Quantified greedy 0 delta r1)::cont =>
         let gidl := def_groups r1 in
-        let titer := compute_tr (Areg r1 :: Acheck inp :: Areg (Quantified greedy 0 (noi_pred delta) r1) :: cont) inp (GroupMap.reset gidl gm) dir in
-        let tskip := compute_tr cont inp gm dir in
+        let titer := compute_tr (Areg r1 :: Acheck inp :: Areg (Quantified greedy 0 (noi_pred delta) r1) :: cont) inp rer (GroupMap.reset gidl gm) dir in
+        let tskip := compute_tr cont inp rer gm dir in
         greedy_choice greedy (GroupAction (Reset gidl) titer) tskip
+    (* tree_mod_open *)
+    | Areg (Modifiers del r1)::cont =>
+        let newrer := apply_mod rer del in
+        compute_tr (Areg r1 :: Areset rer :: cont) inp newrer gm dir
     (* tree_group *)
     | Areg (Group gid r1)::cont =>
-        let treecont := compute_tr (Areg r1 :: Aclose gid :: cont) inp (GroupMap.open (idx inp) gid gm) dir in
+        let treecont := compute_tr (Areg r1 :: Aclose gid :: cont) inp rer (GroupMap.open (idx inp) gid gm) dir in
         GroupAction (Open gid) treecont
     (* tree_lk, tree_lk_fail *)
     | Areg (Lookaround lk r1)::cont =>
-        let treelk := compute_tr [Areg r1] inp gm (lk_dir lk) in
+        let treelk := compute_tr [Areg r1] inp rer gm (lk_dir lk) in
         match lk_result lk treelk gm inp with
         | Some gmlk =>
-            let treecont := compute_tr cont inp gmlk dir in
+            let treecont := compute_tr cont inp rer gmlk dir in
             LK lk treelk treecont
         | None =>  LKFail lk treelk
         end
     (* tree_anchor, tree_anchor_fail *)
     | Areg (Anchor a)::cont =>
         if anchor_satisfied rer a inp then
-          let treecont := compute_tr cont inp gm dir in
+          let treecont := compute_tr cont inp rer gm dir in
           AnchorPass a treecont
         else
           Mismatch
@@ -132,25 +138,25 @@ Section Utilities.
     | Areg (Backreference gid)::cont =>
         match read_backref rer gm gid inp dir with
         | Some (br_str, nextinp) =>
-            let tcont := compute_tr cont nextinp gm dir in
+            let tcont := compute_tr cont nextinp rer gm dir in
             ReadBackRef br_str tcont
         | None =>
             Mismatch
         end
     end.
 
-  Lemma compute_tree_None_compute_tr act inp gm dir fuel:
+  Lemma compute_tree_None_compute_tr act inp rer gm dir fuel:
     compute_tree rer act inp gm dir fuel <> None ->
-    compute_tree rer act inp gm dir fuel = Some (compute_tr act inp gm dir).
+    compute_tree rer act inp gm dir fuel = Some (compute_tr act inp rer gm dir).
   Proof.
     intros HNone; destruct compute_tree eqn:Htr in *; [ | congruence ].
     apply compute_is_tree in Htr.
     f_equal; eauto using is_tree_determ, compute_tr_is_tree.
   Qed.
 
-  Lemma compute_tree_compute_tr act inp gm dir:
+  Lemma compute_tree_compute_tr act inp rer gm dir:
     let fuel := S (actions_fuel act inp dir) in
-    compute_tree rer act inp gm dir fuel = Some (compute_tr act inp gm dir).
+    compute_tree rer act inp gm dir fuel = Some (compute_tr act inp rer gm dir).
   Proof.
     unfold compute_tr.
     pose proof functional_terminates rer act inp gm dir _ (PeanoNat.Nat.lt_succ_diag_r _).
@@ -159,11 +165,11 @@ Section Utilities.
 
   Arguments compute_tree params rer !act inp gm dir fuel.
 
-  Lemma compute_tr_rw act inp gm dir:
-    compute_tr act inp gm dir = compute_tr_unfold act inp gm dir.
+  Lemma compute_tr_rw act inp rer gm dir:
+    compute_tr act inp rer gm dir = compute_tr_unfold act inp rer gm dir.
   Proof.
     unfold compute_tr.
-    pose proof compute_tree_compute_tr act inp gm dir as HnotNone.
+    pose proof compute_tree_compute_tr act inp rer gm dir as HnotNone.
     destruct act as [|act cont]; simpl in *.
     { reflexivity. }
     destruct act.
@@ -215,6 +221,11 @@ Section Utilities.
           assert (titer_opt <> None). { destruct titer_opt; discriminate. }
           apply compute_tree_None_compute_tr in H. fold titer_opt in H.
           rewrite H in *. reflexivity.
+      + set (rer' := apply_mod rer del) in *.
+        set (treecont_opt := compute_tree rer' _ inp _ _ _) in *.
+        assert (treecont_opt <> None). { destruct treecont_opt; discriminate. }
+        apply compute_tree_None_compute_tr in H. fold treecont_opt in H.
+        rewrite H in *; reflexivity.
       + set (treelk_opt := compute_tree rer [Areg r] inp gm _ _) in *.
         assert (treelk_opt <> None). { destruct treelk_opt; discriminate. }
         apply compute_tree_None_compute_tr in H. fold treelk_opt in H.
@@ -244,13 +255,17 @@ Section Utilities.
       assert (treecont_opt <> None). { destruct treecont_opt; discriminate. }
       apply compute_tree_None_compute_tr in H. fold treecont_opt in H.
       rewrite H in *. reflexivity.
+    - set (treecont_opt := compute_tree t cont inp _ dir _) in *.
+      assert (treecont_opt <> None). { destruct treecont_opt; discriminate. }
+      apply compute_tree_None_compute_tr in H. fold treecont_opt in H.
+      rewrite H in *. reflexivity.
     - set (treecont_opt := compute_tree rer cont inp _ dir _) in *.
       assert (treecont_opt <> None). { destruct treecont_opt; discriminate. }
       apply compute_tree_None_compute_tr in H. fold treecont_opt in H.
       rewrite H in *. reflexivity.
   Qed.
 
-  Definition compute_tr_dep (act: actions) (inp: input) (gm: group_map) (dir: Direction): tree :=
+  Definition compute_tr_dep (act: actions) (inp: input) (rer: RegExpRecord) (gm: group_map) (dir: Direction): tree :=
     let fuel := S (actions_fuel act inp dir) in
     let opt := compute_tree rer act inp gm dir fuel in
     match opt as o return opt = o -> tree with
@@ -260,8 +275,8 @@ Section Utilities.
         fun Heq => False_rect _ (functional_terminates rer act inp gm dir fuel (PeanoNat.Nat.lt_succ_diag_r _) Heq)
     end eq_refl.
 
-  Lemma compute_tr_dep_is_tree {actions i gm dir} :
-    is_tree rer actions i gm dir (compute_tr_dep actions i gm dir).
+  Lemma compute_tr_dep_is_tree {actions i rer gm dir} :
+    is_tree rer actions i gm dir (compute_tr_dep actions i rer gm dir).
   Proof.
     unfold compute_tr_dep.
     set (functional_terminates _ _ _ _ _ _ _) as fn; clearbody fn.
@@ -270,8 +285,8 @@ Section Utilities.
   Qed.
 
   (* LATER: we could also try to define `compute_tr_dep_unfold` like `compute_tr_unfold` *)
-  Lemma compute_tr_dep_reg_is_tree {r i gm dir} :
-    is_tree rer [Areg r] i gm dir (compute_tr_dep [Areg r] i gm dir).
+  Lemma compute_tr_dep_reg_is_tree {r i rer gm dir} :
+    is_tree rer [Areg r] i gm dir (compute_tr_dep [Areg r] i rer gm dir).
   Proof.
     eauto using compute_tr_dep_is_tree.
   Qed.
@@ -281,10 +296,10 @@ Arguments compute_tr_unfold: simpl nomatch.
 
 Ltac compute_tr_step :=
   match goal with
-  | [  |- context[compute_tr ?act ?i ?gm ?dir] ] =>
+  | [  |- context[compute_tr ?act ?i ?rer ?gm ?dir] ] =>
       (* With `simpl nomatch`, progress simpl guarantees that we
                   rewrite only compute_tr instances that are unfoldable. *)
-      rewrite (compute_tr_rw act i gm dir); progress simpl
+      rewrite (compute_tr_rw act i rer gm dir); progress simpl
   | _ => rewrite !app_nil_r || (progress unfold seq_list)
   end.
 

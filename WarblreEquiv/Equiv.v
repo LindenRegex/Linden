@@ -17,7 +17,6 @@ Local Open Scope result_flow.
 
 Section Equiv.
   Context {params: LindenParameters}.
-  Context (rer: RegExpRecord).
 
   (* The identity continuation *)
   Definition id_mcont: MatcherContinuation :=
@@ -26,8 +25,8 @@ Section Equiv.
   (* The identity continuation is equivalent to the empty list of actions with
   any list of forbidden groups and any list of open groups *)
   Lemma id_equiv:
-    forall gl forbgroups dir str0,
-      equiv_cont rer id_mcont gl forbgroups nil dir str0.
+    forall rer gl forbgroups dir str0,
+      equiv_cont id_mcont gl forbgroups nil rer dir str0.
   Proof.
     intros. unfold equiv_cont.
     intros gm ms inp res [|fuel] t Hinpcompat Hgmms Hgmgl Hmsinp Hmschecks Hgmvalid
@@ -39,14 +38,14 @@ Section Equiv.
   (* Case when the repeat matcher is done iterating the regex because min = max = 0. *)
   Lemma repeatMatcher'_done_equiv:
     forall greedy parenIndex parenCount,
-    forall (m: Matcher) (lreg: regex) (dir: Direction),
-      equiv_matcher rer m lreg dir ->
+    forall rer (m: Matcher) (lreg: regex) (dir: Direction),
+      equiv_matcher m lreg rer dir ->
       def_groups lreg = List.seq (parenIndex + 1) parenCount ->
-      forall fuel, equiv_matcher rer
+      forall fuel, equiv_matcher
         (fun ms mc => Semantics.repeatMatcher' m 0 (NoI.N 0) greedy ms mc parenIndex parenCount fuel)
-        (Regex.Quantified greedy 0 (NoI.N 0) lreg) dir.
+        (Regex.Quantified greedy 0 (NoI.N 0) lreg) rer dir.
   Proof.
-    intros greedy parenIndex parenCount m lreg dir Hequiv Hgroupsvalid fuel.
+    intros greedy parenIndex parenCount rer m lreg dir Hequiv Hgroupsvalid fuel.
     unfold equiv_matcher. intros str0 mc gl forbgroups act Hequivcont Hgldisj Hdef_forbid_disj.
     unfold equiv_cont. intros gm ms inp res [|treefuel] t Hinpcompat Hgmms
       Hgmgl Hmsinp Hmsvalidchecks Hgmvalid Hnoforbidden; simpl; try discriminate.
@@ -57,15 +56,15 @@ Section Equiv.
   (* Case when the repeat matcher can choose between iterating the sub-regexp and exiting the quantifier because min = 0 but max != 0. *)
   Lemma repeatMatcher'_free_equiv:
     forall greedy parenIndex parenCount,
-    forall (m: Matcher) (lreg: regex) (dir: Direction),
-      equiv_matcher rer m lreg dir ->
+    forall rer (m: Matcher) (lreg: regex) (dir: Direction),
+      equiv_matcher m lreg rer dir ->
       def_groups lreg = List.seq (parenIndex + 1) parenCount ->
-      forall fuel delta, equiv_matcher rer
+      forall fuel delta, equiv_matcher
         (fun ms mc => Semantics.repeatMatcher' m 0 delta greedy ms mc parenIndex parenCount fuel)
-        (Regex.Quantified greedy 0 delta lreg) dir.
+        (Regex.Quantified greedy 0 delta lreg) rer dir.
     Proof.
       (* We perform induction on the fuel. The case fuel = 0 is immediate. *)
-      intros greedy parenIndex parenCount m lreg dir Hequiv Hgroupsvalid fuel.
+      intros greedy parenIndex parenCount rer m lreg dir Hequiv Hgroupsvalid fuel.
       induction fuel as [|fuel IHfuel]. 1: discriminate.
 
       (* For delta = 0, we apply repeatMatcher'_done_equiv. *)
@@ -84,7 +83,7 @@ Section Equiv.
       set (mcloop := fun y: MatchState => if (_ =? _)%Z then _ else _).
       set (msreset := match_state _ _ cap').
       (* We characterize mcloop. *)
-      assert (Hmcloopequiv: equiv_cont rer mcloop gl forbgroups (Acheck inp::Areg (Regex.Quantified greedy 0 (delta - 1)%NoI lreg)::act)%list dir str0). {
+      assert (Hmcloopequiv: equiv_cont mcloop gl forbgroups (Acheck inp::Areg (Regex.Quantified greedy 0 (delta - 1)%NoI lreg)::act)%list rer dir str0). {
         unfold equiv_cont. intros gm' ms' inp' res' fueltree' t' Hinp'compat Hgm'ms' Hgm'gl Hms'inp' Hms'checks Hgm'valid Hnoforbidden'.
         unfold mcloop.
         destruct (_ =? _)%Z eqn:Heqcheck.
@@ -170,14 +169,14 @@ Section Equiv.
   the two above lemmas otherwise *)
   Lemma repeatMatcher'_equiv:
     forall greedy parenIndex parenCount,
-    forall (m: Matcher) (lreg: regex) (dir: Direction),
-      equiv_matcher rer m lreg dir ->
+    forall rer (m: Matcher) (lreg: regex) (dir: Direction),
+      equiv_matcher m lreg rer dir ->
       def_groups lreg = List.seq (parenIndex + 1) parenCount ->
-      forall fuel min delta, equiv_matcher rer
+      forall fuel min delta, equiv_matcher
         (fun ms mc => Semantics.repeatMatcher' m min (NoI.N min + delta)%NoI greedy ms mc parenIndex parenCount fuel)
-        (Regex.Quantified greedy min delta lreg) dir.
+        (Regex.Quantified greedy min delta lreg) rer dir.
   Proof.
-    intros greedy parenIndex parenCount m lreg dir Hequiv Hgroupsvalid fuel.
+    intros greedy parenIndex parenCount rer m lreg dir Hequiv Hgroupsvalid fuel.
     induction fuel as [|fuel IHfuel]. 1: discriminate.
 
     intros min delta.
@@ -222,14 +221,14 @@ Section Equiv.
 
   Corollary repeatMatcher_equiv:
     forall greedy parenIndex parenCount,
-    forall (m: Matcher) (lreg: regex) (dir: Direction),
-      equiv_matcher rer m lreg dir ->
+    forall rer (m: Matcher) (lreg: regex) (dir: Direction),
+      equiv_matcher m lreg rer dir ->
       def_groups lreg = List.seq (parenIndex + 1) parenCount ->
-      forall min delta, equiv_matcher rer
+      forall min delta, equiv_matcher
         (fun ms mc => Semantics.repeatMatcher m min (NoI.N min + delta)%NoI greedy ms mc parenIndex parenCount)
-        (Regex.Quantified greedy min delta lreg) dir.
+        (Regex.Quantified greedy min delta lreg) rer dir.
   Proof.
-    intros greedy parenIndex parenCount m lreg dir Hequiv Hgroupsvalid min delta.
+    intros greedy parenIndex parenCount rer m lreg dir Hequiv Hgroupsvalid min delta.
     unfold Semantics.repeatMatcher, equiv_matcher.
     intros. unfold equiv_cont. intros.
     eapply repeatMatcher'_equiv; eauto.
@@ -239,12 +238,12 @@ Section Equiv.
 
   (* Lemma for character set matchers *)
   Lemma charSetMatcher_equiv:
-    forall charset cd,
+    forall rer charset cd,
       equiv_cd_charset rer cd charset ->
       forall dir inv,
-        equiv_matcher rer (Semantics.characterSetMatcher rer charset inv dir) (Regex.Character (if inv then CdInv cd else cd)) dir.
+        equiv_matcher (Semantics.characterSetMatcher rer charset inv dir) (Regex.Character (if inv then CdInv cd else cd)) rer dir.
   Proof.
-    intros charset cd Hequiv dir inv.
+    intros rer charset cd Hequiv dir inv.
     unfold equiv_matcher. intros str0 mc gl forbgroups act Hequivcont Hgldisj Hdef_forbid_disj.
     unfold equiv_cont. intros gm ms inp res fuel t Hinpcompat Hgmms Hgmgl Hmsinp Hmschecks Hgmvalid Hnoforbidden.
     unfold Semantics.characterSetMatcher.
@@ -309,11 +308,11 @@ Section Equiv.
       wreg = AtomEsc (ACharacterClassEsc esc) ->
       Root wroot (wreg, ctx) ->
       equiv_regex' wreg lreg (StaticSemantics.countLeftCapturingParensBefore wreg ctx) nm ->
-      forall m dir,
+      forall rer m dir,
         Semantics.compileSubPattern wreg ctx rer dir = Success m ->
-        equiv_matcher rer m lreg dir.
+        equiv_matcher m lreg rer dir.
   Proof.
-    intros nm lroot wroot root_equiv esc wreg lreg ctx -> Hroot Hequiv m dir Hcompilesucc.
+    intros nm lroot wroot root_equiv esc wreg lreg ctx -> Hroot Hequiv rer m dir Hcompilesucc.
     inversion Hequiv.
     - subst esc0 lreg. pose proof equiv_cd_CharacterClassEscape rer esc cd H0 as [a [HcompileCharSet Hequivcdcs]].
       unfold Semantics.compileSubPattern, Semantics.compileToCharSet, Coercions.ClassAtom_to_range, Coercions.ClassEscape_to_ClassAtom, Coercions.CharacterClassEscape_to_ClassEscape in Hcompilesucc.
@@ -330,11 +329,11 @@ Section Equiv.
     forall esc cd ctx,
       Root wroot (AtomEsc (ACharacterEsc esc), ctx) ->
       equiv_CharacterEscape esc cd ->
-      forall m dir,
+      forall rer m dir,
         Semantics.compileSubPattern (AtomEsc (ACharacterEsc esc)) ctx rer dir = Success m ->
-        equiv_matcher rer m (Regex.Character cd) dir.
+        equiv_matcher m (Regex.Character cd) rer dir.
   Proof.
-    intros lroot wroot Hequivroot esc cd ctx Hroot Hequiv m dir.
+    intros lroot wroot Hequivroot esc cd ctx Hroot Hequiv rer m dir.
     inversion Hequiv as [controlesc cd0 Hequiv'' Heqesc Heqcd0 | l cd0 Hequiv'' Heqesc Heqcd0 | Heqesc Heqcd | d1 d2 Heqesc Heqcd | c Heqesc Heqcd | head tail Heqesc Heqcd | hex Heqesc Heqcd | c Heqesc Heqcd].
     - inversion Hequiv'' as [Heqcontrolesc Heqcd | Heqcontrolesc Heqcd | Heqcontrolesc Heqcd | Heqcontrolesc Heqcd | Heqcontrolesc Heqcd]; simpl; intro H; injection H as <-;
       eapply charSetMatcher_equiv with (inv := false); eauto; unfold nat_to_nni; rewrite Character.numeric_pseudo_bij; apply equiv_cd_single.
@@ -355,11 +354,11 @@ Section Equiv.
       forall cc cd ctx,
         Root wroot (CharacterClass cc, ctx) ->
         equiv_CharClass cc cd ->
-        forall m dir,
+        forall rer m dir,
           Semantics.compileSubPattern (CharacterClass cc) ctx rer dir = Success m ->
-          equiv_matcher rer m (Regex.Character cd) dir.
+          equiv_matcher m (Regex.Character cd) rer dir.
   Proof.
-    intros lroot wroot root_equiv cc cd ctx Hroot Hequiv' m dir.
+    intros lroot wroot root_equiv cc cd ctx Hroot Hequiv' rer m dir.
     inversion Hequiv' as [crs cd0 Hequiv'' Heqcc' Heqcd0 | crs cd0 Hequiv'' Heqcc' Heqcd0]; simpl.
     - pose proof equiv_cd_ClassRanges rer crs cd Hequiv'' as [a [Heqa Hequiva]]. setoid_rewrite Heqa. simpl.
       intro H. injection H as <-. eapply charSetMatcher_equiv with (inv := false); eauto.
@@ -370,9 +369,9 @@ Section Equiv.
 
   (* Lemma for backreferences *)
   Lemma backref_equiv:
-    forall gid dir,
-      equiv_matcher rer (Semantics.backreferenceMatcher rer gid dir)
-        (Backreference (positive_to_nat gid)) dir.
+    forall rer gid dir,
+      equiv_matcher (Semantics.backreferenceMatcher rer gid dir)
+        (Backreference (positive_to_nat gid)) rer dir.
   Proof.
     intros. unfold equiv_matcher.
     intros str0 mc gl forbgroups act Hequivcont Hgldisj Hdef_forbid_disj.
@@ -513,26 +512,89 @@ Section Equiv.
         now apply ms_valid_wrt_checks_tail in Hmschecks.
   Qed.
 
+  Lemma remods_corr : forall {F} `{Result.AssertionError F} rer add remove rerp,
+    Semantics.updateModifiers rer add remove = Success rerp ->
+    rerp = apply_mod rer (remods_to_del add remove).
+  Proof.
+    intros.
+    unfold Semantics.updateModifiers in H0.
+    destruct (negb (RegularExpressionModifiers.i add && RegularExpressionModifiers.i remove) &&
+      negb (RegularExpressionModifiers.s add && RegularExpressionModifiers.s remove) &&
+      negb (RegularExpressionModifiers.m add && RegularExpressionModifiers.m remove))%bool.
+    - injection H0 as <-.
+      unfold apply_mod, apply_diff, remods_to_del.
+      destruct add as [ai am as_], remove as [ri rm rs]; simpl.
+      destruct ai, am, as_, ri, rm, rs; reflexivity.
+    - unfold Result.assertion_failed in H0. simpl in H0. destruct H as [f]. discriminate.
+  Qed.
+
+  Lemma equiv_cont_reset : forall mc gl fg act rer rer' dir str,
+    equiv_cont mc gl fg act rer' dir str ->
+    equiv_cont mc gl fg (Areset rer' :: act)%list rer dir str.
+  Proof.
+    unfold equiv_cont.
+    intros; destruct fuel.
+    - simpl in H8; discriminate.
+    - eapply (H _ _ _ _ fuel); eauto.
+      intros inpcheck Hin; eapply H4; eauto.
+      right; assumption.
+  Qed.
+
+  Lemma equiv_mods:
+    forall wr lr add remove del n ctx nm
+      (IH: forall rer' m dir, 
+        Semantics.compileSubPattern wr (Modifiers_inner add remove :: ctx) rer' dir = Success m ->
+        equiv_matcher m lr rer' dir)
+      (Hdel: del = remods_to_del add remove)
+      (Heqn: n = StaticSemantics.countLeftCapturingParensBefore (Modifiers add remove wr) ctx)
+      (EQUIV: equiv_regex' wr lr n nm),
+    forall rer m dir,
+      Semantics.compileSubPattern (Modifiers add remove wr) ctx rer dir = Success m ->
+      equiv_matcher m (Regex.Modifiers del lr) rer dir.
+  Proof.
+    intros. simpl in *.
+    destruct Semantics.updateModifiers as [rerp|] eqn:UPD_SUB; try discriminate.
+    simpl in H.
+    destruct Semantics.compileSubPattern as [msub|] eqn:COMP_SUB; try discriminate.
+    simpl in H. injection H as <-.
+    apply remods_corr in UPD_SUB. subst rerp del.
+    specialize (IH _ _ _ COMP_SUB).
+    unfold equiv_matcher. intros str0 mc gl forbgroups act Hequivcont Hgldisj Hdef_forbid_disj.
+    unfold equiv_cont. intros gm ms inp res [|fuel] t Hinpcompat Hgmms Hgmgl Hmsinp Hmschecks Hgmvalid Hnoforbidden; simpl in *; try discriminate.
+    unfold equiv_matcher in IH.
+    specialize (IH str0 mc gl forbgroups (Areset rer :: act)%list 
+      (equiv_cont_reset _ _ _ _ _ _ _ _ Hequivcont) Hgldisj Hdef_forbid_disj).
+    destruct compute_tree as [treecont|] eqn:Htreecont; simpl; try discriminate.
+    intros Hres H. injection H as <-.
+    eapply IH; eauto.
+    - intros inpcheck Hin.
+      destruct Hin as [Hin1 | [Hin2 | Hin3]]; try discriminate.
+      eapply (Hmschecks inpcheck); right; eauto.
+    - eapply (noforbidden_child lr (Regex.Modifiers (remods_to_del add remove) lr)); eauto.
+      + constructor.
+      + intros [t1 [t2 [t3 [t4 Heq]]]]; discriminate.
+  Qed.
+
   (* Groups, whether named or unnamed (factorization) *)
   Lemma equiv_groups:
     forall wr lr gn_opt n ctx nm
-      (IH: forall m dir,
+      (IH: forall rer m dir,
         Semantics.compileSubPattern wr (Group_inner gn_opt :: ctx) rer dir = Success m ->
-        equiv_matcher rer m lr dir)
+        equiv_matcher m lr rer dir)
       (Heqn: n = StaticSemantics.countLeftCapturingParensBefore (Group gn_opt wr) ctx)
       (EQUIV: equiv_regex' wr lr (S n) nm),
-    forall m dir,
+    forall rer m dir,
       Semantics.compileSubPattern (Group gn_opt wr) ctx rer dir = Success m ->
-      equiv_matcher rer m (Regex.Group (S n) lr) dir.
+      equiv_matcher m (Regex.Group (S n) lr) rer dir.
   Proof.
     intros. simpl in *.
     destruct Semantics.compileSubPattern as [msub|] eqn:COMP_SUB; try discriminate.
-    simpl in H. specialize (IH msub dir COMP_SUB).
+    simpl in H. specialize (IH rer msub dir COMP_SUB).
     injection H as <-.
     unfold equiv_matcher. intros str0 mc gl forbgroups act Hequivcont Hgldisj Hdef_forbid_disj.
     unfold equiv_cont. intros gm ms inp res [|fuel] t Hinpcompat Hgmms Hgmgl Hmsinp Hmschecks Hgmvalid Hnoforbidden; simpl; try discriminate.
     set (mcclose := fun (y: MatchState) => _).
-    assert (Hequivmcclose: equiv_cont rer mcclose ((S n, idx inp)::gl)%list forbgroups (Aclose (S n)::act)%list dir str0). {
+    assert (Hequivmcclose: equiv_cont mcclose ((S n, idx inp)::gl)%list forbgroups (Aclose (S n)::act)%list rer dir str0). {
       unfold equiv_cont. intros gm' ms' inp' res' [|fuel'] t' Hinp'compat Hgm'ms' Hgm'gl' Hms'inp' Hms'checks Hgm'valid Hnoforbidden'; simpl; try discriminate.
       destruct compute_tree as [treecont|] eqn:Htreecont; simpl; try discriminate.
       unfold mcclose.
@@ -571,11 +633,11 @@ Section Equiv.
       (Hroot: Root wroot (wreg, ctx))
       (* and any Linden regex lreg that is equivalent to this sub-regex with the right number of left capturing parentheses before, *)
       (Hequiv: equiv_regex' wreg lreg (StaticSemantics.countLeftCapturingParensBefore wreg ctx) (buildnm wroot)),
-      forall m dir
+      forall rer m dir
         (* if compileSubPattern with direction dir yields a Matcher for regex wreg, *)
         (Hcompsucc: Semantics.compileSubPattern wreg ctx rer dir = Success m),
         (* then this Matcher is equivalent to the regex lreg and direction dir. *)
-        equiv_matcher rer m lreg dir.
+        equiv_matcher m lreg rer dir.
   Proof.
     do 8 intro.
     remember (StaticSemantics.countLeftCapturingParensBefore _ _) as n in Hequiv.
@@ -593,6 +655,7 @@ Section Equiv.
       n wr1 wr2 lr1 lr2 nm Hequiv1 IH1 Hequiv2 IH2 |
       n wr1 wr2 lr1 lr2 nm Hequiv1 IH1 Hequiv2 IH2 |
       n wr lr wquant lquant wgreedylazy greedy nm Hequiv IH Hequivquant Hequivgreedy |
+      n wr lr add remove del nm IH |
       n wr lr nm Hequiv IH |
       name n wr lr nm Hgid Hequiv IH |
       n wr lr wlk llk nm Hequiv IH Hequivlk |
@@ -600,7 +663,7 @@ Section Equiv.
     ].
 
     - (* Epsilon *)
-      intros ctx _ _ _ m dir. simpl.
+      intros ctx _ _ _ rer m dir. simpl.
       intro. injection Hcompsucc as <-.
       unfold equiv_matcher. intros str0 mc gl forbgroups act Hequivcont _ _.
       unfold equiv_cont. intros gm ms inp res fuel t Hinpcompat Hgmms Hgmgl Hmsinp Hmschecks Hgmvalid Hnoforbidden Hmcsucc.
@@ -610,25 +673,25 @@ Section Equiv.
       eapply Hequivcont; eauto using ms_valid_wrt_checks_tail.
 
     - (* Character *)
-      intros ctx Hroot Heqn Heqnm m dir Hcompsucc.
+      intros ctx Hroot Heqn Heqnm rer m dir Hcompsucc.
       injection Hcompsucc as <-.
       apply charSetMatcher_equiv with (inv := false); auto. apply equiv_cd_single.
 
     - (* Dot *)
-      intros ctx Hroot Heqn Heqnm m dir Hcompsucc.
+      intros ctx Hroot Heqn Heqnm rer m dir Hcompsucc.
       injection Hcompsucc as <-.
       apply charSetMatcher_equiv with (inv := false); auto. destruct (RegExpRecord.dotAll rer) eqn:HdotAll.
       + apply equiv_cd_dot_dotAll. auto.
       + apply equiv_cd_dot_noDotAll. auto.
 
     - (* Backreference *)
-      intros ctx Hroot Heqn Heqnm m dir. simpl.
+      intros ctx Hroot Heqn Heqnm rer m dir. simpl.
       destruct Nat.leb eqn:Hgidinbounds; try discriminate. simpl.
       intro H. injection H as <-.
       auto using backref_equiv.
 
     - (* Named Backreference *)
-      intros ctx Hroot Heqn Heqnm m dir. simpl.
+      intros ctx Hroot Heqn Heqnm rer m dir. simpl.
       destruct (length _ =? 1) eqn:Hnumgs; simpl; try discriminate.
       rewrite PeanoNat.Nat.eqb_eq in Hnumgs.
       destruct List.Unique.unique as [gs|err] eqn:Heqgs; try discriminate.
@@ -641,19 +704,19 @@ Section Equiv.
       auto using backref_equiv.
 
     - (* AtomEsc (ACharacterClassEsc esc); idem *)
-      intros ctx Hroot Heqn Heqnm m dir Hcompsucc.
+      intros ctx Hroot Heqn Heqnm rer m dir Hcompsucc.
       eapply characterClassEscape_equiv with (nm := nm); eauto. constructor. assumption.
 
     - (* AtomEsc (ACharacterEsc esc); idem *)
-      intros ctx Hroot Heqn Heqnm m dir Hcompsucc.
+      intros ctx Hroot Heqn Heqnm rer m dir Hcompsucc.
       eapply characterEscape_equiv; eauto.
 
     - (* CharacterClass; idem *)
-      intros ctx Hroot Heqn Heqnm m dir Hcompsucc.
+      intros ctx Hroot Heqn Heqnm rer m dir Hcompsucc.
       eapply characterClass_equiv; eauto.
 
     - (* Disjunction *)
-      intros ctx Hroot Heqn Heqnm m dir.
+      intros ctx Hroot Heqn Heqnm rer m dir.
       simpl.
       (* Compilation of the two sub-regexes succeeds *)
       destruct Semantics.compileSubPattern as [m1|] eqn:Hcompsucc1; simpl; try discriminate.
@@ -663,11 +726,11 @@ Section Equiv.
       specialize (IH1 (Disjunction_left wr2 :: ctx)%list).
       specialize_prove IH1 by eauto using Down.same_root_down0, Down_Disjunction_left.
       specialize_prove IH1. { simpl. unfold StaticSemantics.countLeftCapturingParensBefore in *. lia. }
-      specialize (IH1 Heqnm m1 dir Hcompsucc1).
+      specialize (IH1 Heqnm rer m1 dir Hcompsucc1).
       specialize (IH2 (Disjunction_right wr1 :: ctx)%list).
       specialize_prove IH2 by eauto using Down.same_root_down0, Down_Disjunction_right.
       specialize_prove IH2. { simpl. unfold StaticSemantics.countLeftCapturingParensBefore in *. erewrite num_groups_equiv by eauto. lia. }
-      specialize (IH2 Heqnm m2 dir Hcompsucc2).
+      specialize (IH2 Heqnm rer m2 dir Hcompsucc2).
       (* Introduce the required variables *)
       unfold equiv_matcher. intros str0 mc gl forbgroups act Hequivcont Hgldisj Hdef_forbid_disj.
       unfold equiv_cont. intros gm ms inp res fuel t Hinpcompat Hgmms Hgmgl Hmsinp Hmschecks Hgmvalid Hnoforbidden.
@@ -711,7 +774,7 @@ Section Equiv.
           -- assumption.
 
     - (* Sequence *)
-      intros ctx Hroot Heqn Heqnm m dir. simpl.
+      intros ctx Hroot Heqn Heqnm rer m dir. simpl.
       (* Compilation of the two sub-regexes succeeds *)
       destruct Semantics.compileSubPattern as [m1|] eqn:Hcompsucc1; simpl; try discriminate.
       destruct (Semantics.compileSubPattern _ (Seq_right _ :: ctx)%list) as [m2|] eqn:Hcompsucc2; simpl; try discriminate.
@@ -719,11 +782,11 @@ Section Equiv.
       specialize (IH1 (Seq_left wr2 :: ctx)%list).
       specialize_prove IH1 by eauto using Down.same_root_down0, Down_Seq_left.
       specialize_prove IH1. { simpl. unfold StaticSemantics.countLeftCapturingParensBefore in *. lia. }
-      specialize (IH1 Heqnm m1 dir Hcompsucc1).
+      specialize (IH1 Heqnm rer m1 dir Hcompsucc1).
       specialize (IH2 (Seq_right wr1 :: ctx)%list).
       specialize_prove IH2 by eauto using Down.same_root_down0, Down_Seq_right.
       specialize_prove IH2. { simpl. unfold StaticSemantics.countLeftCapturingParensBefore in *. erewrite num_groups_equiv by eauto. lia. }
-      specialize (IH2 Heqnm m2 dir Hcompsucc2).
+      specialize (IH2 Heqnm rer m2 dir Hcompsucc2).
       intro Heqm.
       unfold equiv_matcher. intros str0 mc gl forbgroups act Hequivcont Hgldisj Hdef_forbid_disj.
       unfold equiv_cont. intros gm ms inp res [|fuel] t Hinpcompat Hgmms Hgmgl Hmsinp Hmschecks Hgmvalid Hnoforbidden; try discriminate; simpl.
@@ -731,7 +794,7 @@ Section Equiv.
       destruct dir; injection Heqm as <-.
       + (* Forward *)
         set (mc2 := fun s => _).
-        assert (Hequivcont2: equiv_cont rer mc2 gl (forbidden_groups lr2 ++ forbgroups) (Areg lr2 :: act)%list forward str0). {
+        assert (Hequivcont2: equiv_cont mc2 gl (forbidden_groups lr2 ++ forbgroups) (Areg lr2 :: act)%list rer forward str0). {
           unfold equiv_cont. clear gm ms inp res fuel t Hinpcompat Hgmms Hgmgl Hmsinp Hmschecks Hgmvalid Hnoforbidden.
           intros gm ms inp res fuel t Hinpcompat Hgmms Hgmgl Hmsinp Hmschecks Hnoforbidden. unfold mc2.
           intros Hres Ht. eapply IH2; eauto.
@@ -746,7 +809,7 @@ Section Equiv.
 
       + (* Backward *)
         set (mc1 := fun s => _).
-        assert (Hequivcont1: equiv_cont rer mc1 gl (forbidden_groups lr1 ++ forbgroups) (Areg lr1 :: act)%list backward str0). {
+        assert (Hequivcont1: equiv_cont mc1 gl (forbidden_groups lr1 ++ forbgroups) (Areg lr1 :: act)%list rer backward str0). {
           unfold equiv_cont. clear gm ms inp res fuel t Hinpcompat Hgmms Hgmgl Hmsinp Hmschecks Hgmvalid Hnoforbidden.
           intros gm ms inp res fuel t Hinpcompat Hgmms Hgmgl Hmsinp Hmschecks Hnoforbidden. unfold mc1.
           intros Hres Ht. eapply IH1; eauto.
@@ -760,14 +823,14 @@ Section Equiv.
         * now apply noforbidden_seq_bwd.
 
     - (* Quantified *)
-      intros ctx Hroot Heqn Heqnm m dir. simpl.
+      intros ctx Hroot Heqn Heqnm rer m dir. simpl.
       destruct Semantics.compileSubPattern as [msub|] eqn:Hcompsuccsub; simpl; try discriminate.
       specialize (IH (Quantified_inner (wgreedylazy wquant)::ctx)%list).
       specialize_prove IH by eauto using Down.same_root_down0, Down_Quantified_inner.
       specialize_prove IH. {
         simpl. unfold StaticSemantics.countLeftCapturingParensBefore in *. lia.
       }
-      specialize (IH Heqnm msub dir Hcompsuccsub).
+      specialize (IH Heqnm rer msub dir Hcompsuccsub).
       set (min := Semantics.CompiledQuantifier_min _).
       set (max := Semantics.CompiledQuantifier_max _).
       rewrite compilequant_greedy with (lquant := lquant) (greedy := greedy) by assumption.
@@ -790,6 +853,11 @@ Section Equiv.
       inversion Hequivgreedy as [Heqwgl Heqgreedy | Heqwgl Heqgreedy]; subst wgreedylazy greedy; simpl in *; try apply repeatMatcher_equiv; auto.
       all: replace (nrep - min) with 0 by lia; apply repeatMatcher_equiv; auto.
 
+    - (* Modifiers *)
+      intros ctx ROOT EQ_n EQ_nm.
+      apply equiv_mods with (nm := nm) (n := n); auto.
+      apply IHIH; auto. simpl. unfold StaticSemantics.countLeftCapturingParensBefore in *. lia.
+
     - (* Group *)
       intros ctx ROOT EQ_n EQ_nm.
       apply equiv_groups with (nm := nm); auto.
@@ -801,7 +869,7 @@ Section Equiv.
       apply IH; auto. simpl. unfold StaticSemantics.countLeftCapturingParensBefore in *. lia.
 
     - (* Lookarounds *)
-      intros ctx Hroot Heqn Heqnm m dir.
+      intros ctx Hroot Heqn Heqnm rer m dir.
 
       (* Replace Warblre code with factorized code *)
       apply equiv_lookaround_dir_pos in Hequivlk. destruct Hequivlk as [lkdir [lkpos [Heqwlk Heqllk]]].
@@ -880,7 +948,7 @@ Section Equiv.
 
 
     - (* Anchor *)
-      intros ctx Hroot Heqn Heqnm m dir. inversion Hanchequiv as [Heqwr Heqlanchor | Heqwr Heqlanchor | Heqwr Heqlanchor | Heqwr Heqlanchor].
+      intros ctx Hroot Heqn Heqnm rer m dir. inversion Hanchequiv as [Heqwr Heqlanchor | Heqwr Heqlanchor | Heqwr Heqlanchor | Heqwr Heqlanchor].
 
       + (* Input start *)
         simpl. intro H. injection H as <-.

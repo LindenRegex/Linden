@@ -7,22 +7,21 @@ yields trees that respect the inductive semantics *)
 
 Section ComputeIsTree.
   Context {params: LindenParameters}.
-  Context (rer: RegExpRecord).
 
   Theorem compute_is_tree:
-    forall act inp gm dir fuel t,
+    forall rer act inp gm dir fuel t,
       compute_tree rer act inp gm dir fuel = Some t ->
       is_tree rer act inp gm dir t.
   Proof.
-    intros act inp gm dir fuel. revert act inp gm dir. induction fuel as [|fuel IHfuel]; try discriminate.
+    intros rer act inp gm dir fuel. revert rer act inp gm dir. induction fuel as [|fuel IHfuel]; try discriminate.
 
-    intros act inp gm dir t. simpl.
-    destruct act as [|[reg | inpcheck | gid] acts].
+    intros rer act inp gm dir t. simpl.
+    destruct act as [|[reg | inpcheck | gid | rer'] acts].
     1: {
       intros H. injection H as <-. apply tree_match.
     }
 
-    1: destruct reg as [ | cd | r1 r2 | r1 r2 | greedy min delta r | lk r | gid r | a | gid].
+    1: destruct reg as [ | cd | r1 r2 | r1 r2 | greedy min delta r | del | lk r | gid r | a | gid].
 
     - (* Empty *)
       intros H. apply tree_epsilon. apply IHfuel; auto.
@@ -75,6 +74,11 @@ Section ComputeIsTree.
         intros H. injection H as <-.
         apply tree_quant_forced; auto.
 
+    - (* Modifiers *)
+      destruct compute_tree as [tree|] eqn:Htree; simpl; try discriminate.
+      intros H. injection H as <-.
+      apply tree_mod_open; auto.
+
     - (* Lookaround *)
       destruct compute_tree as [treelk|] eqn:Htreelk; simpl; try discriminate.
       destruct (lk_result lk treelk gm inp) eqn:LKRES.
@@ -123,7 +127,11 @@ Section ComputeIsTree.
         apply tree_check_fail. (* Now follows from Hvalidchecks and Hssuffix! *)
         apply is_strict_suffix_inv_false. auto.
 
-
+    - (* Rer Reset *)
+      destruct compute_tree as [treecont|] eqn:Htreecont; try discriminate.
+      intros H. injection H as <-.
+      apply tree_mod_close; apply IHfuel; auto.
+    
     - (* Close *)
       destruct compute_tree as [treecont|] eqn:Htreecont; try discriminate.
       intros H. injection H as <-.

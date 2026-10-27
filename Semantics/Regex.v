@@ -43,6 +43,23 @@ Inductive anchor: Type :=
 | EndBuffer                     (* \z *)
 | TerminatedBuffer.             (* \Z *)
 
+Inductive diff := DAdd | DRemove | DSame.
+
+Definition diff_eq_dec : forall (d1 d2 : diff), {d1 = d2} + {d1 <> d2}.
+Proof.
+  decide equality.
+Defined.
+
+Module Modifier.
+  Record t := make_mod {
+    i : diff;
+    m : diff;
+    s : diff
+  }.
+End Modifier.
+
+Definition modifier := Modifier.t.
+Definition mod := Modifier.make_mod.
 
 Section Regex.
   Context {params: LindenParameters}.
@@ -54,6 +71,7 @@ Section Regex.
   | Disjunction (r1 r2 : regex)
   | Sequence (r1 r2 : regex)
   | Quantified (greedy:bool) (min: nat) (delta: non_neg_integer_or_inf) (r1: regex) (* means any number of repetitions of r1 between min and min+delta *)
+  | Modifiers (del : modifier) (r : regex)
   | Lookaround (lk: lookaround) (r: regex)
   | Group (id : group_id) (r : regex)
   | Anchor (a: anchor)
@@ -66,10 +84,11 @@ Section Regex.
     - decide equality. apply PeanoNat.Nat.eq_dec.
     - apply PeanoNat.Nat.eq_dec.
     - destruct greedy; destruct greedy0; auto. right. lia.
+    - decide equality; apply diff_eq_dec.
+    - decide equality.
+    - decide equality.
     - decide equality.
     - apply PeanoNat.Nat.eq_dec.
-    - decide equality.
-    - decide equality.
   Defined.
 
   (* Note that this "size of the regex" counts counted quantifier as being unfolded, so it might not be linear in the size of the textual representation of the regex *)
@@ -85,6 +104,7 @@ Section Regex.
           | NoI.Inf => regex_size r1
           | NoI.N n => n * regex_size r1
           end)
+    | Modifiers _ r1 => 1 + regex_size r1
     | Lookaround _ r1 => 1 + regex_size r1
     | Group _ r1 => 1 + regex_size r1
     | Anchor _ => 1
@@ -99,6 +119,7 @@ Section Regex.
     | Epsilon | Character _  => []
     | Sequence r1 r2 | Disjunction r1 r2 => def_groups r1 ++ def_groups r2
     | Quantified _ _ _ r1 => def_groups r1
+    | Modifiers _ r1 => def_groups r1
     | Lookaround _ r => def_groups r
     | Group id r1 => id::(def_groups r1)
     | Anchor _ => []
@@ -109,7 +130,7 @@ Section Regex.
     match r with
     | Epsilon | Character _  | Anchor _ | Backreference _ => 0
     | Sequence r1 r2 | Disjunction r1 r2 => max (max_group r1) (max_group r2)
-    | Quantified _ _ _ r | Lookaround _ r => max_group r
+    | Quantified _ _ _ r | Lookaround _ r | Modifiers _ r => max_group r
     | Group id r => max id (max_group r)
     end.
 
