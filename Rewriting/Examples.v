@@ -188,6 +188,22 @@ Section Examples.
   Qed.
 
 
+
+  Lemma disj_elim_copy: forall r1 r2 dir,
+      def_groups r1 = [] ->
+      Disjunction (Disjunction r1 r2) r1 ≅[rer][dir] Disjunction r1 r2.
+  Proof.
+    intros r1 r2 dir.
+    split. simpl. rewrite H; simpl. rewrite app_nil_r. reflexivity.
+    intros i g t1 t2 T1 T2. inversion T1; inversion T2; inversion ISTREE1; subst.
+    clear ISTREE1 T1 T2.
+    unfold tree_equiv_tr_dir; simpl.
+    eapply is_tree_determ with (t1 := t3) in ISTREE0, ISTREE4; eauto.
+    eapply is_tree_determ with (t1 := t7) in ISTREE3; eauto. subst.
+    simpl. rewrite <- app_assoc. symmetry.
+    eapply leaves_equiv_append_head.
+  Qed.
+
   (* INFINITY: Here are lemmas to simplify the work with *)
 
   (* If the remaining length is 0, and we have a regex followed by a check,
@@ -215,7 +231,7 @@ Section Examples.
       is_tree rer acts i g dir t2 ->
       tree_leaves t1 g i dir = tree_leaves t2 g i dir.
   Proof.
-    intros i d g dir acts r t1 t2  greedy l T1 T2. Search leaves_equiv.
+    intros i d g dir acts r t1 t2  greedy l T1 T2. 
     inversion T1; subst. eapply is_tree_determ with (t1 := t1) (t2 := t2) in SKIP; eauto.
     subst; reflexivity.
     specialize (null_length_fails _ _ _ _ _ _ l ISTREE1) as nlf.
@@ -235,6 +251,92 @@ Section Examples.
     inversion T2; subst. rewrite H1; reflexivity.
   Qed.
 
+
+    
+  (* Inputs of leaves only make (non-strictly positive) progress in the direction of matching *)
+  Lemma input_only_forward:
+    forall l t gm gm1 gm2 inp1 inp2 dir,
+      is_tree rer l inp1 gm dir t ->
+      In (inp2, gm2) (tree_leaves t gm1 inp1 dir) ->
+      inp1 = inp2 \/ StrictSuffix.strict_suffix inp2 inp1 dir.
+  Proof.
+    intros l t gm gm1 gm2 inp1 inp2 dir TREE IN.
+    generalize dependent gm2. generalize dependent gm1.
+    induction TREE; intros; simpl in IN; eauto; try contradiction.
+    - inversion IN; try contradiction. inversion H. auto.
+    - apply read_char_success_advance in READ.
+      unfold advance_input' in IN. rewrite READ in IN.
+      eapply StrictSuffix.ss_advance in READ.
+      apply IHTREE in IN. destruct IN; subst; auto.
+      right. eapply StrictSuffix.strict_suffix_trans; eauto.
+    - apply in_app_or in IN as [IN1 | IN2]; eauto.
+    - subst tquant. destruct greedy; simpl in IN;
+        apply in_app_or in IN as [IN1 | IN2]; eauto.
+    - destruct positivity eqn:POS;
+        destruct tree_leaves as [|[i gm']]; eauto; inversion IN.
+    - apply read_backref_success_advance in READ_BACKREF. rewrite <- READ_BACKREF in IN.
+      apply IHTREE in IN.
+      apply advance_input_n_suffix in READ_BACKREF as [p1 | p2]; subst; auto.
+      right. destruct IN; subst; eauto.
+      eapply StrictSuffix.strict_suffix_trans; eauto.
+  Qed.
+
+  (* An input cannot go backwards after passing througth a regex*)
+  Lemma input_does_not_back:
+    forall r t gm gm2 inp1 inp2 dir,
+      is_tree rer [Areg r] inp1 gm dir t ->
+      In (inp2, gm2) (tree_leaves t gm inp1 dir) ->
+      ~ StrictSuffix.strict_suffix inp2 inp1 dir ->
+      inp1 = inp2.
+  Proof.
+    intros.
+    destruct (input_only_forward _ _ _ _ _ _ _ _ H H0).
+    assumption. contradiction.
+  Qed.
+
+
+  Lemma quantifier_null_length_head_skip:
+    forall i d g dir r t1 t2 t3 greedy acts,
+      remaining_length i dir <= 0 ->
+      is_tree rer ([Areg r; Areg (Quantified greedy 0 d r)] ++ acts) i g dir t1 ->
+      is_tree rer [Areg r] i g dir t2 ->
+      is_tree rer ([Areg r] ++ acts) i g dir t3 ->
+      leaves_equiv [] (tree_leaves t1 g i dir) (tree_leaves t3 g i dir).
+  Proof.
+    intros. 
+    rewrite app_cons in H0. eapply leaves_concat with (act1 := [Areg r]) in H0, H2; eauto.
+    assert (forall i0 g0, In (i0, g0) (tree_leaves t2 g i dir) -> i = i0 \/ StrictSuffix.strict_suffix i0 i dir). intros. eapply input_only_forward; eauto.
+    remember (tree_leaves t2 g i dir) as l.
+    remember (tree_leaves t3 g i dir) as l3.
+    remember (tree_leaves t1 g i dir) as l1. clear Heql1 Heql Heql3.
+    generalize dependent t1. generalize dependent t3.
+    revert l3 H2 l1 H0.
+    induction l; intros.
+    - inversion H0; inversion H2; eauto. reflexivity.
+    - inversion H2; inversion H0; inversion HEAD; inversion HEAD0; subst.
+      clear HEAD HEAD0. destruct a; simpl in *.
+      apply leaves_equiv_app. eapply quantifier_null_length_skip with (acts := acts)in TREE0; eauto.
+      rewrite TREE0. reflexivity.
+      assert (i = i0 \/ StrictSuffix.strict_suffix i0 i dir).
+      eapply H3; intros; eauto. destruct H4; subst. lia.
+      apply strict_suffix_remaining_length in H4; lia.
+      eapply IHl; eauto.
+  Qed.
+
+
+
+  Lemma quantifier_null_length_head:
+    forall i d g dir r t1 t2  greedy,
+      remaining_length i dir <= 0 ->
+      is_tree rer [Areg r; Areg (Quantified greedy 0 d r)] i g dir t1 ->
+      is_tree rer [Areg r] i g dir t2 ->
+      leaves_equiv [] (tree_leaves t1 g i dir) (tree_leaves t2 g i dir).
+  Proof.
+    intros. eapply quantifier_null_length_head_skip with (acts := []); eauto.
+    rewrite app_nil_r; eauto.
+  Qed.
+
+  
   Lemma quantifier_inf_step_advances:
     forall i r  n dir acts1 acts2 g t1 t2, remaining_length i dir = n ->
          is_tree rer ([Areg r; Acheck i] ++ acts1) i g dir t1 ->
@@ -258,6 +360,8 @@ Section Examples.
     eapply IH; eauto. eapply strict_suffix_remaining_length; eauto.
   Qed.
 
+
+  
 End Examples. 
 
 
