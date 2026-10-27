@@ -74,10 +74,10 @@ Section EquivMain.
       forall str0,
         (* then plugging the identity MatcherContinuation into the Matcher m yields a
            MatcherContinuation that is equivalent to matching the Linden regex, under any input string. *)
-        equiv_cont rer (fun ms => m ms id_mcont) nil (forbidden_groups lroot) [Areg lroot] forward str0.
+        equiv_cont (fun ms => m ms id_mcont) nil (forbidden_groups lroot) [Areg lroot] rer forward str0.
   Proof.
     intros wroot lroot rer m Hequiv Hcapcount Hcompsucc str0.
-    pose proof equiv rer lroot wroot as Hequivm.
+    pose proof equiv lroot wroot as Hequivm.
     unfold equiv_matcher in Hequivm.
     replace (forbidden_groups lroot) with (forbidden_groups lroot ++ []) by apply app_nil_r.
     eapply Hequivm; eauto.
@@ -116,7 +116,7 @@ Section EquivMain.
         m (input_str inp) (idx inp) = Success res ->
         (* then letting t be the priority tree corresponding to matching the Linden regex
            on the input inp, *)
-        t = compute_tr rer [Areg lroot] inp GroupMap.empty forward ->
+        t = compute_tr [Areg lroot] inp rer GroupMap.empty forward ->
         (* this tree respects the Linden semantics and *)
         is_tree rer [Areg lroot] inp GroupMap.empty forward t /\
         (* the result res is equivalent to the first branch of the tree. *)
@@ -171,7 +171,7 @@ Section EquivMain.
         m str0 0 = Success res ->
         (* then letting t be the priority tree corresponding to matching the Linden regex
            on the string str0, *)
-        t = compute_tr rer [Areg lroot] (init_input str0) GroupMap.empty forward ->
+        t = compute_tr [Areg lroot] (init_input str0) rer GroupMap.empty forward ->
         (* this tree respects the Linden semantics and *)
         is_tree rer [Areg lroot] (init_input str0) GroupMap.empty forward t /\
         (* the result res is equivalent to the first branch of the tree. *)
@@ -195,7 +195,7 @@ Section EquivMain.
         (* and for any input inp, running m on the input yields some result res, *)
         m (input_str inp) (idx inp) = Success res /\
         (* and letting t be the priority tree corresponding to matching the Linden regex on inp, *)
-        forall t, t = compute_tr rer [Areg lroot] inp GroupMap.empty forward ->
+        forall t, t = compute_tr [Areg lroot] inp rer GroupMap.empty forward ->
           (* this tree respects the Linden semantics and *)
           is_tree rer [Areg lroot] inp GroupMap.empty forward t /\
           (* the result res is equivalent to the first branch of this tree. *)
@@ -231,7 +231,7 @@ Section EquivMain.
         (* for any input string str0, running m on str0 yields some result res, *)
         m str0 0 = Success res /\
         (* and letting t be the priority tree corresponding to matching the Linden regex on str0, *)
-        forall t, t = compute_tr rer [Areg lroot] (init_input str0) GroupMap.empty forward ->
+        forall t, t = compute_tr [Areg lroot] (init_input str0) rer GroupMap.empty forward ->
           (* this tree respects the Linden semantics and *)
           is_tree rer [Areg lroot] (init_input str0) GroupMap.empty forward t /\
           (* the result res is equivalent to the first branch of this tree. *)
@@ -243,7 +243,7 @@ Section EquivMain.
 
   (* Computing the result of matching a regex with the given flags on the given input. *)
   Definition linden_result (rer: RegExpRecord) (r: regex) (inp: input) :=
-    let t := compute_tr rer [Areg r] inp GroupMap.empty forward in
+    let t := compute_tr [Areg r] inp rer GroupMap.empty forward in
     first_leaf t inp.
 
 
@@ -273,7 +273,7 @@ Section EquivMain.
     intros wroot rer m str0 i res CAPTURES EE COMP_SUCC EXEC_SUCC.
     pose proof EarlyErrors.earlyErrors wroot EE as EE_ind.
     symmetry in CAPTURES.
-    pose proof MatcherInvariant.compileSubPattern wroot rer CAPTURES EE_ind wroot [] eq_refl forward as MI.
+    pose proof MatcherInvariant.compileSubPattern wroot EE_ind wroot [] eq_refl rer CAPTURES forward as MI.
     unfold Semantics.compilePattern in COMP_SUCC.
     destruct Semantics.compileSubPattern as [msub|] eqn:COMPSUB_SUCC; try discriminate. simpl in COMP_SUCC.
     specialize (MI msub eq_refl).
