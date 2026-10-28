@@ -217,7 +217,7 @@ Proof.
       try solve[eapply tr_jmp; eauto]; clear IHACT.
     invert_rep. inversion NFA; subst.
     2: { in_subset. }
-    assert (TR1: tree_rep t1 c (S pcstart) inp b).
+    assert (TR1: tree_rep t1 c (S (gap (disjunction_peek rer branches r1 r2) + pcstart)) inp b).
     { eapply IHTREE1. pike_subset.
       eapply cons_bc with (pcmid:=end1); try constructor; eauto.
       eapply jump_bc; eauto. }

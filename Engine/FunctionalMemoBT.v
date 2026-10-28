@@ -57,7 +57,7 @@ Fixpoint memobt_loop (c:code) (mbt:mbt_state) (fuel:nat) : mbt_state :=
 
 (* an upper bound for the fuel necessary to compute a result *)
 Definition memobt_fuel (r:regex) (inp:input) : nat :=
-  mbt_complexity r inp.
+  mbt_complexity rer r inp.
 
 Inductive matchres : Type :=
 | OutOfFuel

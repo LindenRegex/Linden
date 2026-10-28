@@ -141,7 +141,7 @@ Definition epsilon_step (t:thread) (c:code) (i:input): epsilon_result :=
               | CanRead => EpsActive [upd_label t exit; upd_label t body]
               | CannotRead => EpsActive [upd_label t exit]
               end
-          | KillThread => EpsDead
+          | KillThread | Data _ => EpsDead
           end
       end
   end.

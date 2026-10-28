@@ -13,7 +13,7 @@ Definition branch_flags := rer_of branch_capture.
 
 Example distinct_leads_compile:
   hd KillThread (NFA.compilation branch_flags true branch_capture) =
-    Branch (CdSingle ($ "a")) 1 5.
+    Branch (CdSingle ($ "a")) 2 6.
 Proof. vm_compute. reflexivity. Qed.
 
 Example equal_leads_fork:
@@ -23,7 +23,7 @@ Proof. vm_compute. reflexivity. Qed.
 
 Example nullable_lead_forks:
   hd KillThread (NFA.compilation branch_flags true
-    (Disjunction (Sequence (greedy_star branch_a) branch_b) branch_b)) = Fork 1 8.
+    (Disjunction (Sequence (greedy_star branch_a) branch_b) branch_b)) = Fork 1 9.
 Proof. vm_compute. reflexivity. Qed.
 
 Definition branch_run (r: regex) (s: list Character.type) :=
@@ -52,7 +52,7 @@ Proof. vm_compute. reflexivity. Qed.
 (* loops whose body must start with a known character peek before entering *)
 Example loop_branch_compile:
   hd KillThread (NFA.compilation branch_flags true (greedy_star branch_a)) =
-    LoopBranch (CdSingle ($ "a")) 1 5.
+    LoopBranch (CdSingle ($ "a")) 2 6.
 Proof. vm_compute. reflexivity. Qed.
 
 Example loop_branch_captures:

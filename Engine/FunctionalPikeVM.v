@@ -81,7 +81,7 @@ Fixpoint pike_vm_loop (c:code) (pvs:pike_vm_state) (fuel:nat) : pike_vm_state :=
 
 (* an upper bound for the fuel necessary to compute a result *)
 Definition vm_fuel (r:regex) (inp:input) : nat :=
-  complexity r inp.
+  complexity rer branches r inp.
 
 Inductive matchres : Type :=
 | OutOfFuel

@@ -86,7 +86,7 @@ Section MemoBT.
                 | CanRead => Explore [(exit, gm, b, i); (body, gm, b, i)]
                 | CannotRead => Explore [(exit, gm, b, i)]
                 end
-            | KillThread => Dead
+            | KillThread | Data _ => Dead
             end
         end
     end.

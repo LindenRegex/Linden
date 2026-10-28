@@ -150,11 +150,11 @@ Section CodeSize.
     match r with
     | Epsilon => 0
     | Regex.Character _ => 1
-    | Disjunction r1 r2 => 2 + compsize r1 + compsize r2
+    | Disjunction r1 r2 => 2 + gap (disjunction_peek rer branches r1 r2) + compsize r1 + compsize r2
     | Sequence r1 r2 => compsize r1 + compsize r2
     | Quantified g 0 (NoI.N 0) r1 => 0
-    | Quantified g 0 (NoI.N 1) r1 => 4 + compsize r1
-    | Quantified g 0 (NoI.Inf) r1 => 4 + compsize r1
+    | Quantified g 0 (NoI.N 1) r1 => 4 + gap (loop_peek branches r1) + compsize r1
+    | Quantified g 0 (NoI.Inf) r1 => 4 + gap (loop_peek branches r1) + compsize r1
     | Group _ r1 => 2 + compsize r1
     | Anchor _ => 1
     | _ => 0
@@ -172,22 +172,22 @@ Section CodeSize.
     generalize dependent start. generalize dependent endl. generalize dependent code.
     induction r; simpl; intros;
       try solve [inversion COMP; subst; auto]; try solve[pike_subset].
-    - destruct (compile r1 (S start)) eqn:C1. destruct (compile r2 (S l)) eqn:C2.
+    - destruct (compile r1 _) eqn:C1. destruct (compile r2 (S l)) eqn:C2.
       erewrite <- IHr1; eauto. 2: pike_subset.
       erewrite <- IHr2; eauto. 2: pike_subset.
-      inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
+      inversion COMP. subst. simpl. rewrite !length_app. unfold gap. simpl. rewrite ?length_app. simpl. lia.
     - destruct (compile r1 start) eqn:C1. destruct (compile r2 l) eqn:C2.
       erewrite <- IHr1; eauto. 2: pike_subset.
       erewrite <- IHr2; eauto. 2: pike_subset.
       inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
     - destruct min; destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst; try solve[pike_subset].
       + inversion COMP. auto.
-      + destruct (compile r (S (S (S start)))) eqn:C1.
+      + destruct (compile r _) eqn:C1.
         erewrite <- IHr; eauto. 2: pike_subset.
-        inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-      + destruct (compile r (S (S (S start)))) eqn:C1.
+        inversion COMP. subst. simpl. rewrite !length_app. unfold gap. simpl. rewrite ?length_app. simpl. lia.
+      + destruct (compile r _) eqn:C1.
         erewrite <- IHr; eauto. 2: pike_subset.
-        inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
+        inversion COMP. subst. simpl. rewrite !length_app. unfold gap. simpl. rewrite ?length_app. simpl. lia.
       + inversion SUBSET; subst; lia.
     - destruct (compile r (S start)) eqn:C1.
       erewrite <- IHr; eauto. 2: pike_subset.
@@ -206,18 +206,18 @@ Section CodeSize.
   (* relating this compilation size to the size of the regex *)
   Theorem compsize_regex_size:
     forall (r:regex),
-      S (compsize r) <= 4 * (regex_size r).
+      S (compsize r) <= 5 * (regex_size r).
   Proof.
-    intros r. induction r; simpl; try lia.
-    - destruct min; simpl; [|lia].
-      destruct delta; simpl; [|lia].
-      destruct n; simpl; [lia|].
-      destruct n; simpl; lia.
+    intros r. induction r; simpl; try (destruct (disjunction_peek rer branches r1 r2); simpl); try lia.
+    - destruct (loop_peek branches r); destruct min; simpl; try lia.
+      all: destruct delta; simpl; try lia.
+      all: destruct n; simpl; try lia.
+      all: destruct n; simpl; lia.
   Qed.
 
   Corollary comp_size_regex_size:
     forall r, pike_regex r ->
-         size (compilation r) <= 4 * (regex_size r).
+         size (compilation r) <= 5 * (regex_size r).
   Proof.
     intros r SUBSET. rewrite compilation_size; auto.
     unfold codesize. apply compsize_regex_size.
@@ -627,7 +627,7 @@ Section PikeVMComplexity.
   (** * Initial PikeVM Measure *)
 
   Definition complexity (r:regex) (inp:input) : nat :=
-    1 + (4 * codesize r) + (inpsize inp * (2 + 4 * codesize r)).
+    1 + (4 * codesize rer branches r) + (inpsize inp * (2 + 4 * codesize rer branches r)).
 
   Theorem initial_measure:
     forall inp r,
@@ -635,7 +635,7 @@ Section PikeVMComplexity.
       vm_inv (compilation r) (pike_vm_initial_state inp) (complexity r inp).
   Proof.
     intros inp r SUBSET.
-    replace (complexity r inp) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp).
+    replace (complexity r inp) with (measure (codesize rer branches r) [] [(0, GroupMap.empty, CanExit)] [] inp).
     - unfold pike_vm_initial_state. rewrite <- (compilation_size rer branches); auto.
       constructor; auto.
       + intros t H. destruct H. 2: inversion H.
@@ -654,7 +654,7 @@ Section PikeVMComplexity.
       vm_inv (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (complexity r inp).
   Proof.
     intros inp r SUBSET.
-    replace (complexity r inp) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp).
+    replace (complexity r inp) with (measure (codesize rer branches r) [] [(0, GroupMap.empty, CanExit)] [] inp).
     - unfold pike_vm_initial_state_unanchored. rewrite <- (compilation_size rer branches); auto.
       constructor; auto.
       + intros t H. destruct H. 2: inversion H.
@@ -1070,18 +1070,18 @@ Section MemoBTComplexity.
   (** * Initial MemoBT Measure *)
 
   Definition mbt_complexity (r:regex) (inp:input) : nat :=
-    2 + 4 * (codesize r * inpsize inp).
+    2 + 4 * (codesize rer false r * inpsize inp).
 
   Theorem initial_memo_measure:
     forall inp r ms dist,
       pike_regex r ->
-      mswf ms (codesize r) inp dist  ->
+      mswf ms (codesize rer false r) inp dist  ->
       exists measure,
         measure <= mbt_complexity r inp /\
           memo_inv (compilation r) inp (initial_state inp ms) measure.
   Proof.
     intros inp r ms dist SUBSET WF.
-    exists (memo_measure (codesize r) (inpsize inp) dist [(0, GroupMap.empty, CanExit,inp)]).
+    exists (memo_measure (codesize rer false r) (inpsize inp) dist [(0, GroupMap.empty, CanExit,inp)]).
     split.
     - unfold memo_measure, mbt_complexity. rewrite <- (compilation_size rer false); auto. simpl.
       pose proof (msfree_initial_dist (size (compilation r)) (inpsize inp) dist) as FREE. simpl. lia.
@@ -1122,10 +1122,10 @@ Section MemoBTComplexity.
   Theorem memobt_complexity:
     forall (r:regex) (inp:input) (ms:memoset),
       pike_regex r ->
-      validms ms (codesize r) inp ->
+      validms ms (codesize rer false r) inp ->
       exists result finalms, steps (memobt_step rer (compilation r))
                           (initial_state inp ms) (mbt_complexity r inp) (MBT_final result finalms) /\
-                          validms finalms (codesize r) inp.
+                          validms finalms (codesize rer false r) inp.
     Proof.
       intros r inp ms SUBSET WF.
       destruct WF as [dist WF].
@@ -1141,7 +1141,7 @@ Section MemoBTComplexity.
       (* The initial state reaches a final state in at most (complexity r inp) steps. *)
       exists result finalms, steps (memobt_step rer (compilation r))
                           (initial_state inp initial_memoset) (mbt_complexity r inp) (MBT_final result finalms) /\
-                          validms finalms (codesize r) inp.
+                          validms finalms (codesize rer false r) inp.
   Proof.
     intros r inp H. eapply memobt_complexity; auto.
     exists []. apply mswf_init.

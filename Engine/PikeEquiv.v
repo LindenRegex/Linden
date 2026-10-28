@@ -350,7 +350,8 @@ Proof.
   induction TREE; intros; subst; try inversion HeqTCHOICE; subst.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
   - repeat invert_rep.
-    assert (BOTH: list_tree_thread code inp [(tree1,gm);(tree2,gm)] [(S pc,gm,b);(S end1,gm,b)]).
+    set (P := S (gap (disjunction_peek _ _ r1 r2) + pc)) in *.
+    assert (BOTH: list_tree_thread code inp [(tree1,gm);(tree2,gm)] [(P,gm,b);(S end1,gm,b)]).
     { constructor.
       * constructor. constructor.
         apply tt_eq with (actions:=Areg r2::cont); auto.
@@ -361,14 +362,14 @@ Proof.
         eapply cons_bc with (pcmid:=end1).
         ** constructor; auto.
         ** eapply jump_bc; eauto. }
-    unfold epsilon_step. rewrite FORK. unfold disjunction_fork.
+    unfold epsilon_step. rewrite FORK. unfold disjunction_fork, disjunction_peek.
     destruct branches, (lead_descr r1) as [[]|] eqn:L1, (lead_descr r2) as [[]|] eqn:L2;
       try destruct (_ == _) eqn:NE; try solve [eexists _, _; eauto using keeps_refl].
     (* a Branch keeps the only alternative whose first character can be read *)
     apply EqDec.inversion_false in NE.
     inversion BOTH as [|? ? ? ? ? ? ONE TT1]; inversion ONE as [|? ? ? ? ? ? NIL TT2]; subst.
     destruct (check_read _ _ _ _) eqn:READ;
-      [exists [(S pc,gm,b)], [(tree1,gm)] | exists [(S end1,gm,b)], [(tree2,gm)]];
+      [exists [(P,gm,b)], [(tree1,gm)] | exists [(S end1,gm,b)], [(tree2,gm)]];
       repeat split; eauto using ltt_cons, ltt_nil, keep_cons, keep_drop, keep_nil, lead_dead, distinct_singletons_disjoint.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     repeat (econstructor; eauto). pike_subset.
@@ -379,62 +380,64 @@ Proof.
     + destruct plus; inversion DZ.
     + { (* Question Mark *)
         destruct plus; inversion D1. subst.
-        repeat invert_rep. destruct greedy; inversion CHOICE; subst.
+        repeat invert_rep. set (P := gap (loop_peek _ r1) + pc) in *.
+        destruct greedy; inversion CHOICE; subst.
         +                           (* greedy qmark *)
           eapply loop_fork_step with (greedy := true); [eauto| |intros; simpl; eapply lead_dead; eauto].
           econstructor.
           * econstructor. constructor.
             apply tt_eq with (actions:=cont); auto. pike_subset.
           * apply tt_begin; auto.
-            replace (S (S pc)) with (S pc +1) in RESET by lia.
+            replace (S (S P)) with (S P +1) in RESET by lia.
             apply tt_reset; auto.
             apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 (NoI.N 0) r1)::cont); auto.
             2: { pike_subset. }
             apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+            { constructor. replace (S P+1+1) with (S (S (S P))) by lia. auto. }
             repeat (econstructor; eauto).
         +                           (* lazy qmark *)
           eapply loop_fork_step with (greedy := false); [eauto| |intros; simpl; eapply lead_dead; eauto].
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
-            replace (S (S pc)) with (S pc + 1) in RESET by lia.
+            replace (S (S P)) with (S P + 1) in RESET by lia.
             apply tt_reset; auto.
             apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 (NoI.N 0) r1)::cont); auto.
             2: { pike_subset. }
             apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+            { constructor. replace (S P+1+1) with (S (S (S P))) by lia. auto. }
             repeat (econstructor; eauto).
           * apply tt_eq with (actions:=cont); auto. pike_subset.
       }
     + { (* Star *)
         destruct plus; inversion DINF.
-        repeat invert_rep. destruct greedy; inversion CHOICE; subst.
+        repeat invert_rep. set (P := gap (loop_peek _ r1) + pc) in *.
+        destruct greedy; inversion CHOICE; subst.
         +                           (* greedy star *)
           eapply loop_fork_step with (greedy := true); [eauto| |intros; simpl; eapply lead_dead; eauto].
           econstructor.
           * econstructor. constructor.
             apply tt_eq with (actions:=cont); auto. pike_subset.
           * apply tt_begin; auto.
-            replace (S (S pc)) with (S pc +1) in RESET by lia.
+            replace (S (S P)) with (S P +1) in RESET by lia.
             apply tt_reset; auto.
             apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 +∞ r1)::cont); auto.
             2: { pike_subset. }
             apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+            { constructor. replace (S P+1+1) with (S (S (S P))) by lia. auto. }
             repeat (econstructor; eauto).
-            replace (S (S pc)) with (S pc + 1) by lia. auto.
+            replace (S P + 1) with (S (S P)) in RESET by lia. exact RESET.
         +                           (* lazy star *)
           eapply loop_fork_step with (greedy := false); [eauto| |intros; simpl; eapply lead_dead; eauto].
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
-            replace (S (S pc)) with (S pc + 1) in RESET by lia.
+            replace (S (S P)) with (S P + 1) in RESET by lia.
             apply tt_reset; auto.
             apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 +∞ r1)::cont); auto.
             2: { pike_subset. }
             apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+            { constructor. replace (S P+1+1) with (S (S (S P))) by lia. auto. }
             repeat (econstructor; eauto).
-            replace (S (S pc)) with (S pc + 1) by lia. auto.
+            replace (S P + 1) with (S (S P)) in RESET by lia. exact RESET.
           * apply tt_eq with (actions:=cont); auto. pike_subset.
       }
     (* Unsupported *)
@@ -723,9 +726,8 @@ Lemma nfa_rep_start:
 Proof.
   intros r code pc pcend H. induction H;
     try solve[left; simpl; auto];
-    try solve[right; eexists; split; eauto; constructor];
-    try solve[right; (edestruct disjunction_fork_cases as [E|[? E]] + edestruct loop_fork_cases as [E|[? [_ E]]]);
-      rewrite E in FORK; try destruct greedy; eexists; split; eauto; constructor].
+    try solve[right; eexists; split; [eauto|]; unfold disjunction_fork, loop_fork, greedy_fork;
+      repeat match goal with |- context [match ?x with _ => _ end] => destruct x end; constructor].
   - destruct IHnfa_rep1 as [SAME1 | [i [START1 REP1]]]; subst.
     2: { right. eexists. split; eauto. }
     destruct IHnfa_rep2 as [SAME2 | [i [START2 REP2]]]; subst.
@@ -1023,7 +1025,7 @@ Qed.
 Lemma nfa_rep_next_first:
   forall r code start endl pc i,
     nfa_rep r code start endl -> start <= pc < endl ->
-    get_pc code pc = Some i -> next_first pc i.
+    get_pc code pc = Some i -> next_first code pc i.
 Proof.
   intros r code start endl pc i REP. revert pc.
   induction REP; intros pc RANGE GET;
@@ -1031,22 +1033,21 @@ Proof.
     try (apply nfa_rep_incr in REP2 as INC2);
     locate_pc pc GET;
     try solve [lia | simpl; auto | eauto with lia
-      | unfold disjunction_fork, loop_fork, greedy_fork; repeat match goal with |- context [match ?x with _ => _ end] => destruct x end; reflexivity];
+      | unfold disjunction_fork, loop_fork, greedy_fork; rewrite <- P; try destruct greedy; simpl; auto];
     first [eapply IHREP; eauto; lia
       | assert (pc < end1 \/ end1 <= pc) as [] by lia; [eapply IHREP1|eapply IHREP2]; eauto; lia].
 Qed.
 
 Lemma compilation_next_first:
   forall r pc i,
-    get_pc (compilation r) pc = Some i -> next_first pc i.
+    get_pc (compilation r) pc = Some i -> next_first (compilation r) pc i.
 Proof.
   intros r pc i GET. unfold compilation, NFA.compilation in *.
   destruct (NFA.compile rer branches r 0) as [c endl] eqn:COMP.
   pose proof (fresh_correct _ _ _ _ _ _ COMP) as LEN. simpl in LEN.
-  apply compile_nfa_rep with (prev:=[]) in COMP; auto. simpl in COMP.
+  apply compile_nfa_rep_suffix with (prev:=[]) (suffix:=[Accept]) in COMP; auto. simpl in COMP.
   assert (pc < length c \/ pc >= length c) as [IN|OUT] by lia.
-  - unfold get_pc in GET. rewrite nth_error_app1 in GET by lia.
-    eapply nfa_rep_next_first; eauto. lia.
+  - eapply nfa_rep_next_first; [exact COMP| |exact GET]. lia.
   - unfold get_pc in GET. rewrite nth_error_app2 in GET by lia.
     destruct (pc - length c) as [|[]]; inversion GET; simpl; auto.
 Qed.

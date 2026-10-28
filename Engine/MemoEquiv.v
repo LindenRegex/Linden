@@ -480,7 +480,7 @@ Section MemoEquiv.
     remember (Choice tree1 tree2) as TCHOICE.
     induction TREE; intros; subst; try inversion HeqTCHOICE; subst.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    - repeat invert_rep. exists [(S pc,gm,b,inp);(S end1,gm,b,inp)]. split.
+    - repeat invert_rep; cbn [loop_peek disjunction_peek gap pad length Nat.add] in *. exists [(S pc,gm,b,inp);(S end1,gm,b,inp)]. split.
       + unfold exec_instr. rewrite FORK. auto.
       + constructor.
         * constructor. constructor.
@@ -501,7 +501,7 @@ Section MemoEquiv.
       + destruct plus; inversion DZ.
       + { (* Question Mark *)
           destruct plus; inversion D1. subst.
-          repeat invert_rep. destruct greedy; inversion CHOICE; subst.
+          repeat invert_rep; cbn [loop_peek disjunction_peek gap pad length Nat.add] in *. destruct greedy; inversion CHOICE; subst.
           +                           (* greedy qmark *)
             simpl. rewrite FORK. exists [(S pc, gm, b, inp); (S end1, gm, b, inp)]. split; auto.
             econstructor.
@@ -530,7 +530,7 @@ Section MemoEquiv.
         }
       + { (* Star *)
           destruct plus; inversion DINF.
-          repeat invert_rep. destruct greedy; inversion CHOICE; subst.
+          repeat invert_rep; cbn [loop_peek disjunction_peek gap pad length Nat.add] in *. destruct greedy; inversion CHOICE; subst.
           +                           (* greedy star *)
             simpl. rewrite FORK. exists [(S pc, gm, b, inp); (S end1, gm, b, inp)]. split; auto.
             econstructor.
@@ -544,7 +544,7 @@ Section MemoEquiv.
               apply cons_bc with (pcmid:=end1).
               { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
               repeat (econstructor; eauto).
-              replace (S (S pc)) with (S pc + 1) by lia. auto.
+              replace (S pc + 1) with (S (S pc)) in RESET by lia. exact RESET.
           +                           (* lazy star *)
             simpl. rewrite FORK. exists [(S end1, gm, b, inp); (S pc, gm, b, inp)]. split; auto.
             econstructor.
@@ -556,7 +556,7 @@ Section MemoEquiv.
               apply cons_bc with (pcmid:=end1).
               { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
               repeat (econstructor; eauto).
-              replace (S (S pc)) with (S pc + 1) by lia. auto.
+              replace (S pc + 1) with (S (S pc)) in RESET by lia. exact RESET.
             * apply tc_eq with (actions:=cont); auto. pike_subset.
         }
       (* Unsupported *)
