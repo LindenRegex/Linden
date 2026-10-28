@@ -103,7 +103,7 @@ Section MemoEquiv.
       tree_config code (tree, GroupMap.empty,inp) (0, GroupMap.empty, CanExit,inp).
   Proof.
     intros r code tree inp COMPILE TREE SUBSET.
-    unfold compilation in COMPILE. destruct (compile r 0) as [c fresh] eqn:COMP.
+    unfold compilation in COMPILE. destruct (compile r None 0) as [c fresh] eqn:COMP.
     apply compile_nfa_rep with (prev := []) in COMP as REP; auto. simpl in REP.
     apply fresh_correct in COMP. simpl in COMP. subst.
     subst. eapply tc_eq; eauto.
@@ -251,7 +251,7 @@ Section MemoEquiv.
       memo_inv code (initial_tree_state tree inp ts) (MemoBT.initial_state inp ms).
   Proof.
     intros r inp tree code ts ms TREE COMPILE SUBSET INCL.
-    unfold compilation in COMPILE. destruct (compile r 0) as [c fresh] eqn:COMP.
+    unfold compilation in COMPILE. destruct (compile r None 0) as [c fresh] eqn:COMP.
     apply compile_nfa_rep with (prev := []) in COMP as REP; auto. simpl in REP.
     apply fresh_correct in COMP. simpl in COMP. subst.
     eapply memoinv; auto.

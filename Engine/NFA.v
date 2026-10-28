@@ -157,14 +157,18 @@ Section NFA.
     | _ => None
     end.
 
-  (* the descriptor a disjunction peeks at, if it branches *)
-  Definition disjunction_peek (r1 r2: regex) : option char_descr :=
-    match branches, lead_descr r1, lead_descr r2 with
+  (* the first of two leading descriptors, if they are distinct characters *)
+  Definition distinct_peek (d1 d2: option char_descr) : option char_descr :=
+    match branches, d1, d2 with
     | true, Some (CdSingle c1), Some (CdSingle c2) =>
         if Character.canonicalize rer c1 == Character.canonicalize rer c2
         then None else Some (CdSingle c1)
     | _, _, _ => None
     end.
+
+  (* the descriptor a disjunction peeks at, if it branches *)
+  Definition disjunction_peek (r1 r2: regex) : option char_descr :=
+    distinct_peek (lead_descr r1) (lead_descr r2).
 
   Definition disjunction_fork (r1 r2: regex) (l1 l2: label) : bytecode :=
     match disjunction_peek r1 r2 with
@@ -176,10 +180,13 @@ Section NFA.
   Definition loop_peek (r1: regex) : option char_descr :=
     if branches then lead_descr r1 else None.
 
-  Definition loop_fork (greedy: bool) (r1: regex) (body exit: label) : bytecode :=
-    match loop_peek r1 with
-    | Some cd => if greedy then LoopBranch cd body exit else LoopBranchLazy cd body exit
-    | None => greedy_fork greedy body exit
+  (* [fl] is the descriptor that whatever follows the loop must start with:
+     a greedy loop whose body and continuation start differently needs no fork *)
+  Definition loop_fork (greedy: bool) (r1: regex) (fl: option char_descr) (body exit: label) : bytecode :=
+    match loop_peek r1, greedy with
+    | Some cd, true => if distinct_peek (Some cd) fl then Branch cd body exit else LoopBranch cd body exit
+    | Some cd, false => LoopBranchLazy cd body exit
+    | None, _ => greedy_fork greedy body exit
     end.
 
   (* a branching instruction keeps its descriptor in the next cell *)
@@ -187,33 +194,33 @@ Section NFA.
     match peek with Some cd => [Data cd] | None => [] end.
   Definition gap (peek: option char_descr) : nat := length (pad peek).
 
-  (* also returns the next fresh label *)
-  Fixpoint compile (r:regex) (fresh:label) : code * label :=
+  (* [fl] describes what follows [r]; also returns the next fresh label *)
+  Fixpoint compile (r:regex) (fl: option char_descr) (fresh:label) : code * label :=
     match r with
     | Epsilon => ([], fresh)
     | Regex.Character cd => ([Consume cd], S fresh)
     | Disjunction r1 r2 =>
         let peek := disjunction_peek r1 r2 in
-        let (bc1, f1) := compile r1 (S (gap peek + fresh)) in
-        let (bc2, f2) := compile r2 (S f1) in
+        let (bc1, f1) := compile r1 fl (S (gap peek + fresh)) in
+        let (bc2, f2) := compile r2 fl (S f1) in
         ([disjunction_fork r1 r2 (S (gap peek + fresh)) (S f1)] ++ pad peek ++ bc1 ++ [Jmp f2] ++ bc2, f2)
     | Sequence r1 r2 =>
-        let (bc1, f1) := compile r1 fresh in
-        let (bc2, f2) := compile r2 f1 in
+        let (bc1, f1) := compile r1 (lead_descr r2) fresh in
+        let (bc2, f2) := compile r2 fl f1 in
         (bc1 ++ bc2, f2)
     | Quantified greedy 0 (NoI.N 0) r1 => ([], fresh)
     | Quantified greedy 0 (NoI.N 1) r1 =>
         let peek := loop_peek r1 in
-        let (bc1, f1) := compile r1 (S (S (S (gap peek + fresh)))) in
-        ([loop_fork greedy r1 (S (gap peek + fresh)) (S f1)] ++ pad peek ++
+        let (bc1, f1) := compile r1 None (S (S (S (gap peek + fresh)))) in
+        ([loop_fork greedy r1 fl (S (gap peek + fresh)) (S f1)] ++ pad peek ++
          [BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1)
     | Quantified greedy 0 (NoI.Inf) r1 =>
         let peek := loop_peek r1 in
-        let (bc1, f1) := compile r1 (S (S (S (gap peek + fresh)))) in
-        ([loop_fork greedy r1 (S (gap peek + fresh)) (S f1)] ++ pad peek ++
+        let (bc1, f1) := compile r1 None (S (S (S (gap peek + fresh)))) in
+        ([loop_fork greedy r1 fl (S (gap peek + fresh)) (S f1)] ++ pad peek ++
          [BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1)
     | Group gid r1 =>
-        let (bc1, f1) := compile r1 (S fresh) in
+        let (bc1, f1) := compile r1 fl (S fresh) in
         ([SetRegOpen gid] ++ bc1 ++ [SetRegClose gid], S f1)
     | Anchor a => ([CheckAnchor a], S fresh)
     | _ => ([KillThread], S fresh) (* unsupported features *)
@@ -221,9 +228,16 @@ Section NFA.
 
   (* adds an accept at the end of the code *)
   Definition compilation (r:regex) : code :=
-    match (compile r 0) with
+    match (compile r None 0) with
     | (c,fresh) => c ++ [Accept]
     end.
+
+  (* [leads c pc cd]: every thread at [pc] reads [cd] before anything else *)
+  Inductive leads (c: code) : label -> char_descr -> Prop :=
+  | leads_consume: forall pc cd, get_pc c pc = Some (Consume cd) -> leads c pc cd
+  | leads_jmp: forall pc l cd, get_pc c pc = Some (Jmp l) -> leads c l cd -> leads c pc cd
+  | leads_open: forall pc g cd, get_pc c pc = Some (SetRegOpen g) -> leads c (S pc) cd -> leads c pc cd
+  | leads_close: forall pc g cd, get_pc c pc = Some (SetRegClose g) -> leads c (S pc) cd -> leads c pc cd.
 
   (** * Inductive NFA characterization *)
   (* like a representation predicate *)
@@ -255,8 +269,9 @@ Section NFA.
     forall c r1 greedy lbl,
       nfa_rep (Quantified greedy 0 (NoI.N 0) r1) c lbl lbl
   | nfa_rep_qmark:
-    forall c r1 greedy start end1
-      (FORK: get_pc c start = Some (loop_fork greedy r1 (S (gap (loop_peek r1) + start)) (S end1)))
+    forall c r1 greedy fl start end1
+      (FORK: get_pc c start = Some (loop_fork greedy r1 fl (S (gap (loop_peek r1) + start)) (S end1)))
+      (FOLLOW: forall cd, fl = Some cd -> leads c (S end1) cd)
       (PAD: forall cd, loop_peek r1 = Some cd -> get_pc c (S start) = Some (Data cd))
       (BEGIN: get_pc c (S (gap (loop_peek r1) + start)) = Some (BeginLoop))
       (RESET: get_pc c (S (S (gap (loop_peek r1) + start))) = Some (ResetRegs (def_groups r1)))
@@ -264,8 +279,9 @@ Section NFA.
       (END: get_pc c end1 = Some (EndLoop (S end1))),
       nfa_rep (Quantified greedy 0 (NoI.N 1) r1) c start (S end1)
   | nfa_rep_star:
-    forall c r1 greedy start end1
-      (FORK: get_pc c start = Some (loop_fork greedy r1 (S (gap (loop_peek r1) + start)) (S end1)))
+    forall c r1 greedy fl start end1
+      (FORK: get_pc c start = Some (loop_fork greedy r1 fl (S (gap (loop_peek r1) + start)) (S end1)))
+      (FOLLOW: forall cd, fl = Some cd -> leads c (S end1) cd)
       (PAD: forall cd, loop_peek r1 = Some cd -> get_pc c (S start) = Some (Data cd))
       (BEGIN: get_pc c (S (gap (loop_peek r1) + start)) = Some (BeginLoop))
       (RESET: get_pc c (S (S (gap (loop_peek r1) + start))) = Some (ResetRegs (def_groups r1)))
@@ -294,6 +310,13 @@ Section NFA.
     forall A (x:A) l, x::l = [x] ++ l.
   Proof. intros. simpl. auto. Qed.
 
+  Lemma leads_extend:
+    forall c pc cd suffix, leads c pc cd -> leads (c ++ suffix) pc cd.
+  Proof.
+    induction 1; [eapply leads_consume|eapply leads_jmp|eapply leads_open|eapply leads_close];
+      eauto using get_suffix.
+  Qed.
+
   Lemma nfa_rep_extend:
     forall r c start endl suffix,
       nfa_rep r c start endl ->
@@ -302,28 +325,33 @@ Section NFA.
     intros r c start endl suffix H. generalize dependent suffix.
     induction H; intros; econstructor;
       try solve [erewrite get_suffix; eauto]; try solve [intros; erewrite get_suffix; eauto];
-      try apply IHnfa_rep; try apply IHnfa_rep1; try apply IHnfa_rep2. auto.
+      try solve [eauto using leads_extend];
+      try apply IHnfa_rep; try apply IHnfa_rep1; try apply IHnfa_rep2.
   Qed.
 
 
 
   (* correctness of the returned fresh label *)
   Lemma fresh_correct:
-    forall r fresh l next,
-      compile r fresh = (l, next) ->
+    forall r fl fresh l next,
+      compile r fl fresh = (l, next) ->
       fresh + List.length l = next.
   Proof.
-    intros r. induction r; intros fresh l next COMPILE; cbn [compile] in COMPILE;
+    intros r. induction r; intros fl fresh l next COMPILE; cbn [compile] in COMPILE;
       repeat match type of COMPILE with
-      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ => fail | _ => destruct x end
-      | context [compile ?r' ?f] => let C := fresh "C" in
-          destruct (compile r' f) eqn:C; first [apply IHr1 in C | apply IHr2 in C | apply IHr in C]
+      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ _ => fail | _ => destruct x end
+      | context [compile ?r' ?fl ?f] => let C := fresh "C" in
+          destruct (compile r' fl f) eqn:C; first [apply IHr1 in C | apply IHr2 in C | apply IHr in C]
       end;
       inversion COMPILE; subst; unfold gap; simpl; repeat (rewrite length_app; simpl); lia.
   Qed.
 
   Lemma nfa_rep_list:
     forall r c1 c2 start endl, c1 = c2 -> nfa_rep r c2 start endl -> nfa_rep r c1 start endl.
+  Proof. intros; subst; auto. Qed.
+
+  Lemma leads_list:
+    forall c1 c2 pc cd, leads c2 pc cd -> c1 = c2 -> leads c1 pc cd.
   Proof. intros; subst; auto. Qed.
 
   Lemma get_at:
@@ -340,18 +368,35 @@ Section NFA.
       destruct E as [? ->]; apply get_at
     end.
 
+  (* compiled code starts by reading the mandatory first character *)
+  Lemma compile_leads:
+    forall r fl c start endl prev suffix cd,
+      compile r fl start = (c, endl) -> start = List.length prev -> lead_descr r = Some cd ->
+      leads (prev ++ c ++ suffix) start cd.
+  Proof.
+    induction r; intros * COMP START LEAD; cbn [compile lead_descr] in *; try discriminate.
+    - injection LEAD as <-. injection COMP as <- <-. apply leads_consume. get_at_with prev; auto.
+    - destruct (compile r1 _ _) as [bc1 f1] eqn:C1, (compile r2 _ _) as [bc2 f2]. injection COMP as <- <-.
+      rewrite <- app_assoc. eapply IHr1; eauto.
+    - destruct (compile r _ _) as [bc1 f1] eqn:C1. injection COMP as <- <-.
+      eapply leads_open; [get_at_with prev; auto|].
+      eapply leads_list; [eapply IHr with (prev := prev ++ [SetRegOpen id]); eauto|list_eq].
+      rewrite length_app; simpl; lia.
+  Qed.
+
   (* this shows that the compilation function adheres to the representation predicate *)
   Theorem compile_nfa_rep_suffix:
-    forall r c start endl prev suffix,
-      compile r start = (c, endl) ->
+    forall r fl c start endl prev suffix,
+      compile r fl start = (c, endl) ->
       start = List.length prev ->
+      (forall cd, fl = Some cd -> leads (prev ++ c ++ suffix) endl cd) ->
       nfa_rep r (prev ++ c ++ suffix) start endl.
   Proof.
-    intros r. induction r; intros c start endl prev suffix H START; cbn [compile] in H.
+    intros r. induction r; intros fl c start endl prev suffix H START FOLLOW; cbn [compile] in H.
     - inversion H. subst. constructor.
     - inversion H. subst. constructor. get_at_with prev; auto.
-    - destruct (compile r1 _) as [bc1 end1] eqn:COMP1.
-      destruct (compile r2 (S end1)) as [bc2 end2] eqn:COMP2.
+    - destruct (compile r1 _ _) as [bc1 end1] eqn:COMP1.
+      destruct (compile r2 _ (S end1)) as [bc2 end2] eqn:COMP2.
       injection H as <- <-. apply fresh_correct in COMP1 as LEN1. subst start.
       set (p := disjunction_peek r1 r2) in *.
       set (df := disjunction_fork r1 r2 (S (gap p + length prev)) (S end1)).
@@ -360,20 +405,27 @@ Section NFA.
       + intros cd P. subst p. rewrite P in *. get_at_with (prev ++ [df]).
         rewrite length_app. simpl. lia.
       + eapply nfa_rep_list;
-          [|apply IHr1 with (prev := prev ++ [df] ++ pad p) (suffix := Jmp end2 :: bc2 ++ suffix);
-            [exact COMP1|subst p; rewrite !length_app; unfold gap; simpl; lia]].
-        list_eq.
+          [|apply IHr1 with (fl := fl) (prev := prev ++ [df] ++ pad p) (suffix := Jmp end2 :: bc2 ++ suffix);
+            [exact COMP1|subst p; rewrite !length_app; unfold gap; simpl; lia|]].
+        * list_eq.
+        * intros cd F. eapply leads_list; [eapply leads_jmp; [|apply FOLLOW, F]|list_eq].
+          get_at_with (prev ++ [df] ++ pad p ++ bc1). rewrite !length_app. unfold gap in *. simpl. lia.
       + get_at_with (prev ++ [df] ++ pad p ++ bc1). rewrite !length_app. unfold gap in *. simpl. lia.
       + eapply nfa_rep_list;
-          [|apply IHr2 with (prev := prev ++ [df] ++ pad p ++ bc1 ++ [Jmp end2]) (suffix := suffix);
-            [exact COMP2|subst p; rewrite !length_app; unfold gap in *; simpl; lia]].
-        list_eq.
-    - destruct (compile r1 start) as [bc1 end1] eqn:COMP1. destruct (compile r2 end1) as [bc2 end2] eqn:COMP2.
-      inversion H. subst. apply fresh_correct in COMP1 as LEN1. econstructor.
-      + eapply nfa_rep_list; [|apply IHr1 with (prev:=prev) (suffix := bc2 ++ suffix); eauto]. list_eq.
-      + eapply nfa_rep_list; [|apply IHr2 with (prev:=prev ++ bc1) (suffix := suffix); eauto].
+          [|apply IHr2 with (fl := fl) (prev := prev ++ [df] ++ pad p ++ bc1 ++ [Jmp end2]) (suffix := suffix);
+            [exact COMP2|subst p; rewrite !length_app; unfold gap in *; simpl; lia|]].
         * list_eq.
-        * rewrite length_app. lia.
+        * intros cd F. eapply leads_list; [apply FOLLOW, F|list_eq].
+    - destruct (compile r1 _ start) as [bc1 end1] eqn:COMP1. destruct (compile r2 _ end1) as [bc2 end2] eqn:COMP2.
+      inversion H. subst. apply fresh_correct in COMP1 as LEN1. econstructor.
+      + eapply nfa_rep_list;
+          [|apply IHr1 with (fl := lead_descr r2) (prev:=prev) (suffix := bc2 ++ suffix); [exact COMP1|auto|]].
+        * list_eq.
+        * intros cd F. rewrite app_assoc. eapply compile_leads; eauto. rewrite length_app. lia.
+      + eapply nfa_rep_list;
+          [|apply IHr2 with (fl := fl) (prev:=prev ++ bc1) (suffix := suffix); [exact COMP2|rewrite length_app; lia|]].
+        * list_eq.
+        * intros cd F. eapply leads_list; [apply FOLLOW, F|list_eq].
     - destruct min.
       2: { inversion H. subst. apply nfa_unsupported.
           - unfold not. intros. inversion H0.
@@ -388,31 +440,35 @@ Section NFA.
         * unfold not. intros. inversion H1; subst; lia.
         * get_at_with prev; auto. }
       (* Question Mark and Star *)
-      all: destruct (compile r _) as [bc1 end1] eqn:COMP1; injection H as <- <-; subst start;
+      all: destruct (compile r _ _) as [bc1 end1] eqn:COMP1; injection H as <- <-; subst start;
         apply fresh_correct in COMP1 as LEN1;
-        set (lf := loop_fork greedy r (S (gap (loop_peek r) + length prev)) (S end1));
-        constructor.
+        set (lf := loop_fork greedy r fl (S (gap (loop_peek r) + length prev)) (S end1)) in *;
+        econstructor.
       all: try (get_at_with prev; reflexivity).
+      all: try exact FOLLOW.
       all: try (intros cd P; rewrite P in *; get_at_with (prev ++ [lf]);
           rewrite length_app; simpl; lia).
       all: try (get_at_with (prev ++ [lf] ++ pad (loop_peek r)); rewrite !length_app; unfold gap; simpl; lia).
       all: try (get_at_with (prev ++ [lf] ++ pad (loop_peek r) ++ [BeginLoop]); rewrite !length_app; unfold gap; simpl; lia).
       all: try (match goal with |- context[_ ++ [EndLoop ?e]] =>
           eapply nfa_rep_list;
-            [|apply IHr with (prev := prev ++ [lf] ++ pad (loop_peek r) ++ [BeginLoop; ResetRegs (def_groups r)])
+            [|apply IHr with (fl := None) (prev := prev ++ [lf] ++ pad (loop_peek r) ++ [BeginLoop; ResetRegs (def_groups r)])
                 (suffix := [EndLoop e] ++ suffix);
-              [exact COMP1|rewrite !length_app; unfold gap; simpl; lia]];
+              [exact COMP1|rewrite !length_app; unfold gap; simpl; lia|discriminate]];
           list_eq end).
       all: try (get_at_with (prev ++ [lf] ++ pad (loop_peek r) ++ [BeginLoop; ResetRegs (def_groups r)] ++ bc1);
           rewrite !length_app; unfold gap in *; simpl; lia).
     - inversion H. subst. apply nfa_unsupported.
       + unfold not. intros. inversion H0.
       + get_at_with prev; auto.
-    - destruct (compile r (S start)) as [bc1 end1] eqn:COMP1. inversion H. subst.
+    - destruct (compile r _ (S start)) as [bc1 end1] eqn:COMP1. inversion H. subst.
       apply fresh_correct in COMP1 as LEN1. constructor.
       + get_at_with prev; auto.
-      + eapply nfa_rep_list; [|apply IHr with (prev:=prev ++ [SetRegOpen id]) (suffix := SetRegClose id :: suffix);
-          [exact COMP1|rewrite length_app; simpl; lia]]. list_eq.
+      + eapply nfa_rep_list; [|apply IHr with (fl := fl) (prev:=prev ++ [SetRegOpen id]) (suffix := SetRegClose id :: suffix);
+          [exact COMP1|rewrite length_app; simpl; lia|]].
+        * list_eq.
+        * intros cd F. eapply leads_list; [eapply leads_close; [|apply FOLLOW, F]|list_eq].
+          get_at_with (prev ++ [SetRegOpen id] ++ bc1). rewrite !length_app. simpl. lia.
       + get_at_with (prev ++ [SetRegOpen id] ++ bc1). rewrite !length_app. simpl. lia.
     - inversion H. subst. constructor. get_at_with prev; auto.
     - inversion H. subst. apply nfa_unsupported.
@@ -422,11 +478,11 @@ Section NFA.
 
   Theorem compile_nfa_rep:
     forall r c start endl prev,
-      compile r start = (c, endl) ->
+      compile r None start = (c, endl) ->
       start = List.length prev ->
       nfa_rep r (prev ++ c) start endl.
   Proof.
-    intros. rewrite <- (app_nil_r c). apply compile_nfa_rep_suffix; auto.
+    intros. rewrite <- (app_nil_r c). apply compile_nfa_rep_suffix with (fl := None); auto. discriminate.
   Qed.
 
   (** * Lifting the representation predicate to continuations  *)
@@ -489,21 +545,27 @@ Section NFA.
     end.
 
   Lemma loop_fork_cases:
-    forall greedy r1 l1 l2,
-      loop_fork greedy r1 l1 l2 = greedy_fork greedy l1 l2 \/
-      exists cd, lead_descr r1 = Some cd /\ loop_fork greedy r1 l1 l2 =
-        if greedy then LoopBranch cd l1 l2 else LoopBranchLazy cd l1 l2.
-  Proof. intros. unfold loop_fork, loop_peek. destruct branches, (lead_descr r1); eauto. Qed.
+    forall greedy r1 fl l1 l2,
+      loop_fork greedy r1 fl l1 l2 = greedy_fork greedy l1 l2 \/
+      exists cd, lead_descr r1 = Some cd /\
+        (loop_fork greedy r1 fl l1 l2 = (if greedy then LoopBranch cd l1 l2 else LoopBranchLazy cd l1 l2) \/
+         greedy = true /\ distinct_peek (lead_descr r1) fl = Some cd /\ loop_fork greedy r1 fl l1 l2 = Branch cd l1 l2).
+  Proof.
+    intros. unfold loop_fork, loop_peek, distinct_peek.
+    destruct branches, (lead_descr r1) as [[]|], fl as [[]|], greedy; try destruct (_ == _); eauto 7.
+  Qed.
 
   Lemma disjunction_fork_targets:
     forall r1 r2 l1 l2, fork_targets (disjunction_fork r1 r2 l1 l2) = Some (l1, l2).
   Proof. intros. unfold disjunction_fork. destruct disjunction_peek; auto. Qed.
 
   Lemma loop_fork_targets:
-    forall greedy r1 l1 l2,
-      fork_targets (loop_fork greedy r1 l1 l2) =
+    forall greedy r1 fl l1 l2,
+      fork_targets (loop_fork greedy r1 fl l1 l2) =
         Some (if greedy then l1 else l2, if greedy then l2 else l1).
-  Proof. intros. destruct (loop_fork_cases greedy r1 l1 l2) as [->|[? [_ ->]]]; destruct greedy; auto. Qed.
+  Proof.
+    intros. destruct (loop_fork_cases greedy r1 fl l1 l2) as [->|[? [_ [->|[-> [_ ->]]]]]]; try destruct greedy; auto.
+  Qed.
 
   Lemma disjunction_fork_no_stutter:
     forall r1 r2 l1 l2 pc code,
@@ -513,11 +575,11 @@ Section NFA.
   Qed.
 
   Lemma loop_fork_no_stutter:
-    forall greedy r1 l1 l2 pc code,
-      get_pc code pc = Some (loop_fork greedy r1 l1 l2) -> stutters pc code = false.
+    forall greedy r1 fl l1 l2 pc code,
+      get_pc code pc = Some (loop_fork greedy r1 fl l1 l2) -> stutters pc code = false.
   Proof.
     intros. unfold stutters. rewrite H. unfold loop_fork, greedy_fork.
-    destruct loop_peek, greedy; auto.
+    destruct loop_peek, greedy; try destruct distinct_peek; auto.
   Qed.
 
   Lemma does_stutter:
@@ -559,14 +621,14 @@ Ltac stutter :=
   match goal with
   | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some (disjunction_fork _ _ _ _ _ _) |- _ ] =>
       rewrite (disjunction_fork_no_stutter _ _ _ _ _ _ _ _ H1) in H; discriminate
-  | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some (loop_fork _ _ _ _ _) |- _ ] =>
-      rewrite (loop_fork_no_stutter _ _ _ _ _ _ _ H1) in H; discriminate
+  | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some (loop_fork _ _ _ _ _ _ _) |- _ ] =>
+      rewrite (loop_fork_no_stutter _ _ _ _ _ _ _ _ _ H1) in H; discriminate
   | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some _ |- _ ] =>
       try solve[unfold stutters in H; rewrite H1 in H; inversion H]
   end.
 
 Ltac locate_pc pc GET :=
-  try match goal with PAD: forall cd, ?p = Some cd -> _ |- _ =>
+  try match goal with PAD: forall cd, ?p = Some cd -> get_pc _ _ = Some (Data cd) |- _ =>
     remember p as pk eqn:P; destruct pk; [pose proof (PAD _ eq_refl) as DATA|]; cbn [gap pad length Nat.add] in *
   end;
   repeat match goal with

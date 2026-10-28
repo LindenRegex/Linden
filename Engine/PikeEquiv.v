@@ -57,7 +57,7 @@ Lemma initial_tree_thread:
     tree_thread code inp (tree, GroupMap.empty) (0, GroupMap.empty, CanExit).
 Proof.
   intros r code tree inp COMPILE TREE SUBSET.
-  unfold compilation in COMPILE. destruct (compile r 0) as [c fresh] eqn:COMP.
+  unfold compilation in COMPILE. destruct (compile r None 0) as [c fresh] eqn:COMP.
   apply compile_nfa_rep with (prev := []) in COMP as REP; auto. simpl in REP.
   apply fresh_correct in COMP. simpl in COMP. subst.
   subst. eapply tt_eq; eauto.
@@ -312,26 +312,72 @@ Proof.
   apply single_match in H1. apply single_match in H2. congruence.
 Qed.
 
-(* a loop fork keeps both threads, or only the exit when the body cannot start *)
+(* the thread at the first of two distinct descriptors excludes the other *)
+Lemma distinct_peek_disjoint: forall d1 d2 cd inp,
+  distinct_peek rer branches d1 d2 = Some cd ->
+  d1 = Some cd /\ exists cd2, d2 = Some cd2 /\
+    (check_read rer cd inp forward = CanRead -> check_read rer cd2 inp forward = CannotRead).
+Proof.
+  unfold distinct_peek. intros d1 d2 cd inp P.
+  destruct branches, d1 as [[]|], d2 as [[]|]; try discriminate; destruct (_ == _) eqn:NE; inversion P; subst.
+  apply EqDec.inversion_false in NE. eauto using distinct_singletons_disjoint.
+Qed.
+
+(* a thread whose code must first read [cd] dies where [cd] cannot be read *)
+Lemma leads_dead:
+  forall code pc cd inp
+    (LEADS: leads code pc cd)
+    (READ: check_read rer cd inp forward = CannotRead)
+    acts b t gm
+    (REP: actions_rep acts code pc)
+    (TREE: bool_tree rer acts inp b t),
+    tree_res t gm inp forward = None.
+Proof.
+  intros until 1. induction LEADS as [pc cd GET|pc l cd GET _ IH|pc g cd GET _ IH|pc g cd GET _ IH];
+    intros; pose proof TREE as TREE0; revert gm REP TREE0; induction TREE; intros; inversion REP; subst;
+    (* past a jump *)
+    try solve [eapply IH; [exact READ|replace l with pcstart by congruence; eassumption|exact TREE0]];
+    simpl; auto;
+    try (inversion ACTION; subst); try (inversion NFA; subst); try (destruct plus; discriminate);
+    (* the instruction at [pc] is not the one [leads] reads *)
+    try solve [unfold disjunction_fork, loop_fork, greedy_fork in *;
+      repeat match goal with H: get_pc _ _ = Some (match ?x with _ => _ end) |- _ => destruct x end; congruence];
+    (* nothing executed yet *)
+    try solve [eapply IHTREE; eauto using cons_bc, areg_bc];
+    (* past an opening or a closing *)
+    try solve [eapply IH; eauto using cons_bc, areg_bc, aclose_bc].
+  (* reading [cd] *)
+  destruct (proj1 (can_read_correct _ _ _ _ _) (ex_intro _ _ READ0)) as [C _]. congruence.
+Qed.
+
+(* a loop fork keeps both threads, only the exit when the body cannot start,
+   or only the body when the continuation cannot start *)
 Lemma loop_fork_step:
-  forall greedy r1 code pc body exit gm b inp tbody texit
-    (FORK: get_pc code pc = Some (loop_fork branches greedy r1 body exit))
+  forall greedy r1 fl code pc body exit gm b inp tbody texit
+    (FORK: get_pc code pc = Some (loop_fork rer branches greedy r1 fl body exit))
     (BOTH: list_tree_thread code inp
        (if greedy then [(tbody,gm);(texit,gm)] else [(texit,gm);(tbody,gm)])
        (if greedy then [(body,gm,b);(exit,gm,b)] else [(exit,gm,b);(body,gm,b)]))
     (DEAD: forall cd, lead_descr r1 = Some cd -> check_read rer cd inp forward = CannotRead ->
-       tree_res tbody gm inp forward = None),
+       tree_res tbody gm inp forward = None)
+    (DEADEXIT: forall cd, fl = Some cd -> check_read rer cd inp forward = CannotRead ->
+       tree_res texit gm inp forward = None),
   exists threadactive kept,
     epsilon_step rer (pc,gm,b) code inp = EpsActive threadactive /\
       keeps inp (if greedy then [(tbody,gm);(texit,gm)] else [(texit,gm);(tbody,gm)]) kept /\
       list_tree_thread code inp kept threadactive.
 Proof.
   intros. unfold epsilon_step. rewrite FORK.
-  edestruct loop_fork_cases as [E|[cd [L E]]]; rewrite E; destruct greedy; simpl in *;
+  destruct (loop_fork_cases rer branches greedy r1 fl body exit) as [E|[cd [L [E|[-> [P E]]]]]]; rewrite E;
+    try destruct greedy; simpl in *;
     try destruct (check_read _ _ _ _) eqn:READ; try solve [eexists _, _; eauto using keeps_refl].
   all: inversion BOTH as [|? ? ? ? ? ? ONE TT1]; inversion ONE as [|? ? ? ? ? ? NIL TT2]; subst.
-  all: exists [(exit,gm,b)], [(texit,gm)];
-    repeat split; eauto using ltt_cons, ltt_nil, keep_drop, keep_cons, keep_nil.
+  all: lazymatch goal with
+    | P: distinct_peek _ _ _ _ = Some _, READ: check_read _ _ _ _ = CanRead |- _ =>
+        destruct (distinct_peek_disjoint _ _ _ inp P) as [_ [cd2 [-> EXCL]]];
+        exists [(body,gm,b)], [(tbody,gm)]
+    | _ => exists [(exit,gm,b)], [(texit,gm)]
+    end; repeat split; eauto using ltt_cons, ltt_nil, keep_drop, keep_cons, keep_nil.
 Qed.
 
 Theorem generate_choice:
@@ -363,14 +409,13 @@ Proof.
         ** constructor; auto.
         ** eapply jump_bc; eauto. }
     unfold epsilon_step. rewrite FORK. unfold disjunction_fork, disjunction_peek.
-    destruct branches, (lead_descr r1) as [[]|] eqn:L1, (lead_descr r2) as [[]|] eqn:L2;
-      try destruct (_ == _) eqn:NE; try solve [eexists _, _; eauto using keeps_refl].
+    destruct distinct_peek eqn:PK; [|eexists _, _; eauto using keeps_refl].
     (* a Branch keeps the only alternative whose first character can be read *)
-    apply EqDec.inversion_false in NE.
+    destruct (distinct_peek_disjoint _ _ _ inp PK) as [L1 [cd2 [L2 EXCL]]].
     inversion BOTH as [|? ? ? ? ? ? ONE TT1]; inversion ONE as [|? ? ? ? ? ? NIL TT2]; subst.
     destruct (check_read _ _ _ _) eqn:READ;
       [exists [(P,gm,b)], [(tree1,gm)] | exists [(S end1,gm,b)], [(tree2,gm)]];
-      repeat split; eauto using ltt_cons, ltt_nil, keep_cons, keep_drop, keep_nil, lead_dead, distinct_singletons_disjoint.
+      repeat split; eauto using ltt_cons, ltt_nil, keep_cons, keep_drop, keep_nil, lead_dead.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     repeat (econstructor; eauto). pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
@@ -383,7 +428,7 @@ Proof.
         repeat invert_rep. set (P := gap (loop_peek _ r1) + pc) in *.
         destruct greedy; inversion CHOICE; subst.
         +                           (* greedy qmark *)
-          eapply loop_fork_step with (greedy := true); [eauto| |intros; simpl; eapply lead_dead; eauto].
+          eapply loop_fork_step with (greedy := true); [eauto| |intros; simpl; eapply lead_dead; eauto|intros; eapply leads_dead; eauto].
           econstructor.
           * econstructor. constructor.
             apply tt_eq with (actions:=cont); auto. pike_subset.
@@ -396,7 +441,7 @@ Proof.
             { constructor. replace (S P+1+1) with (S (S (S P))) by lia. auto. }
             repeat (econstructor; eauto).
         +                           (* lazy qmark *)
-          eapply loop_fork_step with (greedy := false); [eauto| |intros; simpl; eapply lead_dead; eauto].
+          eapply loop_fork_step with (greedy := false); [eauto| |intros; simpl; eapply lead_dead; eauto|intros; eapply leads_dead; eauto].
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
             replace (S (S P)) with (S P + 1) in RESET by lia.
@@ -413,7 +458,7 @@ Proof.
         repeat invert_rep. set (P := gap (loop_peek _ r1) + pc) in *.
         destruct greedy; inversion CHOICE; subst.
         +                           (* greedy star *)
-          eapply loop_fork_step with (greedy := true); [eauto| |intros; simpl; eapply lead_dead; eauto].
+          eapply loop_fork_step with (greedy := true); [eauto| |intros; simpl; eapply lead_dead; eauto|intros; eapply leads_dead; eauto].
           econstructor.
           * econstructor. constructor.
             apply tt_eq with (actions:=cont); auto. pike_subset.
@@ -427,7 +472,7 @@ Proof.
             repeat (econstructor; eauto).
             replace (S P + 1) with (S (S P)) in RESET by lia. exact RESET.
         +                           (* lazy star *)
-          eapply loop_fork_step with (greedy := false); [eauto| |intros; simpl; eapply lead_dead; eauto].
+          eapply loop_fork_step with (greedy := false); [eauto| |intros; simpl; eapply lead_dead; eauto|intros; eapply leads_dead; eauto].
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
             replace (S (S P)) with (S P + 1) in RESET by lia.
@@ -1033,7 +1078,8 @@ Proof.
     try (apply nfa_rep_incr in REP2 as INC2);
     locate_pc pc GET;
     try solve [lia | simpl; auto | eauto with lia
-      | unfold disjunction_fork, loop_fork, greedy_fork; rewrite <- P; try destruct greedy; simpl; auto];
+      | unfold disjunction_fork, loop_fork, greedy_fork; rewrite <- P;
+        repeat match goal with |- context [match ?x with _ => _ end] => destruct x end; cbn [next_first]; auto];
     first [eapply IHREP; eauto; lia
       | assert (pc < end1 \/ end1 <= pc) as [] by lia; [eapply IHREP1|eapply IHREP2]; eauto; lia].
 Qed.
@@ -1043,9 +1089,9 @@ Lemma compilation_next_first:
     get_pc (compilation r) pc = Some i -> next_first (compilation r) pc i.
 Proof.
   intros r pc i GET. unfold compilation, NFA.compilation in *.
-  destruct (NFA.compile rer branches r 0) as [c endl] eqn:COMP.
-  pose proof (fresh_correct _ _ _ _ _ _ COMP) as LEN. simpl in LEN.
-  apply compile_nfa_rep_suffix with (prev:=[]) (suffix:=[Accept]) in COMP; auto. simpl in COMP.
+  destruct (NFA.compile rer branches r None 0) as [c endl] eqn:COMP.
+  apply fresh_correct in COMP as LEN. simpl in LEN.
+  apply compile_nfa_rep_suffix with (prev:=[]) (suffix:=[Accept]) in COMP; auto; [|discriminate]. simpl in COMP.
   assert (pc < length c \/ pc >= length c) as [IN|OUT] by lia.
   - eapply nfa_rep_next_first; [exact COMP| |exact GET]. lia.
   - unfold get_pc in GET. rewrite nth_error_app2 in GET by lia.
@@ -1054,7 +1100,7 @@ Qed.
 
 Lemma compile_stutter_wf:
   forall r code fresh,
-    compile r 0 = (code, fresh) ->
+    compile r None 0 = (code, fresh) ->
     stutter_wf code.
 Proof.
   intros r code fresh H.
@@ -1076,7 +1122,7 @@ Theorem compilation_stutter_wf:
     stutter_wf code.
 Proof.
   unfold compilation. intros r code H.
-  destruct (compile r 0) as [r_code fresh] eqn:COMP. subst.
+  destruct (compile r None 0) as [r_code fresh] eqn:COMP. subst.
   apply compile_stutter_wf in COMP.
   unfold stutter_wf, stutters, get_pc.
   intros pc gm b nextpc nextgm nextb inp H H0.

@@ -55,6 +55,24 @@ Example loop_branch_compile:
     LoopBranch (CdSingle ($ "a")) 2 6.
 Proof. vm_compute. reflexivity. Qed.
 
+(* a greedy loop followed by a different character needs a single thread *)
+Example follow_branch_compile:
+  hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star branch_a) branch_b)) =
+    Branch (CdSingle ($ "a")) 2 6.
+Proof. vm_compute. reflexivity. Qed.
+
+Example case_folded_follow_loops:
+  let rer := RegExpRecord.make true false false tt 0 in
+  hd KillThread (NFA.compilation rer true
+    (Sequence (greedy_star branch_a) (Regex.Character (CdSingle ($ "A"))))) =
+    LoopBranch (CdSingle ($ "a")) 2 6.
+Proof. vm_compute. reflexivity. Qed.
+
+Example follow_branch_runs:
+  map (branch_run (Sequence (greedy_star branch_a) branch_b)) [[$ "a"; $ "a"; $ "b"]; [$ "b"]; [$ "a"]] =
+  map (reference_run (Sequence (greedy_star branch_a) branch_b)) [[$ "a"; $ "a"; $ "b"]; [$ "b"]; [$ "a"]].
+Proof. vm_compute. reflexivity. Qed.
+
 Example loop_branch_captures:
   map (branch_run (Sequence (greedy_star (Group 1 branch_a)) branch_b)) [[$ "a"; $ "b"]; [$ "b"]; [$ "a"]] =
   map (reference_run (Sequence (greedy_star (Group 1 branch_a)) branch_b)) [[$ "a"; $ "b"]; [$ "b"]; [$ "a"]].
