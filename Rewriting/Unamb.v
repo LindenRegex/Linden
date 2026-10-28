@@ -361,24 +361,45 @@ Section UnAmbiguity.
       is_tree rer [Areg (Quantified false 0 m r)] inp gm dir t1 ->
       is_tree rer [Areg (Quantified false 0 (m+d)%NoI r)] inp gm dir t2 ->
       unamb [Areg r] ->
-      prefix (tree_leaves t1 gm inp dir) (tree_leaves t2 gm inp dir).
+         exists acts,  ((tree_leaves t1 gm inp dir) ++ acts) = (tree_leaves t2 gm inp dir).
   Proof.
     revert d r.
     induction m; intros.
-    - (*Base case: min = d*)
-      inversion H; inversion SKIP; inversion H0; inversion SKIP0; subst.
-      + simpl. eapply prefix_refl. 
-      + eexists. eapply app_inv_head_iff. reflexivity.
-      + destruct plus; discriminate.
-      + destruct plus; discriminate.
-    - (* Case where min = m + d *)
-      inversion H; inversion H0; subst. destruct d; discriminate.
-      inversion SKIP; inversion SKIP0; subst; simpl.
-      eexists. simpl. etransitivity; rewrite app_cons. reflexivity.
-      eapply app_inv_head_iff.
-      Admitted.
-      
-      
+    + inversion H; inversion SKIP; subst.
+      inversion H0; inversion SKIP0; subst.
+      simpl. exists []. reflexivity.
+      inversion SKIP0; subst. simpl.
+      exists (tree_leaves titer (GroupMap.reset (def_groups r) gm) inp dir).
+      reflexivity. destruct plus; discriminate.
+    + inversion H; inversion SKIP; subst. simpl. clear H SKIP.
+      inversion H0; inversion SKIP; subst. simpl. clear H0 SKIP.
+      destruct d; discriminate. simpl.
+      rewrite app_cons in ISTREE1, ISTREE0.
+      specialize (is_tree_productivity rer [Areg r] inp (GroupMap.reset (def_groups r) gm) dir) as [t3 T3].
+      eapply leaves_concat with (act1 := [Areg r]) in ISTREE1, ISTREE0; eauto.
+      pose proof (unamb_list _ _ _ _ _ H1 T3) as [c1 | [el c2]].
+      rewrite c1 in *. inversion ISTREE0; inversion ISTREE1; subst.
+      exists []. reflexivity.
+      rewrite c2 in *. apply FlatMap_one_leaf in ISTREE0, ISTREE1.
+      inversion ISTREE0; inversion ISTREE1; subst. simpl in *.
+      inversion TREE; inversion TREE0; subst.
+      2, 3: contradiction.
+      2: { simpl. exists []. reflexivity. }
+      destruct el; simpl in *. destruct plus. 2: discriminate.
+      inversion H4. subst.
+      destruct plus0, d; try discriminate.
+      inversion H3; subst.
+      specialize (IHm (NoI.N (n0)) _ _ _ _ _ treecont TREECONT0).
+      simpl in IHm. specialize (IHm TREECONT H1) as [acts lEq].
+      exists acts. etransitivity. 1,2: rewrite app_cons. reflexivity. f_equal.
+      apply lEq.
+      specialize (IHm +∞ _ _ _ _ _ treecont TREECONT0). simpl in IHm.
+      specialize (IHm TREECONT H1) as [acts lEq].
+      exists acts. etransitivity. 1,2: rewrite app_cons. reflexivity.
+      f_equal. apply lEq.
+  Qed.
+
+  
   Theorem unamb_list_nat_eqs:
     forall r i g dir t1 t2 (delta1: nat) delta2,
       def_groups r = [] ->
@@ -453,7 +474,7 @@ Section UnAmbiguity.
     assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql.
     revert i g t1 t2 T1 T2 Hlength_le.
     induction l; intros i g t1 t2 T1 T2 Hlength_le; simpl.
-    + inversion T1; inversion T2; subst. destruct plus, plus0; try discriminate. clear T1 T2.
+    - inversion T1; inversion T2; subst. destruct plus, plus0; try discriminate. clear T1 T2.
       inversion SKIP; subst.
       inversion SKIP0; inversion SKIP1; subst.
       simpl. etransitivity. 1,2: rewrite app_cons. reflexivity.
@@ -472,12 +493,12 @@ Section UnAmbiguity.
       assert (tree_leaves titer1 (GroupMap.reset (def_groups r) g) i dir = []).
       eapply null_length_fails; eauto. exact ISTREE2.
       rewrite H0. rewrite H.  rewrite H2. reflexivity.
-    + apply GroupId.le_lteq in Hlength_le as [p1 | p2].
+    - apply GroupId.le_lteq in Hlength_le as [p1 | p2].
       rewrite  Nat.lt_succ_r in p1.  eapply IHl; eauto.
       inversion T1; inversion T2; subst. simpl. destruct plus, plus0; try discriminate.
       simpl in *. specialize (is_tree_productivity rer [Areg r] i g dir ) as [t3 T3].
       inversion SKIP0; subst.
-    - rewrite UNDEFGROUPS in ISTREE0, ISTREE1. simpl in ISTREE0, ISTREE1.
+    + rewrite UNDEFGROUPS in ISTREE0, ISTREE1. simpl in ISTREE0, ISTREE1.
       eapply leaves_concat with (act1 := [Areg r]) in ISTREE0, ISTREE1; eauto. inversion SKIP1; inversion SKIP; subst. simpl.
       specialize (unamb_list _ _ _ _ _ UNAMBR T3) as [lEmpt | [el ld]].
       rewrite lEmpt in ISTREE1, ISTREE0. inversion ISTREE1; inversion ISTREE0.
@@ -492,7 +513,7 @@ Section UnAmbiguity.
       eapply IHl; eauto. 
       pose proof (strict_suffix_remaining_length _ _ _ PROGRESS). lia.
       reflexivity.
-    -  rewrite UNDEFGROUPS in ISTREE0, ISTREE1, ISTREE2. simpl in ISTREE0, ISTREE1, ISTREE2.
+    + rewrite UNDEFGROUPS in ISTREE0, ISTREE1, ISTREE2. simpl in ISTREE0, ISTREE1, ISTREE2.
        eapply leaves_concat with (act1 := [Areg r]) in ISTREE0, ISTREE1, ISTREE2; eauto. inversion SKIP1; inversion SKIP; subst. simpl.
        specialize (unamb_list _ _ _ _ _ UNAMBR T3) as [lEmpt | [el ld]].
        rewrite lEmpt in ISTREE1, ISTREE0, ISTREE2. inversion ISTREE1; inversion ISTREE0; inversion ISTREE2.
@@ -899,17 +920,19 @@ Section UnAmbiguity.
       unfold tree_equiv_tr_dir.
       remember (remaining_length i backward) as l.
       assert (Hlength_le: remaining_length i backward <= l) by lia. clear Heql.
-      generalize dependent i. revert g t1 t2.
-      induction l; intros g t1 t2 i TREE1 TREE2 Hlength_le. 
-      + inversion TREE1; inversion TREE2; inversion CONT; subst.
-        destruct plus0. discriminate.
-        inversion SKIP; subst; clear TREE1 TREE2 H17 CONT SKIP. simpl.
-        specialize (is_tree_productivity rer [Areg r] i (GroupMap.reset (def_groups r) gm) backward) as [t2 T2].
-        eapply quantifier_null_length_head in ISTREE1; eauto.
+      inversion T1; inversion T2; subst; simpl in CONT. clear T1 T2.
+      generalize dependent i. revert g t2 titer.
+      induction l; intros g t1 t2 i Hlength_le TREE1 TREE2. 
+      + specialize  (is_tree_productivity rer [Areg (Quantified g 1 (NoI.N 0) r)] i gm backward) as [t4 T4]. 
+        eapply quantifier_null_length_skip with (acts := [Areg (Quantified g 1 (NoI.N 0) r)]) in TREE2; eauto.
         rewrite GROUPEMPT in *; simpl in *.
-        Admitted.
-        
-      
+        specialize  (is_tree_productivity rer [Areg r] i gm backward) as [t3 T3].
+        eapply quantifier_null_length_head  with (t2 := t3) in TREE1; eauto.
+        etransitivity. eapply TREE1.
+        inversion T4; subst. rewrite GROUPEMPT in *; simpl in *.
+        eapply quantifier_null_length_head in ISTREE1; eauto.
+        symmetry. rewrite TREE2. auto.
+      + Admitted.
   
   
   Theorem unamb_quantifier_pops_right:
@@ -1467,5 +1490,34 @@ Section UnAmbiguity.
   Qed.
 
   
+  Lemma quantified_open_greedy_right_min:
+    forall r min1 min2 delta1 g,
+      def_groups r = [] -> 
+      (Sequence (Quantified true min1 +∞ r) (Quantified g min2 delta1 r))
+        ≅[rer] (Quantified true (min1 + min2) +∞ r).
+  Proof.
+    intros r min1 min2 delta1 g GROUPEMPT dir.
+    destruct dir.
+  Admitted.
+
+  Lemma quantified_open_pops_left:
+    forall r min g,
+      def_groups r = [] -> 
+      (Sequence (Quantified true 0 +∞ r) (Quantified g min 0 r))
+        ≅[rer] (Quantified true min +∞ r).
+  Proof.
+    intros r min g GROUPEMPT dir.
+    destruct dir.
+    2: eapply atmost_bounded_equiv; auto.
+    induction min.
+    - etransitivity. {
+        eapply seq_equiv_dir. reflexivity. eapply quantified_zero_equiv; auto.
+      }
+      etransitivity. {
+        eapply sequence_epsilon_right_equiv.
+      } reflexivity.
+    - Admitted.
+        
+    
 End UnAmbiguity.
 
