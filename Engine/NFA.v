@@ -23,6 +23,7 @@ Section NFA.
   | CheckAnchor: anchor -> bytecode
   | Jmp: label -> bytecode
   | Fork: label -> label -> bytecode
+  | ForkLazy: label -> label -> bytecode (* runs the second label first *)
   | SetRegOpen: group_id -> bytecode
   | SetRegClose: group_id -> bytecode
   | ResetRegs: list group_id -> bytecode
@@ -110,7 +111,7 @@ Section NFA.
     | Consume _ | CheckAnchor _ | SetRegOpen _ | SetRegClose _ | ResetRegs _ | BeginLoop => [S pc]
     | Accept | KillThread => []
     | Jmp l | EndLoop l => [l]
-    | Fork l1 l2 | Branch _ l1 l2 | LoopBranch _ l1 l2 | LoopBranchLazy _ l1 l2 => [l1; l2]
+    | Fork l1 l2 | ForkLazy l1 l2 | Branch _ l1 l2 | LoopBranch _ l1 l2 | LoopBranchLazy _ l1 l2 => [l1; l2]
     end.
 
   (* the two threads of a forking instruction, in priority order *)
@@ -118,7 +119,7 @@ Section NFA.
     match b with
     | Fork l1 l2 | Branch _ l1 l2 => Some (l1, l2)
     | LoopBranch _ body exit => Some (body, exit)
-    | LoopBranchLazy _ body exit => Some (exit, body)
+    | ForkLazy body exit | LoopBranchLazy _ body exit => Some (exit, body)
     | _ => None
     end.
 
@@ -127,7 +128,7 @@ Section NFA.
   Definition greedy_fork (greedy:bool) (l1 l2:label) :=
     if greedy
     then Fork l1 l2
-    else Fork l2 l1.
+    else ForkLazy l1 l2.
 
   (** [branches] enables [Branch] and [LoopBranch]: a disjunction whose
       alternatives must start with distinct characters, or a loop whose body
