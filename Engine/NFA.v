@@ -123,6 +123,13 @@ Section NFA.
     | _ => None
     end.
 
+  (* the compiler places the first label of every forking instruction right after it *)
+  Definition next_first (pc:label) (b:bytecode) : Prop :=
+    match b with
+    | Fork l _ | ForkLazy l _ | Branch _ l _ | LoopBranch _ l _ | LoopBranchLazy _ l _ => l = S pc
+    | _ => True
+    end.
+
   (** * NFA Compilation  *)
 
   Definition greedy_fork (greedy:bool) (l1 l2:label) :=
