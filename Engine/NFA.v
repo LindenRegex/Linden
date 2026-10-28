@@ -230,30 +230,13 @@ Section NFA.
       compile r fresh = (l, next) ->
       fresh + List.length l = next.
   Proof.
-    Ltac inv_comp H := inversion H; subst; simpl; lia.
-    intros r.
-    induction r; intros fresh l next COMPILE; try solve[inv_comp COMPILE].
-    - inversion COMPILE.
-      destruct (compile r1 (S fresh)) as [bc1 f1] eqn:COMP1. destruct (compile r2 (S f1)) as [bc2 f2] eqn:COMP2.
-      inversion H0. subst f2. apply IHr1 in COMP1. apply IHr2 in COMP2. simpl.
-      rewrite <- COMP1 in COMP2. simpl in COMP2. rewrite length_app. simpl. lia.
-    - inversion COMPILE.
-      destruct (compile r1 fresh) as [bc1 f1] eqn:COMP1. destruct (compile r2 f1) as [bc2 f2] eqn:COMP2.
-      inversion H0. subst f2. apply IHr1 in COMP1. apply IHr2 in COMP2.
-      rewrite <- COMP1 in COMP2. rewrite length_app. lia.
-    - inversion COMPILE. destruct min.
-      2: { inversion H0. simpl. lia. }
-      destruct delta.
-      + destruct n; try destruct n; try solve[inversion H0; simpl; lia].
-        destruct (compile r (S (S (S fresh)))) as [bc1 f1] eqn:COMP1.
-        inversion H0. apply IHr in COMP1.
-        subst. simpl. rewrite length_app. simpl. lia.
-      + destruct (compile r (S (S (S fresh)))) as [bc1 f1] eqn:COMP1.
-        inversion H0. apply IHr in COMP1.
-        subst. simpl. rewrite length_app. simpl. lia.
-    - inversion COMPILE.
-      destruct (compile r (S fresh)) as [bc1 f1] eqn:COMP1. inversion H0. apply IHr in COMP1.
-      subst. simpl. rewrite length_app. simpl. lia.
+    intros r. induction r; intros fresh l next COMPILE; cbn [compile] in COMPILE;
+      repeat match type of COMPILE with
+      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ => fail | _ => destruct x end
+      | context [compile ?r' ?f] => let C := fresh "C" in
+          destruct (compile r' f) eqn:C; first [apply IHr1 in C | apply IHr2 in C | apply IHr in C]
+      end;
+      inversion COMPILE; subst; simpl; repeat (rewrite length_app; simpl); lia.
   Qed.
 
   (* this shows that the compilation function adheres to the representation predicate *)
@@ -458,6 +441,13 @@ Ltac stutter :=
   match goal with
   | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some _ |- _ ] =>
       try solve[unfold stutters in H; rewrite H1 in H; inversion H]
+  end.
+
+Ltac locate_pc pc GET :=
+  repeat match goal with
+  | H : get_pc ?cc ?l = Some ?j, G : get_pc ?cc pc = Some _ |- _ =>
+      assert (pc = l \/ pc <> l) as [->|] by lia;
+      [rewrite H in GET; injection GET as <-; clear H|clear H]
   end.
 
 Ltac invert_rep :=

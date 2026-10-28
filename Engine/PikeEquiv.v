@@ -944,75 +944,17 @@ Lemma compile_jumps:
     get_pc code pc = Some (Jmp next) ->
     pc < next.
 Proof.
-  intros r code start endl pc next REP GE LT GET.
-  generalize dependent pc. induction REP; intros.
-  - lia.
-  - assert (pc = lbl) by lia. subst.
-    rewrite CONSUME in GET. inversion GET.
-  - apply nfa_rep_incr in REP1 as INCR1.
-    apply nfa_rep_incr in REP2 as INCR2.
-    assert (pc = start \/ pc >= S start) as [ST|H] by lia.
-    (* Fork *)
-    { subst. rewrite FORK in GET. inversion GET. }
-    assert (pc < end1 \/ pc >= end1) as [R1|H1] by lia.
-    (* in r1 *)
-    { apply IHREP1; auto. }
-    assert (pc = end1 \/ pc >= S end1) as [J|H2] by lia.
-    (* the jmp *)
-    { subst. rewrite JMP in GET. inversion GET. lia. }
-    (* in r2 *)
-    apply IHREP2; auto.
-  - apply nfa_rep_incr in REP1 as INCR1.
-    apply nfa_rep_incr in REP2 as INCR2.
-    assert (pc < end1 \/ pc >= end1) as [H1|H2] by lia.
-    (* in r1 *)
-    { apply IHREP1; auto. }
-    (* in r2 *)
-    apply IHREP2; auto.
-  - lia.
-  - apply nfa_rep_incr in REP as INC.
-    assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
-    (* fork *)
-    { subst. rewrite FORK in GET. destruct greedy; inversion GET. }
-    assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
-    (* Begin *)
-    { subst. rewrite BEGIN in GET. inversion GET. }
-    assert (pc = S (S start) \/ pc >= S (S (S start))) as [RES|H2] by lia.
-    (* Reset *)
-    { subst. rewrite RESET in GET. inversion GET. }
-    assert (pc < end1 \/ pc = end1) as [R1|H3] by lia.
-    (* in r1 *)
-    { apply IHREP; auto. }
-    (* endloop *)
-    subst. rewrite END in GET. inversion GET.
-  - apply nfa_rep_incr in REP as INC.
-    assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
-    (* fork *)
-    { subst. rewrite FORK in GET. destruct greedy; inversion GET. }
-    assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
-    (* Begin *)
-    { subst. rewrite BEGIN in GET. inversion GET. }
-    assert (pc = S (S start) \/ pc >= S (S (S start))) as [RES|H2] by lia.
-    (* Reset *)
-    { subst. rewrite RESET in GET. inversion GET. }
-    assert (pc < end1 \/ pc = end1) as [R1|H3] by lia.
-    (* in r1 *)
-    { apply IHREP; auto. }
-    (* endloop *)
-    subst. rewrite END in GET. inversion GET.
-  - apply nfa_rep_incr in REP as INC.
-    assert (pc = start \/ pc >= S start) as [ST|H] by lia.
-    (* open *)
-    { subst. rewrite OPEN in GET. inversion GET. }
-    assert (pc = end1 \/ pc < end1) as [END|H1] by lia.
-    (* close *)
-    { subst. rewrite CLOSE in GET. inversion GET. }
-    (* in r1 *)
-    apply IHREP; auto.
-  - assert (pc = lbl) by lia. subst.
-    rewrite CHECK in GET. inversion GET.
-  - assert (pc = lbl) by lia. subst.
-    rewrite KILL in GET. inversion GET.
+  intros r code start endl pc next REP. revert pc.
+  induction REP; intros pc GE LT GET; remember (Jmp next) as j eqn:J in GET;
+    try (apply nfa_rep_incr in REP as INC); try (apply nfa_rep_incr in REP1 as INC1);
+    try (apply nfa_rep_incr in REP2 as INC2);
+    locate_pc pc GET;
+    try solve [lia | discriminate | injection J; lia
+      | unfold greedy_fork in J;
+        repeat match type of J with context [match ?x with _ => _ end] => destruct x end; discriminate];
+    subst j;
+    first [eapply IHREP; eauto; lia
+      | assert (pc < end1 \/ end1 <= pc) as [] by lia; [eapply IHREP1|eapply IHREP2]; eauto; lia].
 Qed.
 
 

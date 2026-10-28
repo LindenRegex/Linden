@@ -729,17 +729,9 @@ Section MemoEquiv.
     intros code pc gm b nextpc nextgm nextb inp nextinp WF STUTTERS EXEC.
     unfold stutter_wf in WF. unfold exec_instr in EXEC.
     destruct (get_pc code pc) eqn:GET; [|inversion EXEC].
-    destruct b0; try solve[inversion EXEC; lia].
-    - destruct read_char; try destruct p; inversion EXEC. lia.
-    - destruct anchor_satisfied; inversion EXEC. lia.
-    - inversion EXEC; subst.
-      eapply (WF pc nextgm nextb nextpc nextgm nextb nextinp); eauto.
-      unfold PikeVM.epsilon_step. rewrite GET.
-      unfold PikeVM.upd_label. eauto.
-    - destruct b; inversion EXEC; subst.
-      eapply (WF pc nextgm CanExit nextpc nextgm CanExit nextinp); eauto.
-      unfold PikeVM.epsilon_step. rewrite GET.
-      unfold PikeVM.upd_label. eauto.
+    destruct b0; try solve[inversion EXEC; lia | unfold stutters in STUTTERS; rewrite GET in STUTTERS; discriminate].
+    inversion EXEC; subst. eapply (WF pc nextgm nextb nextpc nextgm nextb nextinp); eauto.
+    unfold PikeVM.epsilon_step. rewrite GET. reflexivity.
   Qed.
 
 

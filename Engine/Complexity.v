@@ -52,91 +52,16 @@ Section CodeWF.
       In next (next_pcs pc i) ->
       next <= endl.
   Proof.
-    intros r c startl endl pc next i REP GE LT GET IN.
-    generalize dependent pc. induction REP; intros.
-    - lia.
-    (* char *)
-    - assert (pc = lbl) by lia. subst.
-      rewrite CONSUME in GET. inversion GET. subst.
-      simpl in IN. destruct IN; lia.
-    - apply nfa_rep_incr in REP1 as INCR1.
-      apply nfa_rep_incr in REP2 as INCR2.
-      assert (pc = start \/ pc >= S start) as [ST|H] by lia.
-      (* Fork *)
-      { subst. rewrite FORK in GET. inversion GET. subst.
-        simpl in IN. destruct IN as [IN|[IN|IN]]; inversion IN; lia. }
-      assert (pc < end1 \/ pc >= end1) as [R1|H1] by lia.
-      (* in r1 *)
-      { eapply IHREP1 in IN; eauto. lia. }
-      assert (pc = end1 \/ pc >= S end1) as [J|H2] by lia.
-      (* the jmp *)
-      { subst. rewrite JMP in GET. inversion GET. subst.
-        simpl in IN. destruct IN as [IN|IN]; inversion IN. lia. }
-      (* in r2 *)
-      apply IHREP2 in IN; auto.
-    - apply nfa_rep_incr in REP1 as INCR1.
-      apply nfa_rep_incr in REP2 as INCR2.
-      assert (pc < end1 \/ pc >= end1) as [H1|H2] by lia.
-      (* in r1 *)
-      { apply IHREP1 in IN; auto. lia. }
-      (* in r2 *)
-      apply IHREP2 in IN; auto.
-    - lia.
-    - apply nfa_rep_incr in REP as INC.
-      assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
-      (* fork *)
-      { subst. rewrite FORK in GET. destruct greedy; inversion GET; subst;
-          simpl in IN; destruct IN as [IN|[IN|IN]]; inversion IN; lia. }
-      assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
-      (* Begin *)
-      { subst. rewrite BEGIN in GET. inversion GET. subst.
-        simpl in IN. destruct IN as [IN|IN]; inversion IN; lia. }
-      assert (pc = S (S start) \/ pc >= S (S (S start))) as [RES|H2] by lia.
-      (* Reset *)
-      { subst. rewrite RESET in GET. inversion GET. subst.
-        simpl in IN. destruct IN as [IN|IN]; inversion IN; lia. }
-      assert (pc < end1 \/ pc = end1) as [R1|H3] by lia.
-      (* in r1 *)
-      { apply IHREP in IN; auto. }
-      (* endloop *)
-      subst. rewrite END in GET. inversion GET. subst.
-      simpl in IN. destruct IN as [IN|IN]; inversion IN; lia.
-    - apply nfa_rep_incr in REP as INC.
-      assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
-      (* fork *)
-      { subst. rewrite FORK in GET. destruct greedy; inversion GET; subst;
-          simpl in IN; destruct IN as [IN|[IN|IN]]; inversion IN; lia. }
-      assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
-      (* Begin *)
-      { subst. rewrite BEGIN in GET. inversion GET. subst.
-        simpl in IN. destruct IN as [IN|IN]; inversion IN; lia. }
-      assert (pc = S (S start) \/ pc >= S (S (S start))) as [RES|H2] by lia.
-      (* Reset *)
-      { subst. rewrite RESET in GET. inversion GET. subst.
-        simpl in IN. destruct IN as [IN|IN]; inversion IN; lia. }
-      assert (pc < end1 \/ pc = end1) as [R1|H3] by lia.
-      (* in r1 *)
-      { apply IHREP in IN; auto. }
-      (* endloop *)
-      subst. rewrite END in GET. inversion GET. subst.
-      simpl in IN. destruct IN as [IN|IN]; inversion IN; lia.
-    - apply nfa_rep_incr in REP as INC.
-      assert (pc = start \/ pc >= S start) as [ST|H] by lia.
-      (* open *)
-      { subst. rewrite OPEN in GET. inversion GET. subst.
-        simpl in IN. destruct IN as [IN|IN]; inversion IN; lia. }
-      assert (pc = end1 \/ pc < end1) as [END|H1] by lia.
-      (* close *)
-      { subst. rewrite CLOSE in GET. inversion GET. subst.
-        simpl in IN. destruct IN as [IN|IN]; inversion IN; lia. }
-      (* in r1 *)
-      apply IHREP in IN; auto.
-    - assert (pc = lbl) by lia. subst.
-      rewrite CHECK in GET. inversion GET. subst.
-      simpl in IN. destruct IN; lia.
-    - assert (pc = lbl) by lia. subst.
-      rewrite KILL in GET. inversion GET. subst.
-      simpl in IN. inversion IN.
+    intros r c startl endl pc next i REP. revert pc.
+    induction REP; intros pc GE LT GET IN;
+      try (apply nfa_rep_incr in REP as INC); try (apply nfa_rep_incr in REP1 as INC1);
+      try (apply nfa_rep_incr in REP2 as INC2);
+      locate_pc pc GET;
+      try solve [simpl in IN; lia
+        | unfold greedy_fork in IN;
+          repeat match type of IN with context [match ?x with _ => _ end] => destruct x end; simpl in IN; lia];
+      first [apply IHREP in IN; eauto; lia
+        | assert (pc < end1 \/ end1 <= pc) as [] by lia; [apply IHREP1 in IN|apply IHREP2 in IN]; eauto; lia].
   Qed.
 
   Theorem compiled_wf:
@@ -170,13 +95,9 @@ Section CodeWF.
       exists i, get_pc code (fst (fst t)) = Some i /\
              In (fst (fst newt)) (next_pcs (fst (fst t)) i).
   Proof.
-    unfold epsilon_step. intros [[pc gm]b] code inp newt H.
-    destruct (get_pc code pc) eqn:GET; [|inversion H].
-    destruct b0; inversion H; subst.
-    - destruct (check_read rer c inp forward); inversion H1; subst.
-      simpl; eexists; split; eauto; simpl; auto; lia.
-    - destruct (anchor_satisfied rer a inp); inversion H1; subst.
-    - destruct b; inversion H1.
+    unfold epsilon_step. intros [[pc gm] b] code inp newt H.
+    destruct (get_pc code pc) as [i|] eqn:GET; [exists i; split; [auto|]|discriminate].
+    destruct i; repeat match type of H with context [match ?x with _ => _ end] => destruct x end; inversion H; subst; simpl; lia.
   Qed.
 
   Lemma eps_step_active_wf:
@@ -187,22 +108,8 @@ Section CodeWF.
              In (fst (fst newt)) (next_pcs (fst (fst t)) i).
   Proof.
     unfold epsilon_step. intros [[pc gm] b] code inp next newt H IN.
-    destruct (get_pc code pc) eqn:GET.
-    2: { inversion H. subst. inversion IN. }
-    destruct b0; inversion H; subst;
-      try solve[inversion IN; subst; try solve [inversion H0];
-                simpl; eexists; split; eauto; simpl; auto; lia].
-    - destruct (check_read rer c inp forward); inversion H1; subst;
-        inversion IN; subst; try solve [inversion H0];
-        simpl; eexists; split; eauto; simpl; auto; lia.
-    - destruct (anchor_satisfied rer a inp); inversion H1; subst;
-        inversion IN; subst; try solve [inversion H0];
-        simpl; eexists; split; eauto; simpl; auto; lia.
-    - inversion IN; [|inversion H0]; subst; try solve [inversion H1];
-        simpl; eexists; split; eauto; simpl; auto.
-    - destruct b; subst; inversion H1; subst;
-        inversion IN; subst; try solve [inversion H0];
-        simpl; eexists; split; eauto; simpl; auto; lia.
+    destruct (get_pc code pc) as [i|] eqn:GET; [exists i; split; [auto|]|inversion H; subst; contradiction].
+    destruct i; repeat match type of H with context [match ?x with _ => _ end] => destruct x end; inversion H; subst; simpl in IN; intuition subst; simpl; lia.
   Qed.
 
   Lemma exec_instr_wf:
@@ -213,22 +120,8 @@ Section CodeWF.
                  In (fst (fst (fst conf'))) (next_pcs (fst (fst (fst conf))) instr).
   Proof.
     unfold exec_instr. intros code nextconfs [[[pc gm] b] i] conf' H IN.
-    destruct (get_pc code pc) eqn:GET.
-    2: { inversion H. subst. inversion IN. }
-    destruct b0; inversion H; subst;
-      try solve[inversion IN; subst; try solve [inversion H0];
-                simpl; eexists; split; eauto; simpl; auto; lia].
-   - destruct (read_char rer c i forward); try destruct p; inversion H1; subst;
-        inversion IN; subst; try solve [inversion H0];
-        simpl; eexists; split; eauto; simpl; auto; lia.
-    - destruct (anchor_satisfied rer a i); try destruct p; inversion H1; subst;
-        inversion IN; subst; try solve [inversion H0];
-        simpl; eexists; split; eauto; simpl; auto; lia.
-    - inversion IN; [|inversion H0]; subst; try solve [inversion H1];
-        simpl; eexists; split; eauto; simpl; auto.
-    - destruct b; subst; inversion H1; subst;
-        inversion IN; subst; try solve [inversion H0];
-        simpl; eexists; split; eauto; simpl; auto; lia.
+    destruct (get_pc code pc) as [instr|] eqn:GET; [exists instr; split; [auto|]|inversion H; subst; contradiction].
+    destruct instr; repeat match type of H with context [match ?x with _ => _ end] => destruct x end; inversion H; subst; simpl in IN; intuition subst; simpl; lia.
   Qed.
 
 End CodeWF.
@@ -611,12 +504,7 @@ Section PikeVMComplexity.
       length next <= 2.
   Proof.
     unfold epsilon_step. intros [[pc gm] b] code inp next H.
-    destruct (get_pc code pc) eqn:GET.
-    2: { inversion H. simpl. lia. }
-    destruct b0; try solve [inversion H; simpl; lia].
-    - destruct (check_read rer c inp forward); try solve [inversion H; simpl; lia].
-    - destruct (anchor_satisfied rer a inp); try solve [inversion H; simpl; lia].
-    - destruct b; try solve [inversion H; simpl; lia].
+    destruct (get_pc code pc) as [[]|]; repeat match type of H with context [match ?x with _ => _ end] => destruct x end; inversion H; simpl; lia.
   Qed.
 
   Theorem increase_mult:
@@ -1095,12 +983,7 @@ Section MemoBTComplexity.
       length stk <= 2.
   Proof.
     unfold exec_instr. intros code [[[pc gm] b] inp] stk E.
-    destruct (get_pc code pc) eqn:GET.
-    2: { inversion E. simpl. lia. }
-    destruct b0; try solve [inversion E; simpl; lia].
-    - destruct (read_char rer c inp forward) as [[char i]|]; try solve [inversion E; simpl; lia].
-    - destruct (anchor_satisfied rer a inp); try solve [inversion E; simpl; lia].
-    - destruct b; try solve [inversion E; simpl; lia].
+    destruct (get_pc code pc) as [[]|]; repeat match type of E with context [match ?x with _ => _ end] => destruct x end; inversion E; simpl; lia.
   Qed.
 
 
@@ -1112,19 +995,12 @@ Section MemoBTComplexity.
       validinp i2 originp.
   Proof.
     unfold exec_instr. intros c stk originp pc1 pc2 b1 b2 gm1 gm2 i1 i2 VAL E IN.
-    destruct (get_pc c pc1) eqn:GET.
-    2: { inversion E. simpl. subst. inversion IN. }
-    destruct b; try solve[inversion E; subst; inversion IN; subst; inversion H; subst; auto].
-    - destruct read_char as [[char i]|] eqn:R.
-      * inversion E; subst. inversion IN; subst; inversion H; subst; auto.
-        apply read_char_success_advance in R. right.
-        inversion VAL; subst.
-        ** constructor; auto.
-        ** eapply ss_next; eauto.
-      * inversion E; subst. inversion IN.
-    - destruct anchor_satisfied; inversion E; subst; inversion IN; subst; inversion H; subst; auto.
-    - inversion E; subst. inversion IN; subst; inversion H; subst; try inversion H0; subst; auto.
-    - destruct gm1; inversion E; subst; inversion IN; subst; inversion H; subst; auto.
+    destruct (get_pc c pc1) as [[]|];
+      repeat match type of E with context [match ?x with _ => _ end] => destruct x eqn:? end;
+      inversion E; subst; simpl in IN; try solve [intuition congruence].
+    destruct IN as [[= <- <- <- <-]|[]].
+    match goal with R: read_char _ _ _ _ = _ |- _ => apply read_char_success_advance in R end.
+    right. inversion VAL; subst; eauto using ss_next, strict_suffix.
   Qed.
 
   (* at each step, the measure strictly decreases *)
