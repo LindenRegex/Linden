@@ -77,7 +77,7 @@ Section RegexpTree.
         reflexivity.
     Qed.
 
-    Lemma bounded_bounded_equiv m n r: (* r{m}r{n} ≅ r{m+n} *)
+    Lemma bounded_bounded_equiv_true m n r: (* r{m}r{n} ≅ r{m+n} *)
       def_groups r = [] ->
       (Sequence (Quantified true m 0 r) (Quantified true n 0 r))
         ≅[rer] Quantified true (m + n) 0 r.
@@ -87,19 +87,49 @@ Section RegexpTree.
       - rewrite PeanoNat.Nat.add_comm. apply bounded_util_bwd. auto.
     Qed.
 
-    Lemma bounded_atmost_equiv m n r: (* r{m}r{0,n} ≅[forward] r{m,m+n} *)
+    Corollary bounded_bounded_equiv p m n r: (* r{m}r{n} ≅ r{m+n} *)
+      def_groups r = [] ->
+      (Sequence (Quantified p m 0 r) (Quantified p n 0 r))
+        ≅[rer] Quantified p (m + n) 0 r.
+    Proof.
+      pose proof bounded_bounded_equiv_true m n r. destruct p; intros; auto.
+      etransitivity. 2: apply forced_equiv.
+      etransitivity; auto.
+      apply seq_equiv; symmetry; apply forced_equiv.
+    Qed.
+
+    Lemma bounded_atmost_equiv_true m n r: (* r{m}r{0,n} ≅[forward] r{m,m+n} *)
       def_groups r = [] ->
       (Sequence (Quantified true m 0 r) (Quantified true 0 n r))
         ≅[rer][forward] Quantified true m n r.
     Proof. intro NO_GROUPS. rewrite bounded_util_fwd, PeanoNat.Nat.add_0_r. 1: reflexivity. auto. Qed.
 
-    Lemma atmost_bounded_equiv m n r: (* r{0,n}r{m} ≅[backward] r{m,m+n} *)
+    Corollary bounded_atmost_equiv p m n r: (* r{m}r{0,n} ≅[forward] r{m,m+n} *)
+      def_groups r = [] ->
+      (Sequence (Quantified p m 0 r) (Quantified true 0 n r))
+        ≅[rer][forward] Quantified true m n r.
+    Proof.
+      pose proof bounded_atmost_equiv_true m n r. destruct p; intros; auto.
+      etransitivity; auto.
+      apply seq_equiv. symmetry. apply forced_equiv. reflexivity.
+    Qed.
+
+    Lemma atmost_bounded_equiv_true m n r: (* r{0,n}r{m} ≅[backward] r{m,m+n} *)
       def_groups r = [] ->
       (Sequence (Quantified true 0 n r) (Quantified true m 0 r))
         ≅[rer][backward] Quantified true m n r.
     Proof. intro NO_GROUPS. rewrite bounded_util_bwd, PeanoNat.Nat.add_0_r. 1: reflexivity. auto. Qed.
 
-    Lemma bounded_atmost_lazy_equiv m n r: (* r{m}r{0,n}? ≅[forward] r{m,m+n}? *)
+    Corollary atmost_bounded_equiv p m n r: (* r{0,n}r{m} ≅[backward] r{m,m+n} *)
+      def_groups r = [] ->
+      (Sequence (Quantified true 0 n r) (Quantified p m 0 r))
+        ≅[rer][backward] Quantified true m n r.
+    Proof.
+      pose proof atmost_bounded_equiv_true m n r. destruct p; intros; auto.
+      etransitivity; auto. apply seq_equiv. reflexivity. symmetry. apply forced_equiv.
+    Qed.
+
+    Lemma bounded_atmost_lazy_equiv_true m n r: (* r{m}r{0,n}? ≅[forward] r{m,m+n}? *)
       def_groups r = [] ->
       (Sequence (Quantified true m 0 r) (Quantified false 0 n r))
         ≅[rer][forward] Quantified false m n r.
@@ -129,7 +159,16 @@ Section RegexpTree.
         auto.
     Qed.
 
-    Lemma atmost_bounded_lazy_equiv m n r: (* r{0,n}?r{m} ≅[backward] r{m,m+n}? *)
+    Corollary bounded_atmost_lazy_equiv p m n r: (* r{m}r{0,n}? ≅[forward] r{m,m+n}? *)
+      def_groups r = [] ->
+      (Sequence (Quantified p m 0 r) (Quantified false 0 n r))
+        ≅[rer][forward] Quantified false m n r.
+    Proof.
+      pose proof bounded_atmost_lazy_equiv_true m n r. destruct p; intros; auto.
+      etransitivity; auto. apply seq_equiv. symmetry. apply forced_equiv. reflexivity.
+    Qed.
+
+    Lemma atmost_bounded_lazy_equiv_true m n r: (* r{0,n}?r{m} ≅[backward] r{m,m+n}? *)
       def_groups r = [] ->
       (Sequence (Quantified false 0 n r) (Quantified true m 0 r))
         ≅[rer][backward] Quantified false m n r.
@@ -156,6 +195,15 @@ Section RegexpTree.
         eapply seq_equiv_dir.
         auto.
         apply forced_equiv.
+    Qed.
+
+    Corollary atmost_bounded_lazy_equiv p m n r: (* r{0,n}?r{m} ≅[backward] r{m,m+n}? *)
+      def_groups r = [] ->
+      (Sequence (Quantified false 0 n r) (Quantified p m 0 r))
+        ≅[rer][backward] Quantified false m n r.
+    Proof.
+      pose proof atmost_bounded_lazy_equiv_true m n r. destruct p; intros; auto.
+      etransitivity; auto. apply seq_equiv. reflexivity. symmetry. apply forced_equiv.
     Qed.
 
     Lemma bounded_atmost_forward:
