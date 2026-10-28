@@ -31,8 +31,10 @@ Section NFA.
   | EndLoop: label -> bytecode    (* also contains the backedge instead of adding a jump *)
   | KillThread: bytecode         (* for unsupported features *)
   (* Peek without consuming: matching descriptor selects the first target;
-     a mismatch (including end of input) selects the second. *)
+     a mismatch (including end of input) selects the second. [BranchLazy]
+     runs the same way but ranks the second target first. *)
   | Branch: char_descr -> label -> label -> bytecode
+  | BranchLazy: char_descr -> label -> label -> bytecode
   (* Loop entry that peeks without consuming: the body (first label) is only
      entered when the descriptor matches; the exit (second label) is always
      kept, after the body for [LoopBranch] and before it for [LoopBranchLazy]. *)
@@ -113,7 +115,7 @@ Section NFA.
     | Consume _ | CheckAnchor _ | SetRegOpen _ | SetRegClose _ | ResetRegs _ | BeginLoop => [S pc]
     | Accept | KillThread | Data _ => []
     | Jmp l | EndLoop l => [l]
-    | Fork l1 l2 | ForkLazy l1 l2 | Branch _ l1 l2 | LoopBranch _ l1 l2 | LoopBranchLazy _ l1 l2 => [l1; l2]
+    | Fork l1 l2 | ForkLazy l1 l2 | Branch _ l1 l2 | BranchLazy _ l1 l2 | LoopBranch _ l1 l2 | LoopBranchLazy _ l1 l2 => [l1; l2]
     end.
 
   (* the two threads of a forking instruction, in priority order *)
@@ -121,7 +123,7 @@ Section NFA.
     match b with
     | Fork l1 l2 | Branch _ l1 l2 => Some (l1, l2)
     | LoopBranch _ body exit => Some (body, exit)
-    | ForkLazy body exit | LoopBranchLazy _ body exit => Some (exit, body)
+    | ForkLazy body exit | BranchLazy _ body exit | LoopBranchLazy _ body exit => Some (exit, body)
     | _ => None
     end.
 
@@ -130,7 +132,7 @@ Section NFA.
   Definition next_first (c:code) (pc:label) (b:bytecode) : Prop :=
     match b with
     | Fork l _ | ForkLazy l _ => l = S pc
-    | Branch cd l _ | LoopBranch cd l _ | LoopBranchLazy cd l _ =>
+    | Branch cd l _ | BranchLazy cd l _ | LoopBranch cd l _ | LoopBranchLazy cd l _ =>
         l = S (S pc) /\ get_pc c (S pc) = Some (Data cd)
     | _ => True
     end.
@@ -181,12 +183,14 @@ Section NFA.
     if branches then lead_descr r1 else None.
 
   (* [fl] is the descriptor that whatever follows the loop must start with:
-     a greedy loop whose body and continuation start differently needs no fork *)
+     a loop whose body and continuation start differently needs no fork *)
   Definition loop_fork (greedy: bool) (r1: regex) (fl: option char_descr) (body exit: label) : bytecode :=
-    match loop_peek r1, greedy with
-    | Some cd, true => if distinct_peek (Some cd) fl then Branch cd body exit else LoopBranch cd body exit
-    | Some cd, false => LoopBranchLazy cd body exit
-    | None, _ => greedy_fork greedy body exit
+    match loop_peek r1, distinct_peek (loop_peek r1) fl, greedy with
+    | Some cd, Some _, true => Branch cd body exit
+    | Some cd, Some _, false => BranchLazy cd body exit
+    | Some cd, None, true => LoopBranch cd body exit
+    | Some cd, None, false => LoopBranchLazy cd body exit
+    | None, _, _ => greedy_fork greedy body exit
     end.
 
   (* a branching instruction keeps its descriptor in the next cell *)
@@ -549,7 +553,8 @@ Section NFA.
       loop_fork greedy r1 fl l1 l2 = greedy_fork greedy l1 l2 \/
       exists cd, lead_descr r1 = Some cd /\
         (loop_fork greedy r1 fl l1 l2 = (if greedy then LoopBranch cd l1 l2 else LoopBranchLazy cd l1 l2) \/
-         greedy = true /\ distinct_peek (lead_descr r1) fl = Some cd /\ loop_fork greedy r1 fl l1 l2 = Branch cd l1 l2).
+         distinct_peek (lead_descr r1) fl = Some cd /\
+         loop_fork greedy r1 fl l1 l2 = (if greedy then Branch cd l1 l2 else BranchLazy cd l1 l2)).
   Proof.
     intros. unfold loop_fork, loop_peek, distinct_peek.
     destruct branches, (lead_descr r1) as [[]|], fl as [[]|], greedy; try destruct (_ == _); eauto 7.
@@ -564,7 +569,7 @@ Section NFA.
       fork_targets (loop_fork greedy r1 fl l1 l2) =
         Some (if greedy then l1 else l2, if greedy then l2 else l1).
   Proof.
-    intros. destruct (loop_fork_cases greedy r1 fl l1 l2) as [->|[? [_ [->|[-> [_ ->]]]]]]; try destruct greedy; auto.
+    intros. destruct (loop_fork_cases greedy r1 fl l1 l2) as [->|[? [_ [->|[_ ->]]]]]; destruct greedy; auto.
   Qed.
 
   Lemma disjunction_fork_no_stutter:

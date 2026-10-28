@@ -368,7 +368,7 @@ Lemma loop_fork_step:
       list_tree_thread code inp kept threadactive.
 Proof.
   intros. unfold epsilon_step. rewrite FORK.
-  destruct (loop_fork_cases rer branches greedy r1 fl body exit) as [E|[cd [L [E|[-> [P E]]]]]]; rewrite E;
+  destruct (loop_fork_cases rer branches greedy r1 fl body exit) as [E|[cd [L [E|[P E]]]]]; rewrite E;
     try destruct greedy; simpl in *;
     try destruct (check_read _ _ _ _) eqn:READ; try solve [eexists _, _; eauto using keeps_refl].
   all: inversion BOTH as [|? ? ? ? ? ? ONE TT1]; inversion ONE as [|? ? ? ? ? ? NIL TT2]; subst.
@@ -756,6 +756,7 @@ Inductive start_rep: bytecode -> Prop :=
 | start_fork: forall l1 l2, start_rep (Fork l1 l2)
 | start_forklazy: forall l1 l2, start_rep (ForkLazy l1 l2)
 | start_branch: forall cd l1 l2, start_rep (Branch cd l1 l2)
+| start_branchlazy: forall cd l1 l2, start_rep (BranchLazy cd l1 l2)
 | start_loopbranch: forall cd l1 l2, start_rep (LoopBranch cd l1 l2)
 | start_loopbranchlazy: forall cd l1 l2, start_rep (LoopBranchLazy cd l1 l2)
 | start_open: forall gid, start_rep (SetRegOpen gid)

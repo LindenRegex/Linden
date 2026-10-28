@@ -82,3 +82,14 @@ Example lazy_loop_branch_captures:
   map (branch_run (Sequence (lazy_star (Group 1 branch_a)) branch_b)) [[$ "a"; $ "b"]; [$ "b"]; [$ "a"]] =
   map (reference_run (Sequence (lazy_star (Group 1 branch_a)) branch_b)) [[$ "a"; $ "b"]; [$ "b"]; [$ "a"]].
 Proof. vm_compute. reflexivity. Qed.
+
+(* so does a lazy one, ranking the exit first *)
+Example lazy_follow_branch_compile:
+  hd KillThread (NFA.compilation branch_flags true (Sequence (lazy_star branch_a) branch_b)) =
+    BranchLazy (CdSingle ($ "a")) 2 6.
+Proof. vm_compute. reflexivity. Qed.
+
+Example lazy_follow_branch_runs:
+  map (branch_run (Sequence (lazy_star (Group 1 branch_a)) (Group 2 branch_b))) [[$ "a"; $ "a"; $ "b"]; [$ "b"]; [$ "a"]; [$ "a"; $ "b"; $ "b"]] =
+  map (reference_run (Sequence (lazy_star (Group 1 branch_a)) (Group 2 branch_b))) [[$ "a"; $ "a"; $ "b"]; [$ "b"]; [$ "a"]; [$ "a"; $ "b"; $ "b"]].
+Proof. vm_compute. reflexivity. Qed.
