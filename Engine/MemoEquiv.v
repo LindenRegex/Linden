@@ -57,7 +57,7 @@ Section MemoEquiv.
       (SAMEGM1: snd (fst (fst config1)) = snd (fst treegm1))
       (SAMEGM2: snd (fst (fst config2)) = snd (fst treegm2))
       (SAMEINP: snd config1 = snd treegm2),
-      fst (fst treegm1) = fst (fst treegm2).
+      tswap (fst (fst treegm1)) (fst (fst treegm2)).
   Proof.
     intros code treegm1 treegm2 config1 config2 TC1.
     generalize dependent config2. generalize dependent treegm2.
@@ -66,20 +66,20 @@ Section MemoEquiv.
         simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
         simpl in SAMEINP;
         try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
-      simpl. subst. symmetry. eapply actions_rep_unicity in CONT; eauto.
+      simpl. subst. apply ts_sym. eapply actions_rep_unicity in CONT; eauto.
     - inversion TC2; subst;
         simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
         try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
       2: { rewrite BEGIN in RESET. inversion RESET. }
       rewrite RESET in RESET0. inversion RESET0. subst.
       specialize (IHTC1 _ _ TC (eq_refl _) (eq_refl _) (eq_refl _) (eq_refl _)).
-      simpl in IHTC1. destruct IHTC1; subst; simpl; auto.
+      simpl in *. auto using ts_group.
     - inversion TC2; subst;
         simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
         try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
       { rewrite BEGIN in RESET. inversion RESET. }
       specialize (IHTC1 _ _ TC (eq_refl _) (eq_refl _) (eq_refl _) (eq_refl _)).
-      simpl in IHTC1. destruct IHTC1; subst; simpl; auto.
+      auto.
   Qed.
 
 
@@ -87,10 +87,9 @@ Section MemoEquiv.
     forall code inp t1 gm1 t2 gm2 pc b
       (TC1: tree_config code (t1,gm1,inp) (pc,gm1,b,inp))
       (TC2: tree_config code (t2,gm2,inp) (pc,gm2,b,inp)),
-      t1 = t2.
+      tswap t1 t2.
   Proof.
-    intros code inp t1 gm1 t2 gm2 pc b TC1 TC2.
-    eapply tc_same_interm in TC1; eauto. simpl in TC1. auto.
+    intros. apply (tc_same_interm _ _ _ _ _ TC1 TC2); auto.
   Qed.
 
 
@@ -140,8 +139,8 @@ Section MemoEquiv.
   Definition seen_inclusion (c:code) (treeseen:seentrees) (memoset:memoset) (current:option (tree*group_map*input)) (currentpc:option label): Prop :=
     forall pc b inp
       (SEEN: is_memo memoset pc b inp = true),
-      (exists t gm,
-          inseen treeseen t = true /\
+      (exists t ts gm,
+          inseen treeseen ts = true /\ tswap t ts /\
             tree_config c (t, gm, inp) (pc, gm, b, inp))
       \/
         (stutters pc c = true /\ exists cur, currentpc = Some cur /\
@@ -154,8 +153,7 @@ Section MemoEquiv.
       seen_inclusion c ts ms current currentpc.
   Proof.
     unfold seen_inclusion. intros c ts ms current currentpc INCL pc b inp SEEN.
-    specialize (INCL pc b inp SEEN) as [[t [gm [IN EQ]]] | [ST [cur [H _]]]]; eauto.
-    inversion H.
+    specialize (INCL pc b inp SEEN) as [IN | [ST [cur [H _]]]]; [left; exact IN | inversion H].
   Qed.
 
   Lemma add_inclusion:
@@ -167,28 +165,27 @@ Section MemoEquiv.
     intros treeseen memoset code inp tree pc gm b nextcurrent nextpc INCL TT.
     unfold seen_inclusion in *.
     intros pc0 b0 inp0 SEEN. apply is_memo_add in SEEN. destruct SEEN as [EQ|SEEN].
-    - inversion EQ. subst. left. exists tree. exists gm. split; auto. apply in_add. left. auto.
+    - inversion EQ. subst. left. exists tree, tree, gm. rewrite in_add. auto using ts_refl.
     - specialize (INCL pc0 b0 inp0 SEEN).
-      destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [cur [Hcur [ts [gms [GEQ [EQ TTS]]]]]]]].
-      + left. exists ts. exists gms. split; auto. apply in_add. right; auto.
-      + left. exists ts. exists gms. split; auto.
-        apply in_add. left; auto. inversion EQ. auto.
+      destruct INCL as [[ts [tss [gms [SEENs [SWs TTs]]]]] | [ST [cur [Hcur [ts [gms [GEQ [EQ TTS]]]]]]]].
+      + left. exists ts, tss, gms. rewrite in_add. auto.
+      + inversion EQ. subst. left. exists ts, ts, gms. rewrite in_add. auto using ts_refl.
   Qed.
 
   Lemma skip_inclusion:
-    forall code inp treeseen memoset tree gm currentpc
+    forall code inp treeseen memoset tree ts gm currentpc
       (INCL: seen_inclusion code treeseen memoset (Some (tree, gm, inp)) currentpc)
-      (SEEN: inseen treeseen tree = true),
+      (SEEN: inseen treeseen ts = true)
+      (SWAP: tswap tree ts),
     forall current nextpc,
       seen_inclusion code treeseen memoset current nextpc.
   Proof.
-    intros code inp treeseen threadseen tree gm currentpc INCL SEEN current nextpc.
-    unfold seen_inclusion in *.
+    intros. unfold seen_inclusion in *.
     intros pc b inp0 SEENPC.
     specialize (INCL pc b inp0 SEENPC).
-    destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [cur [Hcur [ts [gms [GEQ [EQ TTS]]]]]]]].
-    - left. exists ts. exists gms. split; auto.
-    - left. exists ts. exists gms. split; auto. inversion EQ. subst. auto.
+    destruct INCL as [[t' [tss [gms [SEENs [SWs TTs]]]]] | [ST [cur [Hcur [t' [gms [GEQ [EQ TTS]]]]]]]].
+    - left. exists t', tss, gms. auto.
+    - inversion EQ. subst. left. exists t', ts, gms. auto.
   Qed.
 
   Lemma stutter_inclusion:
@@ -206,8 +203,8 @@ Section MemoEquiv.
     { inversion EQ. subst. right. split; auto.
       exists nextpc. split; auto. exists t. exists gm. split; auto. }
     specialize (INCL pc0 b0 inp0 SEEN).
-    destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [cur [Hcur [ts [gms [GEQ [EQ TTS]]]]]]]].
-    - left. exists ts. exists gms. split; auto.
+    destruct INCL as [[ts [tss [gms [SEENs [SWs TTs]]]]] | [ST [cur [Hcur [ts [gms [GEQ [EQ TTS]]]]]]]].
+    - left. exists ts, tss, gms. auto.
     - right. split; auto. exists nextpc. split; auto. exists ts. exists gms. split; auto. inversion Hcur. lia.
   Qed.
 
@@ -769,11 +766,10 @@ Section MemoEquiv.
       { inversion SKIP. }
       inversion MEMOSTEP; try (rewrite UNSEEN in SKIP; inversion SKIP); subst.
       inversion STACK; subst.
-      apply INCL in SKIP as [[teq [gmeq [SEENEQ TTEQ]]] | [STUTTER [cur [Hcur [t' [gm' [GEQ [EQ TTS]]]]]]]].
+      apply INCL in SKIP as [[teq [ts [gmeq [SEENEQ [SW TTEQ]]]]] | [STUTTER [cur [Hcur [t' [gm' [GEQ [EQ TTS]]]]]]]].
       2: { inversion Hcur. lia. }
-      assert (teq = tree); subst.
-      { eapply tc_same_tree; eauto. }
-      exists (MTree treelist treeseen). split; constructor; auto.
+      assert (SWAP: tswap tree ts) by eauto using ts_trans, tc_same_tree.
+      exists (MTree treelist treeseen). split; econstructor; eauto.
       eapply skip_inclusion; eauto.
     }
     destruct treestk as [|[[t gm] inp] treestk].

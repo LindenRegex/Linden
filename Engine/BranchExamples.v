@@ -83,10 +83,10 @@ Example lazy_loop_branch_captures:
   map (reference_run (Sequence (lazy_star (Group 1 branch_a)) branch_b)) [[$ "a"; $ "b"]; [$ "b"]; [$ "a"]].
 Proof. vm_compute. reflexivity. Qed.
 
-(* so does a lazy one, ranking the exit first *)
+(* so does a lazy one, with the same instruction: only one of its threads can survive *)
 Example lazy_follow_branch_compile:
   hd KillThread (NFA.compilation branch_flags true (Sequence (lazy_star branch_a) branch_b)) =
-    BranchLazy (CdSingle ($ "a")) 2 6.
+    Branch (CdSingle ($ "a")) 2 6.
 Proof. vm_compute. reflexivity. Qed.
 
 Example lazy_follow_branch_runs:

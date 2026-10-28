@@ -653,8 +653,8 @@ Qed.
 Definition seen_inclusion (c:code) (inp:input) (treeseen:seentrees) (threadseen:seenpcs) (current:option (tree*group_map)) (currentpc:label): Prop :=
   forall pc b
     (SEEN: inseenpc threadseen pc b = true),
-  (exists t gm,
-      inseen treeseen t = true /\
+  (exists t ts gm,
+      inseen treeseen ts = true /\ tswap t ts /\
         tree_thread c inp (t, gm) (pc, gm, b))
   \/
     (stutters pc c = true /\
@@ -756,7 +756,6 @@ Inductive start_rep: bytecode -> Prop :=
 | start_fork: forall l1 l2, start_rep (Fork l1 l2)
 | start_forklazy: forall l1 l2, start_rep (ForkLazy l1 l2)
 | start_branch: forall cd l1 l2, start_rep (Branch cd l1 l2)
-| start_branchlazy: forall cd l1 l2, start_rep (BranchLazy cd l1 l2)
 | start_loopbranch: forall cd l1 l2, start_rep (LoopBranch cd l1 l2)
 | start_loopbranchlazy: forall cd l1 l2, start_rep (LoopBranchLazy cd l1 l2)
 | start_open: forall gid, start_rep (SetRegOpen gid)
@@ -816,7 +815,7 @@ Lemma tt_same_interm:
     (SAMEB: snd thread1 = snd thread2)
     (SAMEGM1: snd (fst thread1) = snd treegm1)
     (SAMEGM2: snd (fst thread2) = snd treegm2),
-    fst treegm1 = fst treegm2.
+    tswap (fst treegm1) (fst treegm2).
 Proof.
   intros code inp treegm1 treegm2 thread1 thread2 TT1.
   generalize dependent thread2. generalize dependent treegm2.
@@ -824,30 +823,29 @@ Proof.
   - inversion TT2; subst;
       simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
       try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
-    simpl. subst. symmetry. eapply actions_rep_unicity in CONT; eauto.
+    simpl. subst. apply ts_sym. eapply actions_rep_unicity in CONT; eauto.
   - inversion TT2; subst;
       simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
       try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
     2: { rewrite BEGIN in RESET. inversion RESET. }
     rewrite RESET in RESET0. inversion RESET0. subst.
     specialize (IHTT1 _ _ TT (eq_refl _) (eq_refl _) (eq_refl _) (eq_refl _)).
-    simpl in IHTT1. destruct IHTT1. subst. simpl. auto.
+    simpl in *. auto using ts_group.
   - inversion TT2; subst;
       simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
       try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
     { rewrite BEGIN in RESET. inversion RESET. }
     specialize (IHTT1 _ _ TT (eq_refl _) (eq_refl _) (eq_refl _) (eq_refl _)).
-    simpl in IHTT1. destruct IHTT1. subst. simpl. auto.
+    auto.
 Qed.
 
 Lemma tt_same_tree:
   forall code inp t1 gm1 t2 gm2 pc b
     (TT1: tree_thread code inp (t1,gm1) (pc,gm1,b))
     (TT2: tree_thread code inp (t2,gm2) (pc,gm2,b)),
-    t1 = t2.
+    tswap t1 t2.
 Proof.
-  intros code inp t1 gm1 t2 gm2 pc b TT1 TT2.
-  eapply tt_same_interm in TT1; eauto. simpl in TT1. auto.
+  intros. apply (tt_same_interm _ _ _ _ _ _ TT1 TT2); auto.
 Qed.
 
 (** * Seen Inclusion Lemmas *)
@@ -869,28 +867,27 @@ Proof.
   intros treeseen threadseen c inp t pc gm b nextcurrent nextpc INCL TT.
   unfold seen_inclusion in *.
   intros pc0 b0 SEEN. apply inpc_add in SEEN. destruct SEEN as [EQ|SEEN].
-  - inversion EQ. subst. left. exists t. exists gm. split; auto. apply in_add. left. auto.
+  - inversion EQ. subst. left. exists t, t, gm. rewrite in_add. auto using ts_refl.
   - specialize (INCL pc0 b0 SEEN).
-    destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
-    + left. exists ts. exists gms. split; auto. apply in_add. right; auto.
-    + left. exists ts. exists gms. split; auto.
-      apply in_add. left; auto. inversion EQ. auto.
+    destruct INCL as [[ts [tss [gms [SEENs [SWs TTs]]]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
+    + left. exists ts, tss, gms. rewrite in_add. auto.
+    + inversion EQ. subst. left. exists ts, ts, gms. rewrite in_add. auto using ts_refl.
 Qed.
 
 Lemma skip_inclusion:
-  forall code inp treeseen threadseen tree gm currentpc
+  forall code inp treeseen threadseen tree ts gm currentpc
     (INCL: seen_inclusion code inp treeseen threadseen (Some (tree, gm)) currentpc)
-    (SEEN: inseen treeseen tree = true),
+    (SEEN: inseen treeseen ts = true)
+    (SWAP: tswap tree ts),
   forall current nextpc,
     seen_inclusion code inp treeseen threadseen current nextpc.
 Proof.
-  intros code inp treeseen threadseen tree gm currentpc INCL SEEN current nextpc.
-  unfold seen_inclusion in *.
+  intros. unfold seen_inclusion in *.
   intros pc b SEENPC.
   specialize (INCL pc b SEENPC).
-  destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
-  - left. exists ts. exists gms. split; auto.
-  - left. exists ts. exists gms. split; auto. inversion EQ. subst. auto.
+  destruct INCL as [[t' [tss [gms [SEENs [SWs TTs]]]]] | [ST [t' [gms [GEQ [EQ TTS]]]]]].
+  - left. exists t', tss, gms. auto.
+  - inversion EQ. subst. left. exists t', ts, gms. auto.
 Qed.
 
 Lemma stutter_inclusion:
@@ -908,8 +905,8 @@ Proof.
   { inversion EQ. subst. right. split; auto.
     exists t. exists gm. split; auto. }
   specialize (INCL pc0 b0 SEEN).
-  destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
-  - left. exists ts. exists gms. split; auto.
+  destruct INCL as [[ts [tss [gms [SEENs [SWs TTs]]]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
+  - left. exists ts, tss, gms. auto.
   - right. split; auto. exists ts. exists gms. split; auto. lia.
 Qed.
 
@@ -1228,13 +1225,11 @@ Proof.
     destruct treeactive as [|[tree gmt] treeactive]; inversion ACTIVE; subst.
     inversion VMSTEP; subst; try simpl in UNSEEN;
       try rewrite UNSEEN in SKIP; inversion SKIP.
-    apply SEEN in SKIP as [[teq [gmeq [SEENEQ TTEQ]]] | [STUTTER [t' [gm' [GEQ [EQ TTS]]]]]].
-    - assert (teq = tree).
-      { eapply tt_same_tree; eauto. }
-      subst.
+    apply SEEN in SKIP as [[teq [ts [gmeq [SEENEQ [SW TTEQ]]]]] | [STUTTER [t' [gm' [GEQ [EQ TTS]]]]]].
+    - assert (SWAP: tswap tree ts) by eauto using ts_trans, tt_same_tree.
       exists (PTS inp treeactive best treeblocked future treeseen).
       split.
-      + apply pts_skip; auto.
+      + eapply pts_skip; eauto.
       + eapply pikeinv; eauto.
         simpl in SEEN. eapply skip_inclusion; eauto.
     - simpl in GEQ. lia.

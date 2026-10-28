@@ -55,9 +55,11 @@ analysis follows groups and the left side of a sequence, and conservatively
 declines other forms. Likewise, a `?` or `*` loop whose body must start with a
 known character compiles to `LoopBranch` (or `LoopBranchLazy`), which enters the body only when that
 character can be read and always keeps the exit thread. When what follows the
-loop must start with a different character, the loop compiles to `Branch` (or
-`BranchLazy`, which runs alike but ranks the exit first) and keeps a single
-thread. When `branches` is false, the bytecode is unchanged.
+loop must start with a different character, the loop compiles to `Branch`,
+greedy or lazy alike, and keeps a single thread: at most one of its two threads
+can survive, so their priority does not matter. The tree representation of the
+code therefore leaves the order of a choice open, and the seen sets of the tree
+semantics compare trees up to that order. When `branches` is false, the bytecode is unchanged.
 
 The PikeVM theorems hold for both settings. In the PikeTree semantics a step may
 drop new trees that have no result (`keeps`), and `PikeEquiv.lead_dead` shows

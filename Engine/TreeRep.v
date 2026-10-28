@@ -39,12 +39,14 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
     (TR: tree_rep t code (S pc) inp CannotExit),
     tree_rep t code pc inp b
 | tr_choice:
-  forall code pc pc1 pc2 inp b t1 t2 i
+  (* the code does not fix the priority of the two branches *)
+  forall code pc pc1 pc2 inp b t1 t2 t i
     (FORK: get_pc code pc = Some i)
-    (TARGETS: fork_targets i = Some (pc1, pc2))
+    (TARGETS: next_pcs pc i = [pc1; pc2])
     (TR1: tree_rep t1 code pc1 inp b)
-    (TR2: tree_rep t2 code pc2 inp b),
-    tree_rep (Choice t1 t2) code pc inp b
+    (TR2: tree_rep t2 code pc2 inp b)
+    (ORDER: t = Choice t1 t2 \/ t = Choice t2 t1),
+    tree_rep t code pc inp b
 | tr_read:
   forall code pc inp nextinp b cd c t
     (CONSUME: get_pc code pc = Some (Consume cd))
@@ -101,54 +103,23 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
 Ltac same_instr :=
   match goal with
   | [ H1 : get_pc ?code ?pc = ?i1, H2: get_pc ?code ?pc = ?i2 |- _ ] => rewrite H1 in H2; inversion H2; subst;
-      try match goal with H: fork_targets _ = Some _ |- _ => discriminate H end
+      try match goal with H: next_pcs _ _ = [_; _] |- _ => discriminate H end
   end.
 
-(* Determinism of the tree representation *)
+(* Determinism of the tree representation, up to the order of choices *)
 Theorem tree_rep_determ:
   forall code pc inp b t1 t2,
     tree_rep t1 code pc inp b ->
     tree_rep t2 code pc inp b ->
-    t1 = t2.
+    tswap t1 t2.
 Proof.
-  intros code pc inp b t1 t2 H H0.
-  generalize dependent t2.
-  induction H; intros.
-  - inversion H0; subst; auto; same_instr.
-  - inversion H0; subst; auto; same_instr.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-  - inversion H1; subst; auto; same_instr.
-    rewrite TARGETS0 in TARGETS. inversion TARGETS; subst.
-    specialize (IHtree_rep1 _ TR1) as EQT1.
-    specialize (IHtree_rep2 _ TR2) as EQT2.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr;
-      rewrite READ0 in READ; inversion READ; subst.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr;
-      rewrite CHECK0 in CHECK; inversion CHECK; subst.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-    rewrite CHECK0 in CHECK. discriminate.
-  - inversion H0; subst; auto; same_instr.
-    rewrite READ0 in READ. inversion READ.
-  - inversion H0; subst; auto; same_instr.
+  intros code pc inp b t1 t2 H. revert t2.
+  induction H; intros t' H'; inversion H'; subst; try same_instr; try congruence.
+  all: try match goal with R: read_char _ _ _ _ = _, R': read_char _ _ _ _ = _ |- _ =>
+         rewrite R in R'; injection R' as <- <- end.
+  all: eauto using ts_refl, ts_read, ts_progress, ts_group, ts_anchor.
+  rewrite TARGETS in TARGETS0; injection TARGETS0 as <- <-.
+  destruct ORDER as [-> | ->], ORDER0 as [-> | ->]; eauto using ts_choice, ts_trans, ts_swap.
 Qed.
 
 
@@ -223,7 +194,7 @@ Proof.
       eapply jump_bc; eauto. }
     assert (TR2: tree_rep t2 c (S end1) inp b).
     { eapply IHTREE2; eauto using cons_bc, areg_bc. pike_subset. }
-    eauto using tr_choice, disjunction_fork_targets.
+    eauto using tr_choice, disjunction_fork_next.
   (* sequence *)
   - remember (Areg (Sequence r1 r2) :: cont) as seqcont.
     induction ACT; inversion Heqseqcont; subst;
@@ -253,19 +224,12 @@ Proof.
         try solve[eapply tr_jmp; eauto]; clear IHACT.
       invert_rep. inversion NFA; subst.
       2: { in_subset. }
-      destruct greedy; simpl.
-      * eapply tr_choice; [eauto|apply loop_fork_targets| |].
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
-        ** eapply IHTREE2; eauto. pike_subset.
-      * eapply tr_choice; [eauto|apply loop_fork_targets| |].
-        ** eapply IHTREE2; eauto. pike_subset.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+      eapply tr_choice; [eauto|apply loop_fork_next| | |destruct greedy; [left|right]; reflexivity].
+      * eapply tr_begin; eauto.
+        eapply tr_reset; eauto.
+        eapply IHTREE1; eauto. pike_subset.
+        repeat (econstructor; eauto).
+      * eapply IHTREE2; eauto. pike_subset.
     (* Star *)
     + destruct plus; inversion DINF. clear DINF.
       simpl in ACT.
@@ -274,19 +238,12 @@ Proof.
         try solve[eapply tr_jmp; eauto]; clear IHACT.
       invert_rep. inversion NFA; subst.
       2: { in_subset. }
-      destruct greedy; simpl.
-      * eapply tr_choice; [eauto|apply loop_fork_targets| |].
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
-        ** eapply IHTREE2; eauto. pike_subset.
-      * eapply tr_choice; [eauto|apply loop_fork_targets| |].
-        ** eapply IHTREE2; eauto. pike_subset.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+      eapply tr_choice; [eauto|apply loop_fork_next| | |destruct greedy; [left|right]; reflexivity].
+      * eapply tr_begin; eauto.
+        eapply tr_reset; eauto.
+        eapply IHTREE1; eauto. pike_subset.
+        repeat (econstructor; eauto).
+      * eapply IHTREE2; eauto. pike_subset.
     (* Unsupported *)
     + rewrite DUN in SUBSET. inversion SUBSET; subst.
       inversion H1; subst. inversion H0; subst; lia.
@@ -342,7 +299,7 @@ Lemma actions_rep_unicity:
     actions_rep a2 code pc ->
     bool_tree rer a1 inp b t1 ->
     bool_tree rer a2 inp b t2 ->
-    t1 = t2.
+    tswap t1 t2.
 Proof.
   intros. eapply actions_tree_rep in H1; eauto.
   eapply actions_tree_rep in H2; eauto.
