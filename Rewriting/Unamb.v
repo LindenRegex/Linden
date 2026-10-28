@@ -1426,46 +1426,46 @@ Section UnAmbiguity.
     eapply unamb_equivalence_chain_uni_g; try apply naive_unambiguity; auto.
   Qed.
 
-
-  (** If a regex is unambigous we can merge to an inifinity regex on the left with any quantified with the same regex**)
-  Lemma atmost_atmost_equiv_inftrue_false:
-    forall r  min1 min2 delta2 g,
-      def_groups r = [] ->
-      unamb [Areg r] -> 
-      (Sequence (Quantified true min1 +∞ r) (Quantified g min2 delta2 r))
-        ≅[rer] (Quantified true (min1 + min2) +∞ r).
+  Lemma quantified_open_greedy_left:
+    forall r delta1 g,
+      def_groups r = [] -> 
+      (Sequence (Quantified g 0 delta1 r) (Quantified true 0 +∞ r))
+        ≅[rer] (Quantified true 0 +∞ r).
   Proof.
-    intros r m1 m2 delta2 g GROUPEMPT UNAMBR.
-    eapply unamb_equivalence_chain_ind; auto.
-    destruct g. eapply unamb_equivalence_chain_uni_g; eauto.
-    split. simpl. rewrite GROUPEMPT. reflexivity.
-    destruct dir; simpl; intros i gm t1 t2 T1 T2. 
-    inversion T1; subst. simpl in CONT.
-    eapply atmost_atmost_equiv_actions_trueinf_false; eauto.
-    inversion T1; subst. simpl in CONT.
-    eapply atmost_atmost_equiv_actions_false_trueinf; eauto.
-  Qed.
-
-  (** If a regex is unambigous we can merge to an inifinity regex on the right with any quantified with the same regex**)
-  Lemma atmost_atmost_equiv_false_inftrue:
-    forall r  min1 min2 delta1 g,
-      def_groups r = [] ->
-      unamb [Areg r] -> 
-      (Sequence (Quantified g min1 delta1 r) (Quantified true min2 +∞ r))
-        ≅[rer] (Quantified true (min1 + min2) +∞ r).
-  Proof.
-    intros r m1 m2 delta1 g GROUPEMPT UNAMBR.
-    assert ((delta1 + +∞)%NoI = +∞). destruct delta1; auto.
-    rewrite <- H at 2. eapply unamb_equivalence_chain_ind; auto.
-    destruct g. eapply unamb_equivalence_chain_uni_g; eauto.
-    split. simpl. rewrite GROUPEMPT. reflexivity.
-    rewrite H.
-    destruct dir; simpl; intros i gm t1 t2 T1 T2. 
-    inversion T1; subst. simpl in CONT.
-    eapply atmost_atmost_equiv_actions_false_trueinf; eauto.
-    inversion T1; subst. simpl in CONT.
-    eapply atmost_atmost_equiv_actions_trueinf_false; eauto.
+    intros r delta1 g GROUPEMPT.
+    destruct g.
+    - (** True case (already proven) **)
+      etransitivity. eapply atmost_atmost_equiv; eauto.
+      destruct delta1; reflexivity.
+    - (** False case (list analysis) **)
+      split. simpl. rewrite GROUPEMPT. reflexivity.
+      intros i g t1 t2 T1 T2. destruct dir.
+      + inversion T1; subst; clear T1.
+        simpl in CONT. eapply atmost_atmost_equiv_actions_false_trueinf; eauto.
+      + inversion T1; subst; clear T1.
+        simpl in CONT. eapply atmost_atmost_equiv_actions_trueinf_false; eauto.
   Qed.
     
+  Lemma quantified_open_greedy_right:
+    forall r delta1 g,
+      def_groups r = [] -> 
+      (Sequence (Quantified true 0 +∞ r) (Quantified g 0 delta1 r))
+        ≅[rer] (Quantified true 0 +∞ r).
+  Proof.
+    intros r delta1 g GROUPEMPT.
+    destruct g.
+    - (** True case (already proven) **)
+      etransitivity. eapply atmost_atmost_equiv; eauto.
+      destruct delta1; reflexivity.
+    - (** False case (list analysis) **)
+      split. simpl. rewrite GROUPEMPT. reflexivity.
+      intros i g t1 t2 T1 T2. destruct dir.
+      + inversion T1; subst; clear T1.
+        simpl in CONT. eapply atmost_atmost_equiv_actions_trueinf_false; eauto.
+      + inversion T1; subst; clear T1.
+        simpl in CONT. eapply atmost_atmost_equiv_actions_false_trueinf; eauto.
+  Qed.
+
+  
 End UnAmbiguity.
 
