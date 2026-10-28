@@ -16,6 +16,11 @@ Section MemoEquiv.
   Context {params: LindenParameters}.
   Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
+  Local Notation compile := (compile rer false).
+  Local Notation compilation := (compilation rer false).
+  Local Notation nfa_rep := (nfa_rep rer false).
+  Local Notation action_rep := (action_rep rer false).
+  Local Notation actions_rep := (actions_rep rer false).
 
   (* FIXME: these are generalizations of definitions used in the PikeEquiv proof *)
   (* it could be nice to only use the generalized version everywhere *)
@@ -733,6 +738,7 @@ Section MemoEquiv.
     inversion EXEC; subst. eapply (WF pc nextgm nextb nextpc nextgm nextb nextinp); eauto.
     unfold PikeVM.epsilon_step. rewrite GET. reflexivity.
   Qed.
+
 
 
 

@@ -16,6 +16,12 @@ Section FunctionalPikeVM.
   Context {params: LindenParameters}.
   Context {VMS: VMSeen}.
   Context (rer: RegExpRecord).
+  Context (branches: bool).
+  Local Notation compile := (compile rer branches).
+  Local Notation compilation := (compilation rer branches).
+  Local Notation nfa_rep := (nfa_rep rer branches).
+  Local Notation action_rep := (action_rep rer branches).
+  Local Notation actions_rep := (actions_rep rer branches).
 (** * Functional Definition  *)
 
 (* a functional version of the small step *)
@@ -195,7 +201,7 @@ Theorem pike_vm_match_terminates:
     exists result, pike_vm_match r inp = Finished result.
 Proof.
   intros r inp SUBSET. unfold pike_vm_match, vm_fuel.
-  apply pikevm_complexity with (VMS:=VMS) (rer:=rer) (inp:=inp) in SUBSET as [result TERM].
+  apply pikevm_complexity with (VMS:=VMS) (rer:=rer) (branches:=branches) (inp:=inp) in SUBSET as [result TERM].
   exists result. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
@@ -206,7 +212,7 @@ Theorem pike_vm_match_terminates_unanchored {strs:StrSearch}:
     exists result, pike_vm_match_unanchored r inp = Finished result.
 Proof.
   intros r inp SUBSET. unfold pike_vm_match_unanchored, vm_fuel.
-  apply pikevm_complexity_unanchored with (strs:=strs) (VMS:=VMS) (rer:=rer) (inp:=inp) in SUBSET as [result TERM]; auto.
+  apply pikevm_complexity_unanchored with (strs:=strs) (VMS:=VMS) (rer:=rer) (branches:=branches) (inp:=inp) in SUBSET as [result TERM]; auto.
   exists result. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
@@ -236,13 +242,13 @@ Section Example.
 
   Example nq_bytecode := [Fork 1 10; BeginLoop; ResetRegs []; Fork 4 6; Consume (CdSingle a); Jmp 6; Fork 7 8; Jmp 9; Consume (CdSingle b); EndLoop 0; Accept].
 
-  Lemma compile_nq: compilation nq_regex = nq_bytecode.
+  Lemma compile_nq: compilation (rer_of nq_regex) false nq_regex = nq_bytecode.
   Proof. auto. Qed.
 
   Example nq_inp: input := Input [a;b] [].
 
   Lemma nullable_quant:
-    pike_vm_match (rer_of nq_regex) nq_regex nq_inp = Finished (Some (Input [] [b;a], GroupMap.empty)).
+    pike_vm_match (rer_of nq_regex) false nq_regex nq_inp = Finished (Some (Input [] [b;a], GroupMap.empty)).
   Proof. reflexivity. Qed.
 
 (** * Example from the paper - Figure 15  *)
@@ -253,7 +259,7 @@ Example paper_regex : regex := Sequence (Group 1 (Disjunction (greedy_star a_cha
 Example paper_bytecode := [SetRegOpen 1; Fork 2 8; Fork 3 7; BeginLoop; ResetRegs []; Consume (CdSingle a);
                            EndLoop 2; Jmp 9; Consume (CdSingle a); SetRegClose 1; Consume (CdSingle b); Accept].
 
-Lemma compile_paper: compilation paper_regex = paper_bytecode.
+Lemma compile_paper: compilation (rer_of paper_regex) false paper_regex = paper_bytecode.
 Proof. auto. Qed.
 
 Example paper_input := Input [a;b] [].
@@ -279,7 +285,7 @@ Example final_gm : GroupMap.t :=
   GroupMap.close 1 1 (GroupMap.open 0 1 GroupMap.empty).
 
 Lemma paper_pikevm_exec:
-  pike_vm_match (rer_of paper_regex) paper_regex paper_input = Finished (Some (Input [] [b;a], final_gm)).
+  pike_vm_match (rer_of paper_regex) false paper_regex paper_input = Finished (Some (Input [] [b;a], final_gm)).
 Proof. reflexivity. Qed.
 
 End Example.

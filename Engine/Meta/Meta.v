@@ -79,6 +79,8 @@ Record meta_config := {
   (* expressed in a somewhat arbitrary unit, attemps to be the unit of a pointer size *)
   (* if not specified, there is no limit *)
   memory_limit : option nat;
+  (* whether the PikeVM bytecode uses Branch *)
+  pike_branches : bool;
 }.
 
 (* MemoBT supports lazy_prefix *)
@@ -100,14 +102,14 @@ Definition pick_meta_anchored (config:meta_config) (r:regex) (inp:input) : Ancho
   if can_use_memobt config r inp then
     @MemoBTAnchoredEngine _ rer
   else
-    @PikeVMAnchoredEngine VMSlist _ rer.
+    @PikeVMAnchoredEngine VMSlist _ rer config.(pike_branches).
 
 (* a choice of an unanchored engine *)
 Definition pick_meta_unanchored (config:meta_config) (r:regex) (inp:input) : UnanchoredEngine rer :=
   if can_use_memobt config r inp then
     @SearchAccOnceEngine _ rer BruteForceStrSearch (@UnanchorEngine _ rer (@MemoBTAnchoredEngine _ rer) lazy_prefix_supported_memobt)
   else
-    @SearchAccOnceEngine _ rer BruteForceStrSearch (@PikeVMUnanchoredEngine VMSlist _ rer BruteForceStrSearch).
+    @SearchAccOnceEngine _ rer BruteForceStrSearch (@PikeVMUnanchoredEngine VMSlist _ rer config.(pike_branches) BruteForceStrSearch).
 
 Lemma pick_meta_anchored_supported (config:meta_config):
   forall r inp,

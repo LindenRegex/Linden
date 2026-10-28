@@ -72,6 +72,9 @@ Section MemoBT.
                 | CannotExit => Dead
                 | CanExit => Explore [(next, gm, b, i)]
                 end
+            | Branch cd l1 l2 =>
+                Explore [(match check_read rer cd i forward with
+                          | CanRead => l1 | CannotRead => l2 end, gm, b, i)]
             | KillThread => Dead
             end
         end

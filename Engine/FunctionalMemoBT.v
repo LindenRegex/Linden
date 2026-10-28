@@ -16,6 +16,11 @@ Section FunctionMemoBT.
   Context {params: LindenParameters}.
   Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
+  Local Notation compile := (compile rer false).
+  Local Notation compilation := (compilation rer false).
+  Local Notation nfa_rep := (nfa_rep rer false).
+  Local Notation action_rep := (action_rep rer false).
+  Local Notation actions_rep := (actions_rep rer false).
 (** * Functional Definition  *)
 
 (* a functional version of the small step *)

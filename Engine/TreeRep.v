@@ -12,6 +12,12 @@ From Warblre Require Import Base RegExpRecord.
 Section TreeRep.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
+  Context (branches: bool).
+  Local Notation compile := (compile rer branches).
+  Local Notation compilation := (compilation rer branches).
+  Local Notation nfa_rep := (nfa_rep rer branches).
+  Local Notation action_rep := (action_rep rer branches).
+  Local Notation actions_rep := (actions_rep rer branches).
 (** * Tree Rep Predicate  *)
 (* A predicate showing that a tree is represented at a given point in the code *)
 (* For a given input and boolean *)
@@ -35,6 +41,12 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
 | tr_choice:
   forall code pc pc1 pc2 inp b t1 t2
     (FORK: get_pc code pc = Some (Fork pc1 pc2))
+    (TR1: tree_rep t1 code pc1 inp b)
+    (TR2: tree_rep t2 code pc2 inp b),
+    tree_rep (Choice t1 t2) code pc inp b
+| tr_branch:
+  forall code pc pc1 pc2 inp b t1 t2 cd
+    (BRANCH: get_pc code pc = Some (Branch cd pc1 pc2))
     (TR1: tree_rep t1 code pc1 inp b)
     (TR2: tree_rep t2 code pc2 inp b),
     tree_rep (Choice t1 t2) code pc inp b
@@ -111,6 +123,10 @@ Proof.
     specialize (IHtree_rep _ TR) as EQT.
     subst. split; auto.
   - inversion H0; subst; auto; same_instr.
+  - inversion H1; subst; auto; same_instr.
+    specialize (IHtree_rep1 _ TR1) as EQT1.
+    specialize (IHtree_rep2 _ TR2) as EQT2.
+    subst. split; auto.
   - inversion H1; subst; auto; same_instr.
     specialize (IHtree_rep1 _ TR1) as EQT1.
     specialize (IHtree_rep2 _ TR2) as EQT2.
@@ -208,12 +224,14 @@ Proof.
       try solve[eapply tr_jmp; eauto]; clear IHACT.
     invert_rep. inversion NFA; subst.
     2: { in_subset. }
-    eapply tr_choice; eauto.
-    + eapply IHTREE1. pike_subset.
+    assert (TR1: tree_rep t1 c (S pcstart) inp b).
+    { eapply IHTREE1. pike_subset.
       eapply cons_bc with (pcmid:=end1); try constructor; eauto.
-      eapply jump_bc; eauto.
-    + eapply IHTREE2; eauto. pike_subset.
-      repeat (econstructor; eauto).
+      eapply jump_bc; eauto. }
+    assert (TR2: tree_rep t2 c (S end1) inp b).
+    { eapply IHTREE2; eauto using cons_bc, areg_bc. pike_subset. }
+    destruct (disjunction_fork_cases rer branches r1 r2 (S pcstart) (S end1)) as [E|[cd E]];
+      rewrite E in FORK; eauto using tr_choice, tr_branch.
   (* sequence *)
   - remember (Areg (Sequence r1 r2) :: cont) as seqcont.
     induction ACT; inversion Heqseqcont; subst;

@@ -43,3 +43,18 @@ This includes:
    ```
 
 4. Build all proofs with `dune build`.
+
+## Branch instructions (development branch)
+
+`NFA.compile rer branches` takes a flag. When `branches` is true, a disjunction
+whose two alternatives must start with distinct characters (compared after
+canonicalization) compiles to `Branch` instead of `Fork`: `Branch` peeks at the
+current input without consuming it and continues on the only alternative that
+can match; a mismatch, including end of input, selects the second one. The lead
+analysis follows groups and the left side of a sequence, and conservatively
+declines other forms. When `branches` is false, the bytecode is unchanged.
+
+The PikeVM theorems hold for both settings. In the PikeTree semantics a step may
+drop new trees that have no result (`keeps`), and `PikeEquiv.lead_dead` shows
+that the alternative a `Branch` discards is such a tree. The MemoBT engine is
+used with `branches` false.

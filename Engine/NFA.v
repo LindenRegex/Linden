@@ -5,7 +5,7 @@ From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree.
 From Linden Require Import Semantics PikeSubset.
 From Linden Require Import Parameters.
-From Warblre Require Import Numeric.
+From Warblre Require Import Base Numeric RegExpRecord.
 
 Section NFA.
   Context {params: LindenParameters}.
@@ -29,6 +29,9 @@ Section NFA.
   | BeginLoop: bytecode
   | EndLoop: label -> bytecode    (* also contains the backedge instead of adding a jump *)
   | KillThread: bytecode         (* for unsupported features *)
+  (* Peek without consuming: matching descriptor selects the first target;
+     a mismatch (including end of input) selects the second. *)
+  | Branch: char_descr -> label -> label -> bytecode
   .
 
   Definition code : Type := list bytecode.
@@ -102,7 +105,7 @@ Section NFA.
     | Consume _ | CheckAnchor _ | SetRegOpen _ | SetRegClose _ | ResetRegs _ | BeginLoop => [S pc]
     | Accept | KillThread => []
     | Jmp l | EndLoop l => [l]
-    | Fork l1 l2 => [l1; l2]
+    | Fork l1 l2 | Branch _ l1 l2 => [l1; l2]
     end.
 
   (** * NFA Compilation  *)
@@ -112,15 +115,37 @@ Section NFA.
     then Fork l1 l2
     else Fork l2 l1.
 
+  (** [branches] enables [Branch]: a disjunction whose alternatives must start
+      with distinct characters peeks at the input instead of forking. *)
+  Context (rer: RegExpRecord) (branches: bool).
+
+  (* Only a mandatory leading singleton qualifies. We deliberately do not look
+     through nullable prefixes, alternations, quantifiers, or character classes. *)
+  Fixpoint lead_character (r: regex) : option Character :=
+    match r with
+    | Regex.Character (CdSingle c) => Some c
+    | Sequence r1 _ => lead_character r1
+    | Group _ r1 => lead_character r1
+    | _ => None
+    end.
+
+  Definition disjunction_fork (r1 r2: regex) (l1 l2: label) : bytecode :=
+    match branches, lead_character r1, lead_character r2 with
+    | true, Some c1, Some c2 =>
+        if Character.canonicalize rer c1 == Character.canonicalize rer c2
+        then Fork l1 l2 else Branch (CdSingle c1) l1 l2
+    | _, _, _ => Fork l1 l2
+    end.
+
   (* also returns the next fresh label *)
   Fixpoint compile (r:regex) (fresh:label) : code * label :=
     match r with
     | Epsilon => ([], fresh)
-    | Character cd => ([Consume cd], S fresh)
+    | Regex.Character cd => ([Consume cd], S fresh)
     | Disjunction r1 r2 =>
         let (bc1, f1) := compile r1 (S fresh) in
         let (bc2, f2) := compile r2 (S f1) in
-        ([Fork (S fresh) (S f1)] ++ bc1 ++ [Jmp f2] ++ bc2, f2)
+        ([disjunction_fork r1 r2 (S fresh) (S f1)] ++ bc1 ++ [Jmp f2] ++ bc2, f2)
     | Sequence r1 r2 =>
         let (bc1, f1) := compile r1 fresh in
         let (bc2, f2) := compile r2 f1 in
@@ -156,10 +181,10 @@ Section NFA.
   | nfa_rep_char:
     forall c cd lbl
       (CONSUME: get_pc c lbl = Some (Consume cd)),
-      nfa_rep (Character cd) c lbl (S lbl)
+      nfa_rep (Regex.Character cd) c lbl (S lbl)
   | nfa_rep_disj:
     forall c r1 r2 start end1 end2
-      (FORK: get_pc c start = Some (Fork (S start) (S end1)))
+      (FORK: get_pc c start = Some (disjunction_fork r1 r2 (S start) (S end1)))
       (NFA1: nfa_rep r1 c (S start) end1)
       (JMP: get_pc c end1 = Some (Jmp end2))
       (NFA2: nfa_rep r2 c (S end1) end2),
@@ -252,18 +277,18 @@ Section NFA.
     - inversion H. destruct (compile r1 (S start)) as [bc1 end1] eqn:COMP1. destruct (compile r2 (S end1)) as [bc2 end2] eqn:COMP2.
       inversion H2. subst. apply nfa_rep_disj with (end1:=end1).
       + rewrite get_first. simpl. auto.
-      + apply IHr1 with (prev:=prev ++ [Fork (S (length prev)) (S end1)]) in COMP1.
+      + apply IHr1 with (prev:=prev ++ [disjunction_fork r1 r2 (S (length prev)) (S end1)]) in COMP1.
         2: { rewrite length_app. simpl. lia. }
-        replace (prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
-          (((prev ++ [Fork (S (length prev)) (S end1)]) ++ bc1) ++ (Jmp endl :: bc2)).
+        replace (prev ++ disjunction_fork r1 r2 (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
+          (((prev ++ [disjunction_fork r1 r2 (S (length prev)) (S end1)]) ++ bc1) ++ (Jmp endl :: bc2)).
         2:{ rewrite <- app_assoc. rewrite <- app_assoc. auto. }
         apply nfa_rep_extend. auto.
       + apply fresh_correct in COMP1. rewrite <- COMP1.
         replace (S (length prev) + length bc1) with (length prev + (S (length bc1))) by lia.
         rewrite get_prefix. rewrite cons_app. rewrite app_assoc. apply get_first.
-      + apply IHr2 with (prev:= prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) in COMP2.
-        * replace (prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
-            ((prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) ++ bc2).
+      + apply IHr2 with (prev:= prev ++ disjunction_fork r1 r2 (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) in COMP2.
+        * replace (prev ++ disjunction_fork r1 r2 (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
+            ((prev ++ disjunction_fork r1 r2 (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) ++ bc2).
           2: { rewrite <- app_assoc. simpl. apply f_equal. apply f_equal. rewrite <- app_assoc. auto. }
           auto.
         * apply fresh_correct in COMP1. rewrite <- COMP1. simpl.
@@ -402,6 +427,23 @@ Section NFA.
     | _ => false
     end.
 
+  Lemma disjunction_fork_cases:
+    forall r1 r2 l1 l2,
+      disjunction_fork r1 r2 l1 l2 = Fork l1 l2 \/
+      exists cd, disjunction_fork r1 r2 l1 l2 = Branch cd l1 l2.
+  Proof.
+    intros. unfold disjunction_fork.
+    destruct branches, (lead_character r1), (lead_character r2); try destruct (_ == _); eauto.
+  Qed.
+
+  Lemma disjunction_fork_no_stutter:
+    forall r1 r2 l1 l2 pc code,
+      get_pc code pc = Some (disjunction_fork r1 r2 l1 l2) -> stutters pc code = false.
+  Proof.
+    intros. unfold stutters. rewrite H. unfold disjunction_fork.
+    destruct branches, (lead_character r1), (lead_character r2); try destruct (_ == _); auto.
+  Qed.
+
   Lemma does_stutter:
     forall pc code, stutters pc code = true ->
               get_pc code pc = Some BeginLoop \/ (exists next, get_pc code pc = Some (Jmp next)) \/ get_pc code pc = Some KillThread.
@@ -439,6 +481,8 @@ Ltac no_stutter :=
 
 Ltac stutter :=
   match goal with
+  | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some (disjunction_fork _ _ _ _ _ _) |- _ ] =>
+      rewrite (disjunction_fork_no_stutter _ _ _ _ _ _ _ _ H1) in H; discriminate
   | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some _ |- _ ] =>
       try solve[unfold stutters in H; rewrite H1 in H; inversion H]
   end.
@@ -452,19 +496,19 @@ Ltac locate_pc pc GET :=
 
 Ltac invert_rep :=
    match goal with
-   | [ H : actions_rep (Areg _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : actions_rep (Aclose _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : actions_rep (Acheck _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : actions_rep [] _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : action_rep (Areg _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : action_rep (Aclose _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : action_rep (Acheck _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Epsilon) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Regex.Character _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Disjunction _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Sequence _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Quantified _ _ _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Group _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Anchor _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : actions_rep _ _ (Areg _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : actions_rep _ _ (Aclose _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : actions_rep _ _ (Acheck _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : actions_rep _ _ [] _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : action_rep _ _ (Areg _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : action_rep _ _ (Aclose _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : action_rep _ _ (Acheck _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Epsilon) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Regex.Character _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Disjunction _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Sequence _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Quantified _ _ _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Group _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Anchor _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
    | _ => try no_stutter
    end.

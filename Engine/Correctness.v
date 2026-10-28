@@ -41,6 +41,12 @@ Section Correctness.
   Context {params: LindenParameters}.
   Context {VMS: VMSeen}.
   Context (rer: RegExpRecord).
+  Context (branches: bool).
+  Local Notation compile := (compile rer branches).
+  Local Notation compilation := (compilation rer branches).
+  Local Notation nfa_rep := (nfa_rep rer branches).
+  Local Notation action_rep := (action_rep rer branches).
+  Local Notation actions_rep := (actions_rep rer branches).
 
 Definition trc_pike_tree := @trc pike_tree_state pike_tree_step.
 Definition trc_pike_vm (c:code) := @trc pike_vm_state (pike_vm_step rer c).
@@ -49,9 +55,9 @@ Definition trc_pike_vm (c:code) := @trc pike_vm_state (pike_vm_step rer c).
 Lemma vm_to_tree:
   forall svm1 st1 svm2 code
     (STWF: stutter_wf rer code)
-    (INVARIANT: pike_inv rer code st1 svm1)
+    (INVARIANT: pike_inv rer branches code st1 svm1)
     (TRCVM: trc_pike_vm code svm1 svm2),
-    exists st2, trc_pike_tree st1 st2 /\ pike_inv rer code st2 svm2.
+    exists st2, trc_pike_tree st1 st2 /\ pike_inv rer branches code st2 svm2.
 Proof.
   intros svm1 st1 svm2 code STWF INVARIANT TRCVM.
   generalize dependent st1. induction TRCVM; intros.
@@ -73,7 +79,7 @@ Theorem pike_vm_to_pike_tree:
     trc_pike_tree (pike_tree_initial_state tree inp) (PTS_final result).
 Proof.
   intros r inp tree result SUBSET TREE TRCVM.
-  pose proof (initial_pike_inv rer r inp tree (compilation r) TREE (@eq_refl _ _) SUBSET) as INIT.
+  pose proof (initial_pike_inv rer branches r inp tree (compilation r) TREE (@eq_refl _ _) SUBSET) as INIT.
   eapply vm_to_tree in TRCVM as [vmfinal [TRCTREE INV]]; eauto.
   - inversion INV; subst. auto.
   - eapply compilation_stutter_wf; eauto.
@@ -89,7 +95,7 @@ Theorem pike_vm_to_pike_tree_unanchored {strs:StrSearch}:
     trc_pike_tree (pike_tree_initial_state_unanchored tree future inp) (PTS_final result).
 Proof.
   intros r inp tree result future_tree SUBSET TREE TRCVM NEXTFUTURE.
-  pose proof (initial_pike_inv_unanchored rer _ _ _ _ _ TREE (@eq_refl _ _) SUBSET NEXTFUTURE) as [future [M INIT]].
+  pose proof (initial_pike_inv_unanchored rer branches _ _ _ _ _ TREE (@eq_refl _ _) SUBSET NEXTFUTURE) as [future [M INIT]].
   eapply vm_to_tree in TRCVM as [vmfinal [TRCTREE INV]]; eauto.
   - inversion INV; subst. eauto.
   - eapply compilation_stutter_wf; eauto.
@@ -227,6 +233,11 @@ Section MemoBTCorrectness.
   Context {params: LindenParameters}.
   Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
+  Local Notation compile := (compile rer false).
+  Local Notation compilation := (compilation rer false).
+  Local Notation nfa_rep := (nfa_rep rer false).
+  Local Notation action_rep := (action_rep rer false).
+  Local Notation actions_rep := (actions_rep rer false).
 
 Definition trc_memo_tree := @trc mtree_state memotree_step.
 Definition trc_memo_bt (c:code) := @trc mbt_state (memobt_step rer c).
