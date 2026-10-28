@@ -32,6 +32,11 @@ Section NFA.
   (* Peek without consuming: matching descriptor selects the first target;
      a mismatch (including end of input) selects the second. *)
   | Branch: char_descr -> label -> label -> bytecode
+  (* Loop entry that peeks without consuming: the body (first label) is only
+     entered when the descriptor matches; the exit (second label) is always
+     kept, after the body for [LoopBranch] and before it for [LoopBranchLazy]. *)
+  | LoopBranch: char_descr -> label -> label -> bytecode
+  | LoopBranchLazy: char_descr -> label -> label -> bytecode
   .
 
   Definition code : Type := list bytecode.
@@ -105,7 +110,16 @@ Section NFA.
     | Consume _ | CheckAnchor _ | SetRegOpen _ | SetRegClose _ | ResetRegs _ | BeginLoop => [S pc]
     | Accept | KillThread => []
     | Jmp l | EndLoop l => [l]
-    | Fork l1 l2 | Branch _ l1 l2 => [l1; l2]
+    | Fork l1 l2 | Branch _ l1 l2 | LoopBranch _ l1 l2 | LoopBranchLazy _ l1 l2 => [l1; l2]
+    end.
+
+  (* the two threads of a forking instruction, in priority order *)
+  Definition fork_targets (b:bytecode) : option (label * label) :=
+    match b with
+    | Fork l1 l2 | Branch _ l1 l2 => Some (l1, l2)
+    | LoopBranch _ body exit => Some (body, exit)
+    | LoopBranchLazy _ body exit => Some (exit, body)
+    | _ => None
     end.
 
   (** * NFA Compilation  *)
@@ -115,26 +129,33 @@ Section NFA.
     then Fork l1 l2
     else Fork l2 l1.
 
-  (** [branches] enables [Branch]: a disjunction whose alternatives must start
-      with distinct characters peeks at the input instead of forking. *)
+  (** [branches] enables [Branch] and [LoopBranch]: a disjunction whose
+      alternatives must start with distinct characters, or a loop whose body
+      must start with a known character, peeks at the input instead of forking. *)
   Context (rer: RegExpRecord) (branches: bool).
 
-  (* Only a mandatory leading singleton qualifies. We deliberately do not look
-     through nullable prefixes, alternations, quantifiers, or character classes. *)
-  Fixpoint lead_character (r: regex) : option Character :=
+  (* Only a mandatory leading character qualifies. We deliberately do not look
+     through nullable prefixes, alternations or quantifiers. *)
+  Fixpoint lead_descr (r: regex) : option char_descr :=
     match r with
-    | Regex.Character (CdSingle c) => Some c
-    | Sequence r1 _ => lead_character r1
-    | Group _ r1 => lead_character r1
+    | Regex.Character cd => Some cd
+    | Sequence r1 _ => lead_descr r1
+    | Group _ r1 => lead_descr r1
     | _ => None
     end.
 
   Definition disjunction_fork (r1 r2: regex) (l1 l2: label) : bytecode :=
-    match branches, lead_character r1, lead_character r2 with
-    | true, Some c1, Some c2 =>
+    match branches, lead_descr r1, lead_descr r2 with
+    | true, Some (CdSingle c1), Some (CdSingle c2) =>
         if Character.canonicalize rer c1 == Character.canonicalize rer c2
         then Fork l1 l2 else Branch (CdSingle c1) l1 l2
     | _, _, _ => Fork l1 l2
+    end.
+
+  Definition loop_fork (greedy: bool) (r1: regex) (body exit: label) : bytecode :=
+    match branches, lead_descr r1 with
+    | true, Some cd => if greedy then LoopBranch cd body exit else LoopBranchLazy cd body exit
+    | _, _ => greedy_fork greedy body exit
     end.
 
   (* also returns the next fresh label *)
@@ -153,10 +174,10 @@ Section NFA.
     | Quantified greedy 0 (NoI.N 0) r1 => ([], fresh)
     | Quantified greedy 0 (NoI.N 1) r1 =>
         let (bc1, f1) := compile r1 (S (S (S fresh))) in
-        ([greedy_fork greedy (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1)
+        ([loop_fork greedy r1 (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1)
     | Quantified greedy 0 (NoI.Inf) r1 =>
         let (bc1, f1) := compile r1 (S (S (S fresh))) in
-        ([greedy_fork greedy (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1)
+        ([loop_fork greedy r1 (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1)
     | Group gid r1 =>
         let (bc1, f1) := compile r1 (S fresh) in
         ([SetRegOpen gid] ++ bc1 ++ [SetRegClose gid], S f1)
@@ -200,7 +221,7 @@ Section NFA.
       nfa_rep (Quantified greedy 0 (NoI.N 0) r1) c lbl lbl
   | nfa_rep_qmark:
     forall c r1 greedy start end1
-      (FORK: get_pc c start = Some (greedy_fork greedy (S start) (S end1)))
+      (FORK: get_pc c start = Some (loop_fork greedy r1 (S start) (S end1)))
       (BEGIN: get_pc c (S start) = Some (BeginLoop))
       (RESET: get_pc c (S (S start)) = Some (ResetRegs (def_groups r1)))
       (NFA1: nfa_rep r1 c (S (S (S start))) end1)
@@ -208,7 +229,7 @@ Section NFA.
       nfa_rep (Quantified greedy 0 (NoI.N 1) r1) c start (S end1)
   | nfa_rep_star:
     forall c r1 greedy start end1
-      (FORK: get_pc c start = Some (greedy_fork greedy (S start) (S end1)))
+      (FORK: get_pc c start = Some (loop_fork greedy r1 (S start) (S end1)))
       (BEGIN: get_pc c (S start) = Some (BeginLoop))
       (RESET: get_pc c (S (S start)) = Some (ResetRegs (def_groups r1)))
       (NFA1: nfa_rep r1 c (S (S (S start))) end1)
@@ -312,15 +333,15 @@ Section NFA.
         * rewrite get_first. simpl. auto.
         * rewrite get_second. simpl. auto.
         * rewrite get_third. simpl. auto.
-        * apply IHr with (prev:=prev ++ [greedy_fork greedy (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
+        * apply IHr with (prev:=prev ++ [loop_fork greedy r (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
           ** rewrite <- app_assoc in COMP1. simpl in COMP1.
-             replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
-               ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
+             replace (prev ++ loop_fork greedy r (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
+               ((prev ++ loop_fork greedy r (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
              2: { rewrite <- app_assoc. auto. }
              apply nfa_rep_extend. auto.
           ** rewrite length_app. simpl. lia.
-        * replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
-            ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
+        * replace (prev ++ loop_fork greedy r (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
+            ((prev ++ loop_fork greedy r (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
           2: { rewrite <- app_assoc. auto. }
           apply fresh_correct in COMP1. subst. apply get_first_0.
           simpl. rewrite length_app. simpl. lia.
@@ -329,15 +350,15 @@ Section NFA.
         * rewrite get_first. simpl. auto.
         * rewrite get_second. simpl. auto.
         * rewrite get_third. simpl. auto.
-        * apply IHr with (prev:=prev ++ [greedy_fork greedy (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
+        * apply IHr with (prev:=prev ++ [loop_fork greedy r (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
           ** rewrite <- app_assoc in COMP1. simpl in COMP1.
-             replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
-               ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
+             replace (prev ++ loop_fork greedy r (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
+               ((prev ++ loop_fork greedy r (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
              2: { rewrite <- app_assoc. auto. }
              apply nfa_rep_extend. auto.
           ** rewrite length_app. simpl. lia.
-        * replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
-            ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
+        * replace (prev ++ loop_fork greedy r (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
+            ((prev ++ loop_fork greedy r (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
           2: { rewrite <- app_assoc. auto. }
           apply fresh_correct in COMP1. subst. apply get_first_0.
           simpl. rewrite length_app. simpl. lia.
@@ -433,15 +454,40 @@ Section NFA.
       exists cd, disjunction_fork r1 r2 l1 l2 = Branch cd l1 l2.
   Proof.
     intros. unfold disjunction_fork.
-    destruct branches, (lead_character r1), (lead_character r2); try destruct (_ == _); eauto.
+    destruct branches, (lead_descr r1) as [[]|], (lead_descr r2) as [[]|]; try destruct (_ == _); eauto.
   Qed.
+
+  Lemma loop_fork_cases:
+    forall greedy r1 l1 l2,
+      loop_fork greedy r1 l1 l2 = greedy_fork greedy l1 l2 \/
+      exists cd, lead_descr r1 = Some cd /\ loop_fork greedy r1 l1 l2 =
+        if greedy then LoopBranch cd l1 l2 else LoopBranchLazy cd l1 l2.
+  Proof. intros. unfold loop_fork. destruct branches, (lead_descr r1); eauto. Qed.
+
+  Lemma disjunction_fork_targets:
+    forall r1 r2 l1 l2, fork_targets (disjunction_fork r1 r2 l1 l2) = Some (l1, l2).
+  Proof. intros. destruct (disjunction_fork_cases r1 r2 l1 l2) as [->|[? ->]]; auto. Qed.
+
+  Lemma loop_fork_targets:
+    forall greedy r1 l1 l2,
+      fork_targets (loop_fork greedy r1 l1 l2) =
+        Some (if greedy then l1 else l2, if greedy then l2 else l1).
+  Proof. intros. destruct (loop_fork_cases greedy r1 l1 l2) as [->|[? [_ ->]]]; destruct greedy; auto. Qed.
 
   Lemma disjunction_fork_no_stutter:
     forall r1 r2 l1 l2 pc code,
       get_pc code pc = Some (disjunction_fork r1 r2 l1 l2) -> stutters pc code = false.
   Proof.
     intros. unfold stutters. rewrite H. unfold disjunction_fork.
-    destruct branches, (lead_character r1), (lead_character r2); try destruct (_ == _); auto.
+    destruct branches, (lead_descr r1) as [[]|], (lead_descr r2) as [[]|]; try destruct (_ == _); auto.
+  Qed.
+
+  Lemma loop_fork_no_stutter:
+    forall greedy r1 l1 l2 pc code,
+      get_pc code pc = Some (loop_fork greedy r1 l1 l2) -> stutters pc code = false.
+  Proof.
+    intros. unfold stutters. rewrite H. unfold loop_fork, greedy_fork.
+    destruct branches, (lead_descr r1), greedy; auto.
   Qed.
 
   Lemma does_stutter:
@@ -483,6 +529,8 @@ Ltac stutter :=
   match goal with
   | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some (disjunction_fork _ _ _ _ _ _) |- _ ] =>
       rewrite (disjunction_fork_no_stutter _ _ _ _ _ _ _ _ H1) in H; discriminate
+  | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some (loop_fork _ _ _ _ _) |- _ ] =>
+      rewrite (loop_fork_no_stutter _ _ _ _ _ _ _ H1) in H; discriminate
   | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some _ |- _ ] =>
       try solve[unfold stutters in H; rewrite H1 in H; inversion H]
   end.

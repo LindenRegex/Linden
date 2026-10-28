@@ -290,14 +290,14 @@ Qed.
 
 (* a regex whose mandatory first character cannot be read has no result *)
 Lemma lead_dead:
-  forall r c cont inp b t gm
-    (LEAD: lead_character r = Some c)
-    (READ: check_read rer (CdSingle c) inp forward = CannotRead)
+  forall r cd cont inp b t gm
+    (LEAD: lead_descr r = Some cd)
+    (READ: check_read rer cd inp forward = CannotRead)
     (TREE: bool_tree rer (Areg r :: cont) inp b t),
     tree_res t gm inp forward = None.
 Proof.
   induction r; intros; simpl in LEAD; try discriminate; inversion TREE; subst; simpl; eauto.
-  destruct cd; inversion LEAD; subst.
+  inversion LEAD; subst.
   destruct inp as [[|h n] p]; simpl in *; try discriminate. destruct char_match; discriminate.
 Qed.
 
@@ -310,6 +310,28 @@ Proof.
   destruct (char_match rer c (CdSingle c1)) eqn:H1; try discriminate.
   destruct (char_match rer c (CdSingle c2)) eqn:H2; auto.
   apply single_match in H1. apply single_match in H2. congruence.
+Qed.
+
+(* a loop fork keeps both threads, or only the exit when the body cannot start *)
+Lemma loop_fork_step:
+  forall greedy r1 code pc body exit gm b inp tbody texit
+    (FORK: get_pc code pc = Some (loop_fork branches greedy r1 body exit))
+    (BOTH: list_tree_thread code inp
+       (if greedy then [(tbody,gm);(texit,gm)] else [(texit,gm);(tbody,gm)])
+       (if greedy then [(body,gm,b);(exit,gm,b)] else [(exit,gm,b);(body,gm,b)]))
+    (DEAD: forall cd, lead_descr r1 = Some cd -> check_read rer cd inp forward = CannotRead ->
+       tree_res tbody gm inp forward = None),
+  exists threadactive kept,
+    epsilon_step rer (pc,gm,b) code inp = EpsActive threadactive /\
+      keeps inp (if greedy then [(tbody,gm);(texit,gm)] else [(texit,gm);(tbody,gm)]) kept /\
+      list_tree_thread code inp kept threadactive.
+Proof.
+  intros. unfold epsilon_step. rewrite FORK.
+  edestruct loop_fork_cases as [E|[cd [L E]]]; rewrite E; destruct greedy; simpl in *;
+    try destruct (check_read _ _ _ _) eqn:READ; try solve [eexists _, _; eauto using keeps_refl].
+  all: inversion BOTH as [|? ? ? ? ? ? ONE TT1]; inversion ONE as [|? ? ? ? ? ? NIL TT2]; subst.
+  all: exists [(exit,gm,b)], [(texit,gm)];
+    repeat split; eauto using ltt_cons, ltt_nil, keep_drop, keep_cons, keep_nil.
 Qed.
 
 Theorem generate_choice:
@@ -340,8 +362,8 @@ Proof.
         ** constructor; auto.
         ** eapply jump_bc; eauto. }
     unfold epsilon_step. rewrite FORK. unfold disjunction_fork.
-    destruct branches, (lead_character r1) eqn:L1, (lead_character r2) eqn:L2; try destruct (_ == _) eqn:NE;
-      try solve [eexists _, _; eauto using keeps_refl].
+    destruct branches, (lead_descr r1) as [[]|] eqn:L1, (lead_descr r2) as [[]|] eqn:L2;
+      try destruct (_ == _) eqn:NE; try solve [eexists _, _; eauto using keeps_refl].
     (* a Branch keeps the only alternative whose first character can be read *)
     apply EqDec.inversion_false in NE.
     inversion BOTH as [|? ? ? ? ? ? ONE TT1]; inversion ONE as [|? ? ? ? ? ? NIL TT2]; subst.
@@ -359,7 +381,7 @@ Proof.
         destruct plus; inversion D1. subst.
         repeat invert_rep. destruct greedy; inversion CHOICE; subst.
         +                           (* greedy qmark *)
-          simpl. rewrite FORK. exists [(S pc, gm, b); (S end1, gm, b)]; eexists. split; [|split; [repeat constructor|]]; auto.
+          eapply loop_fork_step with (greedy := true); [eauto| |intros; simpl; eapply lead_dead; eauto].
           econstructor.
           * econstructor. constructor.
             apply tt_eq with (actions:=cont); auto. pike_subset.
@@ -372,7 +394,7 @@ Proof.
             { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
             repeat (econstructor; eauto).
         +                           (* lazy qmark *)
-          simpl. rewrite FORK. exists [(S end1, gm, b); (S pc, gm, b)]; eexists. split; [|split; [repeat constructor|]]; auto.
+          eapply loop_fork_step with (greedy := false); [eauto| |intros; simpl; eapply lead_dead; eauto].
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
             replace (S (S pc)) with (S pc + 1) in RESET by lia.
@@ -388,7 +410,7 @@ Proof.
         destruct plus; inversion DINF.
         repeat invert_rep. destruct greedy; inversion CHOICE; subst.
         +                           (* greedy star *)
-          simpl. rewrite FORK. exists [(S pc, gm, b); (S end1, gm, b)]; eexists. split; [|split; [repeat constructor|]]; auto.
+          eapply loop_fork_step with (greedy := true); [eauto| |intros; simpl; eapply lead_dead; eauto].
           econstructor.
           * econstructor. constructor.
             apply tt_eq with (actions:=cont); auto. pike_subset.
@@ -402,7 +424,7 @@ Proof.
             repeat (econstructor; eauto).
             replace (S (S pc)) with (S pc + 1) by lia. auto.
         +                           (* lazy star *)
-          simpl. rewrite FORK. exists [(S end1, gm, b); (S pc, gm, b)]; eexists. split; [|split; [repeat constructor|]]; auto.
+          eapply loop_fork_step with (greedy := false); [eauto| |intros; simpl; eapply lead_dead; eauto].
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
             replace (S (S pc)) with (S pc + 1) in RESET by lia.
@@ -685,6 +707,8 @@ Inductive start_rep: bytecode -> Prop :=
 | start_jmp: forall lbl, start_rep (Jmp lbl)
 | start_fork: forall l1 l2, start_rep (Fork l1 l2)
 | start_branch: forall cd l1 l2, start_rep (Branch cd l1 l2)
+| start_loopbranch: forall cd l1 l2, start_rep (LoopBranch cd l1 l2)
+| start_loopbranchlazy: forall cd l1 l2, start_rep (LoopBranchLazy cd l1 l2)
 | start_open: forall gid, start_rep (SetRegOpen gid)
 | start_close: forall gid, start_rep (SetRegClose gid)
 | start_end: forall lbl, start_rep (EndLoop lbl)
@@ -699,15 +723,13 @@ Proof.
   intros r code pc pcend H. induction H;
     try solve[left; simpl; auto];
     try solve[right; eexists; split; eauto; constructor];
-    try solve[right; edestruct disjunction_fork_cases as [E|[cd E]]; rewrite E in FORK;
-      eexists; split; eauto; constructor].
+    try solve[right; (edestruct disjunction_fork_cases as [E|[? E]] + edestruct loop_fork_cases as [E|[? [_ E]]]);
+      rewrite E in FORK; try destruct greedy; eexists; split; eauto; constructor].
   - destruct IHnfa_rep1 as [SAME1 | [i [START1 REP1]]]; subst.
     2: { right. eexists. split; eauto. }
     destruct IHnfa_rep2 as [SAME2 | [i [START2 REP2]]]; subst.
     + left. auto.
     + right. eexists. split; eauto.
-  - right. destruct greedy; inversion FORK; eexists; split; eauto; constructor.
-  - right. destruct greedy; inversion FORK; eexists; split; eauto; constructor.
 Qed.
 
 Lemma action_rep_start:
@@ -987,7 +1009,7 @@ Proof.
     try (apply nfa_rep_incr in REP2 as INC2);
     locate_pc pc GET;
     try solve [lia | discriminate | injection J; lia
-      | unfold disjunction_fork, greedy_fork in J;
+      | unfold disjunction_fork, loop_fork, greedy_fork in J;
         repeat match type of J with context [match ?x with _ => _ end] => destruct x end; discriminate];
     subst j;
     first [eapply IHREP; eauto; lia

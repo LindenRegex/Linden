@@ -39,14 +39,9 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
     (TR: tree_rep t code (S pc) inp CannotExit),
     tree_rep t code pc inp b
 | tr_choice:
-  forall code pc pc1 pc2 inp b t1 t2
-    (FORK: get_pc code pc = Some (Fork pc1 pc2))
-    (TR1: tree_rep t1 code pc1 inp b)
-    (TR2: tree_rep t2 code pc2 inp b),
-    tree_rep (Choice t1 t2) code pc inp b
-| tr_branch:
-  forall code pc pc1 pc2 inp b t1 t2 cd
-    (BRANCH: get_pc code pc = Some (Branch cd pc1 pc2))
+  forall code pc pc1 pc2 inp b t1 t2 i
+    (FORK: get_pc code pc = Some i)
+    (TARGETS: fork_targets i = Some (pc1, pc2))
     (TR1: tree_rep t1 code pc1 inp b)
     (TR2: tree_rep t2 code pc2 inp b),
     tree_rep (Choice t1 t2) code pc inp b
@@ -105,7 +100,8 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
 
 Ltac same_instr :=
   match goal with
-  | [ H1 : get_pc ?code ?pc = ?i1, H2: get_pc ?code ?pc = ?i2 |- _ ] => rewrite H1 in H2; inversion H2; subst
+  | [ H1 : get_pc ?code ?pc = ?i1, H2: get_pc ?code ?pc = ?i2 |- _ ] => rewrite H1 in H2; inversion H2; subst;
+      try match goal with H: fork_targets _ = Some _ |- _ => discriminate H end
   end.
 
 (* Determinism of the tree representation *)
@@ -124,10 +120,7 @@ Proof.
     subst. split; auto.
   - inversion H0; subst; auto; same_instr.
   - inversion H1; subst; auto; same_instr.
-    specialize (IHtree_rep1 _ TR1) as EQT1.
-    specialize (IHtree_rep2 _ TR2) as EQT2.
-    subst. split; auto.
-  - inversion H1; subst; auto; same_instr.
+    rewrite TARGETS0 in TARGETS. inversion TARGETS; subst.
     specialize (IHtree_rep1 _ TR1) as EQT1.
     specialize (IHtree_rep2 _ TR2) as EQT2.
     subst. split; auto.
@@ -230,8 +223,7 @@ Proof.
       eapply jump_bc; eauto. }
     assert (TR2: tree_rep t2 c (S end1) inp b).
     { eapply IHTREE2; eauto using cons_bc, areg_bc. pike_subset. }
-    destruct (disjunction_fork_cases rer branches r1 r2 (S pcstart) (S end1)) as [E|[cd E]];
-      rewrite E in FORK; eauto using tr_choice, tr_branch.
+    eauto using tr_choice, disjunction_fork_targets.
   (* sequence *)
   - remember (Areg (Sequence r1 r2) :: cont) as seqcont.
     induction ACT; inversion Heqseqcont; subst;
@@ -262,13 +254,13 @@ Proof.
       invert_rep. inversion NFA; subst.
       2: { in_subset. }
       destruct greedy; simpl.
-      * eapply tr_choice; eauto.
+      * eapply tr_choice; [eauto|apply loop_fork_targets| |].
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.
            eapply IHTREE1; eauto. pike_subset.
            repeat (econstructor; eauto).
         ** eapply IHTREE2; eauto. pike_subset.
-      * eapply tr_choice; eauto.
+      * eapply tr_choice; [eauto|apply loop_fork_targets| |].
         ** eapply IHTREE2; eauto. pike_subset.
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.
@@ -283,13 +275,13 @@ Proof.
       invert_rep. inversion NFA; subst.
       2: { in_subset. }
       destruct greedy; simpl.
-      * eapply tr_choice; eauto.
+      * eapply tr_choice; [eauto|apply loop_fork_targets| |].
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.
            eapply IHTREE1; eauto. pike_subset.
            repeat (econstructor; eauto).
         ** eapply IHTREE2; eauto. pike_subset.
-      * eapply tr_choice; eauto.
+      * eapply tr_choice; [eauto|apply loop_fork_targets| |].
         ** eapply IHTREE2; eauto. pike_subset.
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.

@@ -48,3 +48,19 @@ Example case_folded_leads_fork:
   hd KillThread (NFA.compilation rer true
     (Disjunction branch_a (Regex.Character (CdSingle ($ "A"))))) = Fork 1 3.
 Proof. vm_compute. reflexivity. Qed.
+
+(* loops whose body must start with a known character peek before entering *)
+Example loop_branch_compile:
+  hd KillThread (NFA.compilation branch_flags true (greedy_star branch_a)) =
+    LoopBranch (CdSingle ($ "a")) 1 5.
+Proof. vm_compute. reflexivity. Qed.
+
+Example loop_branch_captures:
+  map (branch_run (Sequence (greedy_star (Group 1 branch_a)) branch_b)) [[$ "a"; $ "b"]; [$ "b"]; [$ "a"]] =
+  map (reference_run (Sequence (greedy_star (Group 1 branch_a)) branch_b)) [[$ "a"; $ "b"]; [$ "b"]; [$ "a"]].
+Proof. vm_compute. reflexivity. Qed.
+
+Example lazy_loop_branch_captures:
+  map (branch_run (Sequence (lazy_star (Group 1 branch_a)) branch_b)) [[$ "a"; $ "b"]; [$ "b"]; [$ "a"]] =
+  map (reference_run (Sequence (lazy_star (Group 1 branch_a)) branch_b)) [[$ "a"; $ "b"]; [$ "b"]; [$ "a"]].
+Proof. vm_compute. reflexivity. Qed.

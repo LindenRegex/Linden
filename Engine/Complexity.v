@@ -64,7 +64,7 @@ Section CodeWF.
       try (apply nfa_rep_incr in REP2 as INC2);
       locate_pc pc GET;
       try solve [simpl in IN; lia
-        | unfold disjunction_fork, greedy_fork in IN;
+        | unfold disjunction_fork, loop_fork, greedy_fork in IN;
           repeat match type of IN with context [match ?x with _ => _ end] => destruct x end; simpl in IN; lia];
       first [apply IHREP in IN; eauto; lia
         | assert (pc < end1 \/ end1 <= pc) as [] by lia; [apply IHREP1 in IN|apply IHREP2 in IN]; eauto; lia].
