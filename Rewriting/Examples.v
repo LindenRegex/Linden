@@ -7,9 +7,6 @@ Section Utilities.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
 
-
-  
-
   Lemma sequence_assoc_equiv r0 r1 r2:
     Sequence r0 (Sequence r1 r2) ≅[rer] Sequence (Sequence r0 r1) r2.
   Proof.
@@ -323,6 +320,7 @@ Section Examples.
       eapply IHl; eauto.
   Qed.
 
+  
 
 
   Lemma quantifier_null_length_head:
@@ -336,9 +334,9 @@ Section Examples.
     rewrite app_nil_r; eauto.
   Qed.
 
-  
   Lemma quantifier_inf_step_advances:
-    forall i r  n dir acts1 acts2 g t1 t2, remaining_length i dir = n ->
+    forall i r  n dir acts1 acts2 g t1 t2,
+      remaining_length i dir = n ->
          is_tree rer ([Areg r; Acheck i] ++ acts1) i g dir t1 ->
          is_tree rer ([Areg r; Acheck i] ++ acts2) i g dir t2 ->
          (forall i,
@@ -359,9 +357,26 @@ Section Examples.
     2: reflexivity.
     eapply IH; eauto. eapply strict_suffix_remaining_length; eauto.
   Qed.
-
-
   
+Lemma quantifier_inf_step_skip:
+    forall i dir acts1 acts21 acts22 g t1 t2,
+      is_tree rer (acts1 ++ acts21) i g dir t1 ->
+      is_tree rer (acts1 ++ acts22) i g dir t2 ->
+      (forall i,
+        forall (gm : group_map) (t1 t2 : tree),
+          is_tree rer acts21 i gm dir t1 ->
+          is_tree rer acts22 i gm dir t2 -> leaves_equiv [] (tree_leaves t1 gm i dir) (tree_leaves t2 gm i dir)) ->
+      leaves_equiv [] (tree_leaves t1 g i dir) (tree_leaves t2 g i dir).
+  Proof.
+    intros i  dir acts1 acts21 acts22 g t1 t2  T1 T2 IH.
+    specialize (is_tree_productivity rer acts1 i g dir) as [t3 T3].
+    eapply leaves_concat with (act1 := acts1) in T1, T2; eauto.
+    remember (tree_leaves t3 g i dir) as l2.
+    induction l2. inversion T2; inversion T1; subst. reflexivity.
+    eapply flatmap_leaves_equiv_r; eauto. unfold equiv_leaffuncts. intros.
+    inversion H; inversion H0; subst. destruct lf; simpl in *.
+    eapply IH; eauto. 
+  Qed.
 End Examples. 
 
 

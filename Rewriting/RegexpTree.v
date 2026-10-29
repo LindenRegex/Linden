@@ -946,12 +946,55 @@ Section RegexpTree.
         simpl in CONT. eapply atmost_atmost_equiv_actions_false_trueinf; eauto.
   Qed.
 
+  Lemma quantified_open_inf_switch_tree:
+    forall r i g t1 t2 dir,
+      def_groups r = [] ->
+    is_tree rer [Areg (Quantified true 0 +∞ r); Areg r] i g dir t1 ->
+      is_tree rer [Areg r; Areg (Quantified true 0 +∞ r)] i g dir t2 ->
+      tree_equiv_tr_dir i g dir t1 t2.
+    Proof.
+      intros r i g t1 t2 dir GROUPEMPT T1 T2.
+      remember (remaining_length i dir) as l.
+      assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql.
+      generalize dependent i.
+      induction l; intros.
+      - specialize (is_tree_productivity rer [Areg r] i g dir) as [t3 T3].
+        eapply quantifier_null_length_head in T2; eauto.
+        eapply quantifier_null_length_skip with (acts := [Areg r]) in T1; eauto.
+        unfold tree_equiv_tr_dir. rewrite T1. symmetry; auto.
+      - apply GroupId.le_lteq in Hlength_le as [p1 | p2]. eapply IHl; eauto. lia.
+        unfold tree_equiv_tr_dir. inversion T1; subst. clear T1. simpl.
+        rewrite GROUPEMPT in *; simpl in *.
+        rewrite app_cons in T2, ISTREE1. eapply leaves_concat with (act1 := [Areg r])in T2, ISTREE1; eauto.
+        remember (tree_leaves tskip g i dir) as l1. induction l1.
+        + inversion T2; inversion ISTREE1. reflexivity.
+        + inversion T2; inversion HEAD; subst. rewrite app_cons.
+          Admitted.
+          
+            
+        
+        
+        
+        
+        
+      
+
   Lemma quantified_open_inf_switch:
     forall r dir,
+      def_groups r = [] ->
     (Sequence (Quantified true 0 +∞ r) r)
       ≅[rer][dir] Sequence r (Quantified true 0 +∞ r).
     Proof.
-    Admitted.
+      intros r dir GROUPEMPT.
+      split. simpl. reflexivity.
+      intros i g t1 t2 T1 T2.
+      destruct dir.
+      - inversion T1; inversion T2; subst.
+         simpl in CONT, CONT0. eapply quantified_open_inf_switch_tree; eauto.
+      - inversion T1; inversion T2; subst.
+        simpl in CONT, CONT0. symmetry. eapply quantified_open_inf_switch_tree; eauto.
+    Qed.
+
   Lemma quantified_open_pop_left:
     forall min1  r dir,
       def_groups r = [] ->
@@ -1057,12 +1100,12 @@ Section RegexpTree.
       }
       etransitivity. {
         eapply seq_equiv_dir. reflexivity.
-        eapply seq_equiv_dir. eapply quantified_open_pop_right.
+        eapply seq_equiv_dir. eapply quantified_open_pop_right; eauto.
         reflexivity.
       }
       etransitivity. {
         eapply seq_equiv_dir. reflexivity.
-        eapply seq_equiv_dir. symmetry. eapply quantified_open_pop_left.
+        eapply seq_equiv_dir. symmetry. eapply quantified_open_pop_left; auto.
         reflexivity.
       }
       etransitivity. {
@@ -1076,14 +1119,14 @@ Section RegexpTree.
       } etransitivity. eapply sequence_assoc_equiv.
       etransitivity. {
         eapply seq_equiv_dir.
-        eapply quantified_open_pop_right. reflexivity.
+        eapply quantified_open_pop_right; auto. reflexivity.
       } rewrite GroupId.add_0_r. reflexivity.
     - symmetry. etransitivity. {
         symmetry. eapply merge_forced_backward with (g2 := true); auto.
       }
       etransitivity. {
         eapply seq_equiv_dir.
-        symmetry. eapply quantified_open_pop_right.
+        symmetry. eapply quantified_open_pop_right; auto.
         reflexivity.
       }
       etransitivity. {
@@ -1101,7 +1144,7 @@ Section RegexpTree.
       }
       etransitivity. eapply sequence_assoc_equiv.
       etransitivity. {
-        eapply seq_equiv_dir. eapply quantified_open_pop_right.
+        eapply seq_equiv_dir. eapply quantified_open_pop_right; auto.
         reflexivity.
       } reflexivity. 
   Qed.
@@ -1119,7 +1162,7 @@ Section RegexpTree.
         symmetry. eapply merge_forced_forward with (g1 := true); auto.
       } etransitivity. {
         eapply seq_equiv_dir. reflexivity.
-        symmetry. eapply quantified_open_pop_left.
+        symmetry. eapply quantified_open_pop_left; auto.
       } etransitivity. {
         eapply seq_equiv_dir. reflexivity.
         eapply seq_equiv_dir. symmetry.
@@ -1130,7 +1173,7 @@ Section RegexpTree.
         symmetry. eapply sequence_assoc_equiv.
       } etransitivity. {
         eapply seq_equiv_dir. reflexivity. eapply seq_equiv_dir. reflexivity.
-        eapply quantified_open_pop_left.
+        eapply quantified_open_pop_left; auto.
       } etransitivity. eapply sequence_assoc_equiv.
       etransitivity. {
         eapply seq_equiv_dir. eapply merge_forced_forward; auto. reflexivity.
@@ -1138,7 +1181,7 @@ Section RegexpTree.
     - symmetry. etransitivity. {
         symmetry. eapply merge_forced_backward with (g2 := true); auto.
       } etransitivity. {
-        eapply seq_equiv_dir. symmetry. eapply quantified_open_pop_left . reflexivity.
+        eapply seq_equiv_dir. symmetry. eapply quantified_open_pop_left; auto. reflexivity.
       } etransitivity. {
         eapply seq_equiv_dir. eapply seq_equiv_dir.
         symmetry. eapply quantified_open_greedy_left with (delta1 := delta1) (g := g); auto.
@@ -1149,10 +1192,10 @@ Section RegexpTree.
         reflexivity.
       } etransitivity. {
         eapply seq_equiv_dir. eapply seq_equiv_dir. reflexivity.
-        eapply quantified_open_pop_left. reflexivity.
+        eapply quantified_open_pop_left; eauto. reflexivity.
       }
       etransitivity. {
-        eapply seq_equiv_dir. eapply seq_equiv_dir. 2: symmetry; eapply quantified_open_pop_right. all: reflexivity.
+        eapply seq_equiv_dir. eapply seq_equiv_dir. 2: symmetry; eapply quantified_open_pop_right; auto. all: reflexivity.
       }
       etransitivity. {
         eapply seq_equiv_dir.
@@ -1165,7 +1208,7 @@ Section RegexpTree.
       simpl. etransitivity. symmetry. eapply sequence_assoc_equiv.
       etransitivity. {
         eapply seq_equiv_dir. reflexivity.
-        eapply quantified_open_pop_left.
+        eapply quantified_open_pop_left; auto.
       } reflexivity.
   Qed.
                 
