@@ -146,27 +146,27 @@ Section CodeSize.
   (* Note that this "size of the regex" counts counted quantifier as being unfolded, so it might not be linear in the size of the textual representation of the regex *)
 
   (* the exact size of the bytecode *)
-  Fixpoint compsize (r:regex) : nat :=
+  Fixpoint compsize (r:regex) (fl: option char_descr) : nat :=
     match r with
     | Epsilon => 0
     | Regex.Character _ => 1
-    | Disjunction r1 r2 => 2 + gap (disjunction_peek rer branches r1 r2) + compsize r1 + compsize r2
-    | Sequence r1 r2 => compsize r1 + compsize r2
+    | Disjunction r1 r2 => 2 + gap (disjunction_peek rer branches r1 r2) + compsize r1 fl + compsize r2 fl
+    | Sequence r1 r2 => compsize r1 (lead_descr r2) + compsize r2 fl
     | Quantified g 0 (NoI.N 0) r1 => 0
-    | Quantified g 0 (NoI.N 1) r1 => 4 + gap (loop_peek branches r1) + compsize r1
-    | Quantified g 0 (NoI.Inf) r1 => 4 + gap (loop_peek branches r1) + compsize r1
-    | Group _ r1 => 2 + compsize r1
+    | Quantified g 0 (NoI.N 1) r1 => 4 + gap (loop_peek rer branches r1 fl) + compsize r1 None
+    | Quantified g 0 (NoI.Inf) r1 => 4 + gap (loop_peek rer branches r1 fl) + compsize r1 None
+    | Group _ r1 => 2 + compsize r1 fl
     | Anchor _ => 1
     | _ => 0
     end.
 
-  Definition codesize (r:regex) := S (compsize r).
+  Definition codesize (r:regex) := S (compsize r None).
 
   Lemma compile_size:
     forall r fl start endl code,
       pike_regex r ->
       compile r fl start = (code, endl) ->
-      length (code) = compsize r.
+      length (code) = compsize r fl.
   Proof.
     intros r fl start endl code SUBSET COMP.
     generalize dependent fl. generalize dependent start. generalize dependent endl. generalize dependent code.
@@ -205,11 +205,12 @@ Section CodeSize.
 
   (* relating this compilation size to the size of the regex *)
   Theorem compsize_regex_size:
-    forall (r:regex),
-      S (compsize r) <= 5 * (regex_size r).
+    forall (r:regex) fl,
+      S (compsize r fl) <= 5 * (regex_size r).
   Proof.
-    intros r. induction r; simpl; try (destruct (disjunction_peek rer branches r1 r2); simpl); try lia.
-    - destruct (loop_peek branches r); destruct min; simpl; try lia.
+    intros r. induction r; intros; simpl; try (destruct (disjunction_peek rer branches r1 r2); simpl);
+      repeat match goal with IH: forall _, S (compsize ?r _) <= _ |- context[compsize ?r ?f] => specialize (IH f) end; try lia.
+    - destruct (loop_peek rer branches r fl); destruct min; simpl; try lia.
       all: destruct delta; simpl; try lia.
       all: destruct n; simpl; try lia.
       all: destruct n; simpl; lia.

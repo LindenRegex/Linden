@@ -93,3 +93,31 @@ Example lazy_follow_branch_runs:
   map (branch_run (Sequence (lazy_star (Group 1 branch_a)) (Group 2 branch_b))) [[$ "a"; $ "a"; $ "b"]; [$ "b"]; [$ "a"]; [$ "a"; $ "b"; $ "b"]] =
   map (reference_run (Sequence (lazy_star (Group 1 branch_a)) (Group 2 branch_b))) [[$ "a"; $ "a"; $ "b"]; [$ "b"]; [$ "a"]; [$ "a"; $ "b"; $ "b"]].
 Proof. vm_compute. reflexivity. Qed.
+
+(* a lead disjoint from what follows branches, on either side of an inversion *)
+Definition branch_ac : regex := Regex.Character (CdRange ($ "a") ($ "c")).
+
+Example range_follow_branch_compile:
+  hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star branch_ac) (Regex.Character (CdSingle ($ "d"))))) =
+    Branch (CdRange ($ "a") ($ "c")) 2 6.
+Proof. vm_compute. reflexivity. Qed.
+
+Example digits_follow_branch_compile:
+  hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star (Regex.Character CdDigits)) branch_a)) =
+    Branch CdDigits 2 6.
+Proof. vm_compute. reflexivity. Qed.
+
+Example inverted_follow_branch_compile:
+  hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star (Regex.Character (CdInv (CdSingle ($ "a"))))) branch_a)) =
+    Branch (CdInv (CdSingle ($ "a"))) 2 6.
+Proof. vm_compute. reflexivity. Qed.
+
+(* only a leading character is worth peeking at on every iteration *)
+Example overlapping_range_forks:
+  hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star branch_ac) branch_b)) = Fork 1 5.
+Proof. vm_compute. reflexivity. Qed.
+
+Example range_follow_branch_runs:
+  map (branch_run (Sequence (greedy_star (Group 1 branch_ac)) (Regex.Character (CdSingle ($ "d"))))) [[$ "a"; $ "c"; $ "d"]; [$ "d"]; [$ "b"]] =
+  map (reference_run (Sequence (greedy_star (Group 1 branch_ac)) (Regex.Character (CdSingle ($ "d"))))) [[$ "a"; $ "c"; $ "d"]; [$ "d"]; [$ "b"]].
+Proof. vm_compute. reflexivity. Qed.

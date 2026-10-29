@@ -47,16 +47,19 @@ This includes:
 ## Branch instructions (development branch)
 
 `NFA.compile rer branches` takes a flag. When `branches` is true, a disjunction
-whose two alternatives must start with distinct characters (compared after
-canonicalization) compiles to `Branch` instead of `Fork`: `Branch` peeks at the
+whose two alternatives must start with disjoint descriptors compiles to `Branch`
+instead of `Fork`. `NFA.disjoint` is partial: it only answers true when every
+alternative of one descriptor is a character that the other does not match,
+which covers distinct characters up to canonicalization, ranges, classes and
+inversions on the other side. `Branch` peeks at the
 current input without consuming it and continues on the only alternative that
 can match; a mismatch, including end of input, selects the second one. The lead
 analysis follows groups and the left side of a sequence, and conservatively
 declines other forms. Likewise, a `?` or `*` loop whose body must start with a
 known character compiles to `LoopBranch` (or `LoopBranchLazy`), which enters the body only when that
 character can be read and always keeps the exit thread. When what follows the
-loop must start with a different character, the loop compiles to `Branch`,
-greedy or lazy alike, and keeps a single thread: at most one of its two threads
+loop must start with a disjoint descriptor, the loop compiles to `Branch`,
+whatever its body starts with, greedy or lazy alike, and keeps a single thread: at most one of its two threads
 can survive, so their priority does not matter. The tree representation of the
 code therefore leaves the order of a choice open, and the seen sets of the tree
 semantics compare trees up to that order. When `branches` is false, the bytecode is unchanged.

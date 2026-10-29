@@ -134,7 +134,7 @@ Section NFA.
     else ForkLazy l1 l2.
 
   (** [branches] enables [Branch] and [LoopBranch]: a disjunction whose
-      alternatives must start with distinct characters, or a loop whose body
+      alternatives must start with disjoint descriptors, or a loop whose body
       must start with a known character, peeks at the input instead of forking. *)
   Context (rer: RegExpRecord) (branches: bool).
 
@@ -148,12 +148,21 @@ Section NFA.
     | _ => None
     end.
 
-  (* the first of two leading descriptors, if they are distinct characters *)
+  (* whether every alternative of [cd1] is a character that [cd2] does not match *)
+  Fixpoint excludes (cd1 cd2: char_descr) : bool :=
+    match cd1 with
+    | CdUnion a b => excludes a cd2 && excludes b cd2
+    | CdSingle c => negb (char_match rer c cd2)
+    | _ => false
+    end.
+
+  (* partial: true only when no character matches both descriptors *)
+  Definition disjoint (cd1 cd2: char_descr) : bool := excludes cd1 cd2 || excludes cd2 cd1.
+
+  (* the first of two leading descriptors, if they are disjoint *)
   Definition distinct_peek (d1 d2: option char_descr) : option char_descr :=
     match branches, d1, d2 with
-    | true, Some (CdSingle c1), Some (CdSingle c2) =>
-        if Character.canonicalize rer c1 == Character.canonicalize rer c2
-        then None else Some (CdSingle c1)
+    | true, Some cd1, Some cd2 => if disjoint cd1 cd2 then Some cd1 else None
     | _, _, _ => None
     end.
 
@@ -167,14 +176,17 @@ Section NFA.
     | None => Fork l1 l2
     end.
 
-  (* the descriptor a loop peeks at, if it branches *)
-  Definition loop_peek (r1: regex) : option char_descr :=
-    if branches then lead_descr r1 else None.
+  (* the descriptor a loop peeks at, if it branches: a leading character, or
+     another lead only when it is disjoint from what follows, saving a thread *)
+  Definition loop_peek (r1: regex) (fl: option char_descr) : option char_descr :=
+    if branches then
+      match lead_descr r1 with Some (CdSingle c) => Some (CdSingle c) | d => distinct_peek d fl end
+    else None.
 
   (* [fl] is the descriptor that whatever follows the loop must start with:
      a loop whose body and continuation start differently needs no fork *)
   Definition loop_fork (greedy: bool) (r1: regex) (fl: option char_descr) (body exit: label) : bytecode :=
-    match loop_peek r1, distinct_peek (loop_peek r1) fl, greedy with
+    match loop_peek r1 fl, distinct_peek (lead_descr r1) fl, greedy with
     | Some cd, Some _, _ => Branch cd body exit
     | Some cd, None, true => LoopBranch cd body exit
     | Some cd, None, false => LoopBranchLazy cd body exit
@@ -202,12 +214,12 @@ Section NFA.
         (bc1 ++ bc2, f2)
     | Quantified greedy 0 (NoI.N 0) r1 => ([], fresh)
     | Quantified greedy 0 (NoI.N 1) r1 =>
-        let peek := loop_peek r1 in
+        let peek := loop_peek r1 fl in
         let (bc1, f1) := compile r1 None (S (S (S (gap peek + fresh)))) in
         ([loop_fork greedy r1 fl (S (gap peek + fresh)) (S f1)] ++ pad peek ++
          [BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1)
     | Quantified greedy 0 (NoI.Inf) r1 =>
-        let peek := loop_peek r1 in
+        let peek := loop_peek r1 fl in
         let (bc1, f1) := compile r1 None (S (S (S (gap peek + fresh)))) in
         ([loop_fork greedy r1 fl (S (gap peek + fresh)) (S f1)] ++ pad peek ++
          [BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1)
@@ -262,22 +274,22 @@ Section NFA.
       nfa_rep (Quantified greedy 0 (NoI.N 0) r1) c lbl lbl
   | nfa_rep_qmark:
     forall c r1 greedy fl start end1
-      (FORK: get_pc c start = Some (loop_fork greedy r1 fl (S (gap (loop_peek r1) + start)) (S end1)))
+      (FORK: get_pc c start = Some (loop_fork greedy r1 fl (S (gap (loop_peek r1 fl) + start)) (S end1)))
       (FOLLOW: forall cd, fl = Some cd -> leads c (S end1) cd)
-      (PAD: forall cd, loop_peek r1 = Some cd -> get_pc c (S start) = Some (Data cd))
-      (BEGIN: get_pc c (S (gap (loop_peek r1) + start)) = Some (BeginLoop))
-      (RESET: get_pc c (S (S (gap (loop_peek r1) + start))) = Some (ResetRegs (def_groups r1)))
-      (NFA1: nfa_rep r1 c (S (S (S (gap (loop_peek r1) + start)))) end1)
+      (PAD: forall cd, loop_peek r1 fl = Some cd -> get_pc c (S start) = Some (Data cd))
+      (BEGIN: get_pc c (S (gap (loop_peek r1 fl) + start)) = Some (BeginLoop))
+      (RESET: get_pc c (S (S (gap (loop_peek r1 fl) + start))) = Some (ResetRegs (def_groups r1)))
+      (NFA1: nfa_rep r1 c (S (S (S (gap (loop_peek r1 fl) + start)))) end1)
       (END: get_pc c end1 = Some (EndLoop (S end1))),
       nfa_rep (Quantified greedy 0 (NoI.N 1) r1) c start (S end1)
   | nfa_rep_star:
     forall c r1 greedy fl start end1
-      (FORK: get_pc c start = Some (loop_fork greedy r1 fl (S (gap (loop_peek r1) + start)) (S end1)))
+      (FORK: get_pc c start = Some (loop_fork greedy r1 fl (S (gap (loop_peek r1 fl) + start)) (S end1)))
       (FOLLOW: forall cd, fl = Some cd -> leads c (S end1) cd)
-      (PAD: forall cd, loop_peek r1 = Some cd -> get_pc c (S start) = Some (Data cd))
-      (BEGIN: get_pc c (S (gap (loop_peek r1) + start)) = Some (BeginLoop))
-      (RESET: get_pc c (S (S (gap (loop_peek r1) + start))) = Some (ResetRegs (def_groups r1)))
-      (NFA1: nfa_rep r1 c (S (S (S (gap (loop_peek r1) + start)))) end1)
+      (PAD: forall cd, loop_peek r1 fl = Some cd -> get_pc c (S start) = Some (Data cd))
+      (BEGIN: get_pc c (S (gap (loop_peek r1 fl) + start)) = Some (BeginLoop))
+      (RESET: get_pc c (S (S (gap (loop_peek r1 fl) + start))) = Some (ResetRegs (def_groups r1)))
+      (NFA1: nfa_rep r1 c (S (S (S (gap (loop_peek r1 fl) + start)))) end1)
       (END: get_pc c end1 = Some (EndLoop start)),
       nfa_rep (Quantified greedy 0 (NoI.Inf) r1) c start (S end1)
   | nfa_rep_group:
@@ -434,21 +446,21 @@ Section NFA.
       (* Question Mark and Star *)
       all: destruct (compile r _ _) as [bc1 end1] eqn:COMP1; injection H as <- <-; subst start;
         apply fresh_correct in COMP1 as LEN1;
-        set (lf := loop_fork greedy r fl (S (gap (loop_peek r) + length prev)) (S end1)) in *;
+        set (lf := loop_fork greedy r fl (S (gap (loop_peek r fl) + length prev)) (S end1)) in *;
         econstructor.
       all: try (get_at_with prev; reflexivity).
       all: try exact FOLLOW.
       all: try (intros cd P; rewrite P in *; get_at_with (prev ++ [lf]);
           rewrite length_app; simpl; lia).
-      all: try (get_at_with (prev ++ [lf] ++ pad (loop_peek r)); rewrite !length_app; unfold gap; simpl; lia).
-      all: try (get_at_with (prev ++ [lf] ++ pad (loop_peek r) ++ [BeginLoop]); rewrite !length_app; unfold gap; simpl; lia).
+      all: try (get_at_with (prev ++ [lf] ++ pad (loop_peek r fl)); rewrite !length_app; unfold gap; simpl; lia).
+      all: try (get_at_with (prev ++ [lf] ++ pad (loop_peek r fl) ++ [BeginLoop]); rewrite !length_app; unfold gap; simpl; lia).
       all: try (match goal with |- context[_ ++ [EndLoop ?e]] =>
           eapply nfa_rep_list;
-            [|apply IHr with (fl := None) (prev := prev ++ [lf] ++ pad (loop_peek r) ++ [BeginLoop; ResetRegs (def_groups r)])
+            [|apply IHr with (fl := None) (prev := prev ++ [lf] ++ pad (loop_peek r fl) ++ [BeginLoop; ResetRegs (def_groups r)])
                 (suffix := [EndLoop e] ++ suffix);
               [exact COMP1|rewrite !length_app; unfold gap; simpl; lia|discriminate]];
           list_eq end).
-      all: try (get_at_with (prev ++ [lf] ++ pad (loop_peek r) ++ [BeginLoop; ResetRegs (def_groups r)] ++ bc1);
+      all: try (get_at_with (prev ++ [lf] ++ pad (loop_peek r fl) ++ [BeginLoop; ResetRegs (def_groups r)] ++ bc1);
           rewrite !length_app; unfold gap in *; simpl; lia).
     - inversion H. subst. apply nfa_unsupported.
       + unfold not. intros. inversion H0.
@@ -545,7 +557,7 @@ Section NFA.
          loop_fork greedy r1 fl l1 l2 = Branch cd l1 l2).
   Proof.
     intros. unfold loop_fork, loop_peek, distinct_peek.
-    destruct branches, (lead_descr r1) as [[]|], fl as [[]|], greedy; try destruct (_ == _); eauto 7.
+    destruct branches, (lead_descr r1) as [[]|], fl, greedy; try destruct (disjoint _ _); eauto 7.
   Qed.
 
   Lemma disjunction_fork_next:

@@ -301,26 +301,25 @@ Proof.
   destruct inp as [[|h n] p]; simpl in *; try discriminate. destruct char_match; discriminate.
 Qed.
 
-Lemma distinct_singletons_disjoint: forall c1 c2 inp,
-  Character.canonicalize rer c1 <> Character.canonicalize rer c2 ->
-  check_read rer (CdSingle c1) inp forward = CanRead ->
-  check_read rer (CdSingle c2) inp forward = CannotRead.
+Lemma excludes_sound: forall cd1 cd2 x,
+  excludes rer cd1 cd2 = true -> char_match rer x cd1 = true -> char_match rer x cd2 = false.
 Proof.
-  intros c1 c2 [[|c next] pref] NE READ; cbn [check_read] in *; try discriminate.
-  destruct (char_match rer c (CdSingle c1)) eqn:H1; try discriminate.
-  destruct (char_match rer c (CdSingle c2)) eqn:H2; auto.
-  apply single_match in H1. apply single_match in H2. congruence.
+  induction cd1; intros cd2 x E M; unfold char_match in *; simpl in *; try discriminate.
+  - apply EqDec.inversion_true in M as ->. now apply Bool.negb_true_iff.
+  - apply andb_prop in E as [E1 E2]. apply Bool.orb_true_iff in M as [M|M]; eauto.
 Qed.
 
-(* the thread at the first of two distinct descriptors excludes the other *)
+(* the thread at the first of two disjoint descriptors excludes the other *)
 Lemma distinct_peek_disjoint: forall d1 d2 cd inp,
   distinct_peek rer branches d1 d2 = Some cd ->
   d1 = Some cd /\ exists cd2, d2 = Some cd2 /\
     (check_read rer cd inp forward = CanRead -> check_read rer cd2 inp forward = CannotRead).
 Proof.
   unfold distinct_peek. intros d1 d2 cd inp P.
-  destruct branches, d1 as [[]|], d2 as [[]|]; try discriminate; destruct (_ == _) eqn:NE; inversion P; subst.
-  apply EqDec.inversion_false in NE. eauto using distinct_singletons_disjoint.
+  destruct branches, d1, d2 as [cd2|]; try discriminate; destruct disjoint eqn:D; inversion P; subst.
+  split; eauto. exists cd2. split; auto. destruct inp as [[|x next] pref]; cbn [check_read]; auto.
+  apply Bool.orb_true_iff in D as [D|D]; pose proof (excludes_sound _ _ x D);
+    destruct (char_match rer x cd), (char_match rer x cd2); intuition congruence.
 Qed.
 
 (* a thread whose code must first read [cd] dies where [cd] cannot be read *)
@@ -425,7 +424,7 @@ Proof.
     + destruct plus; inversion DZ.
     + { (* Question Mark *)
         destruct plus; inversion D1. subst.
-        repeat invert_rep. set (P := gap (loop_peek _ r1) + pc) in *.
+        repeat invert_rep. set (P := gap (loop_peek _ _ r1 _) + pc) in *.
         destruct greedy; inversion CHOICE; subst.
         +                           (* greedy qmark *)
           eapply loop_fork_step with (greedy := true); [eauto| |intros; simpl; eapply lead_dead; eauto|intros; eapply leads_dead; eauto].
@@ -455,7 +454,7 @@ Proof.
       }
     + { (* Star *)
         destruct plus; inversion DINF.
-        repeat invert_rep. set (P := gap (loop_peek _ r1) + pc) in *.
+        repeat invert_rep. set (P := gap (loop_peek _ _ r1 _) + pc) in *.
         destruct greedy; inversion CHOICE; subst.
         +                           (* greedy star *)
           eapply loop_fork_step with (greedy := true); [eauto| |intros; simpl; eapply lead_dead; eauto|intros; eapply leads_dead; eauto].
