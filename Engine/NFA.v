@@ -138,11 +138,16 @@ Section NFA.
       must start with a known character, peeks at the input instead of forking. *)
   Context (rer: RegExpRecord) (branches: bool).
 
-  (* Only a mandatory leading character qualifies. We deliberately do not look
-     through nullable prefixes, alternations or quantifiers. *)
+  (* Only a mandatory leading character qualifies, or one of either alternative.
+     We deliberately do not look through nullable prefixes or quantifiers. *)
   Fixpoint lead_descr (r: regex) : option char_descr :=
     match r with
     | Regex.Character cd => Some cd
+    | Disjunction r1 r2 =>
+        match lead_descr r1, lead_descr r2 with
+        | Some cd1, Some cd2 => Some (CdUnion cd1 cd2)
+        | _, _ => None
+        end
     | Sequence r1 _ => lead_descr r1
     | Group _ r1 => lead_descr r1
     | _ => None
@@ -241,7 +246,9 @@ Section NFA.
   | leads_consume: forall pc cd, get_pc c pc = Some (Consume cd) -> leads c pc cd
   | leads_jmp: forall pc l cd, get_pc c pc = Some (Jmp l) -> leads c l cd -> leads c pc cd
   | leads_open: forall pc g cd, get_pc c pc = Some (SetRegOpen g) -> leads c (S pc) cd -> leads c pc cd
-  | leads_close: forall pc g cd, get_pc c pc = Some (SetRegClose g) -> leads c (S pc) cd -> leads c pc cd.
+  | leads_close: forall pc g cd, get_pc c pc = Some (SetRegClose g) -> leads c (S pc) cd -> leads c pc cd
+  | leads_fork: forall pc b l1 l2 cd1 cd2, get_pc c pc = Some b -> next_pcs pc b = [l1; l2] ->
+      leads c l1 cd1 -> leads c l2 cd2 -> leads c pc (CdUnion cd1 cd2).
 
   (** * Inductive NFA characterization *)
   (* like a representation predicate *)
@@ -317,8 +324,7 @@ Section NFA.
   Lemma leads_extend:
     forall c pc cd suffix, leads c pc cd -> leads (c ++ suffix) pc cd.
   Proof.
-    induction 1; [eapply leads_consume|eapply leads_jmp|eapply leads_open|eapply leads_close];
-      eauto using get_suffix.
+    induction 1; eauto using get_suffix, leads.
   Qed.
 
   Lemma nfa_rep_extend:
@@ -372,6 +378,10 @@ Section NFA.
       destruct E as [? ->]; apply get_at
     end.
 
+  Lemma disjunction_fork_next:
+    forall r1 r2 l1 l2 pc, next_pcs pc (disjunction_fork r1 r2 l1 l2) = [l1; l2].
+  Proof. intros. unfold disjunction_fork. destruct disjunction_peek; auto. Qed.
+
   (* compiled code starts by reading the mandatory first character *)
   Lemma compile_leads:
     forall r fl c start endl prev suffix cd,
@@ -380,6 +390,14 @@ Section NFA.
   Proof.
     induction r; intros * COMP START LEAD; cbn [compile lead_descr] in *; try discriminate.
     - injection LEAD as <-. injection COMP as <- <-. apply leads_consume. get_at_with prev; auto.
+    - destruct (lead_descr r1) eqn:L1, (lead_descr r2) eqn:L2; try discriminate. injection LEAD as <-.
+      destruct (compile r1 _ _) as [bc1 f1] eqn:C1, (compile r2 _ _) as [bc2 f2] eqn:C2. injection COMP as <- <-.
+      apply fresh_correct in C1 as LEN1. set (df := disjunction_fork r1 r2 _ _). set (p := pad _).
+      eapply leads_fork; [get_at_with prev; auto|apply disjunction_fork_next| |].
+      + eapply leads_list; [eapply IHr1 with (prev := prev ++ [df] ++ p); eauto|list_eq].
+        subst p. rewrite !length_app. unfold gap. simpl. lia.
+      + eapply leads_list; [eapply IHr2 with (prev := prev ++ [df] ++ p ++ bc1 ++ [Jmp f2]); eauto|list_eq].
+        subst p. rewrite !length_app. unfold gap in *. simpl. lia.
     - destruct (compile r1 _ _) as [bc1 f1] eqn:C1, (compile r2 _ _) as [bc2 f2]. injection COMP as <- <-.
       rewrite <- app_assoc. eapply IHr1; eauto.
     - destruct (compile r _ _) as [bc1 f1] eqn:C1. injection COMP as <- <-.
@@ -559,10 +577,6 @@ Section NFA.
     intros. unfold loop_fork, loop_peek, distinct_peek.
     destruct branches, (lead_descr r1) as [[]|], fl, greedy; try destruct (disjoint _ _); eauto 7.
   Qed.
-
-  Lemma disjunction_fork_next:
-    forall r1 r2 l1 l2 pc, next_pcs pc (disjunction_fork r1 r2 l1 l2) = [l1; l2].
-  Proof. intros. unfold disjunction_fork. destruct disjunction_peek; auto. Qed.
 
   Lemma loop_fork_next:
     forall greedy r1 fl l1 l2 pc, next_pcs pc (loop_fork greedy r1 fl l1 l2) = [l1; l2].

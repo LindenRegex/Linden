@@ -121,3 +121,26 @@ Example range_follow_branch_runs:
   map (branch_run (Sequence (greedy_star (Group 1 branch_ac)) (Regex.Character (CdSingle ($ "d"))))) [[$ "a"; $ "c"; $ "d"]; [$ "d"]; [$ "b"]] =
   map (reference_run (Sequence (greedy_star (Group 1 branch_ac)) (Regex.Character (CdSingle ($ "d"))))) [[$ "a"; $ "c"; $ "d"]; [$ "d"]; [$ "b"]].
 Proof. vm_compute. reflexivity. Qed.
+
+(* a disjunction leads with the union of its alternatives' leads *)
+Definition branch_c : regex := Regex.Character (CdSingle ($ "c")).
+
+Example union_follow_branch_compile:
+  hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star branch_b) (Disjunction branch_c branch_a))) =
+    Branch (CdSingle ($ "b")) 2 6.
+Proof. vm_compute. reflexivity. Qed.
+
+Example union_body_branch_compile:
+  hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star (Disjunction branch_a branch_b)) branch_c)) =
+    Branch (CdUnion (CdSingle ($ "a")) (CdSingle ($ "b"))) 2 10.
+Proof. vm_compute. reflexivity. Qed.
+
+Example union_body_forks:
+  hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star (Disjunction branch_a branch_b)) branch_a)) =
+    Fork 1 9.
+Proof. vm_compute. reflexivity. Qed.
+
+Example union_branch_runs:
+  map (branch_run (Sequence (lazy_star (Disjunction (Group 1 branch_a) branch_b)) branch_c)) [[$ "a"; $ "b"; $ "c"]; [$ "c"]; [$ "a"]; [$ "b"; $ "a"]] =
+  map (reference_run (Sequence (lazy_star (Disjunction (Group 1 branch_a) branch_b)) branch_c)) [[$ "a"; $ "b"; $ "c"]; [$ "c"]; [$ "a"]; [$ "b"; $ "a"]].
+Proof. vm_compute. reflexivity. Qed.

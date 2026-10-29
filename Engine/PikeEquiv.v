@@ -288,6 +288,14 @@ Proof.
 Qed.
 
 
+Lemma check_read_union: forall cd1 cd2 inp,
+  check_read rer (CdUnion cd1 cd2) inp forward = CannotRead ->
+  check_read rer cd1 inp forward = CannotRead /\ check_read rer cd2 inp forward = CannotRead.
+Proof.
+  intros cd1 cd2 [[|c next] pref]; cbn [check_read]; auto. unfold char_match. cbn [char_match'].
+  destruct (char_match' _ _ cd1), (char_match' _ _ cd2); simpl; auto; discriminate.
+Qed.
+
 (* a regex whose mandatory first character cannot be read has no result *)
 Lemma lead_dead:
   forall r cd cont inp b t gm
@@ -297,8 +305,10 @@ Lemma lead_dead:
     tree_res t gm inp forward = None.
 Proof.
   induction r; intros; simpl in LEAD; try discriminate; inversion TREE; subst; simpl; eauto.
-  inversion LEAD; subst.
-  destruct inp as [[|h n] p]; simpl in *; try discriminate. destruct char_match; discriminate.
+  - inversion LEAD; subst.
+    destruct inp as [[|h n] p]; simpl in *; try discriminate. destruct char_match; discriminate.
+  - destruct (lead_descr r1) eqn:L1, (lead_descr r2) eqn:L2; inversion LEAD; subst.
+    apply check_read_union in READ as [R1 R2]. erewrite IHr1, IHr2; eauto.
 Qed.
 
 Lemma excludes_sound: forall cd1 cd2 x,
@@ -322,6 +332,13 @@ Proof.
     destruct (char_match rer x cd), (char_match rer x cd2); intuition congruence.
 Qed.
 
+Lemma leads_not_begin: forall code pc cd,
+  leads code pc cd -> get_pc code pc = Some BeginLoop -> False.
+Proof.
+  inversion 1; intros; try congruence.
+  match goal with N: next_pcs _ ?b = _ |- _ => replace b with BeginLoop in N by congruence; discriminate end.
+Qed.
+
 (* a thread whose code must first read [cd] dies where [cd] cannot be read *)
 Lemma leads_dead:
   forall code pc cd inp
@@ -332,7 +349,9 @@ Lemma leads_dead:
     (TREE: bool_tree rer acts inp b t),
     tree_res t gm inp forward = None.
 Proof.
-  intros until 1. induction LEADS as [pc cd GET|pc l cd GET _ IH|pc g cd GET _ IH|pc g cd GET _ IH];
+  intros until 1.
+  induction LEADS as [pc cd GET|pc l cd GET _ IH|pc g cd GET _ IH|pc g cd GET _ IH|pc i l1 l2 cd1 cd2 GET NEXT L1 IH1 _ IH2];
+    [| | | |destruct i; inversion NEXT; subst];
     intros; pose proof TREE as TREE0; revert gm REP TREE0; induction TREE; intros; inversion REP; subst;
     (* past a jump *)
     try solve [eapply IH; [exact READ|replace l with pcstart by congruence; eassumption|exact TREE0]];
@@ -345,6 +364,13 @@ Proof.
     try solve [eapply IHTREE; eauto using cons_bc, areg_bc];
     (* past an opening or a closing *)
     try solve [eapply IH; eauto using cons_bc, areg_bc, aclose_bc].
+  (* past a fork, which is not a loop's: its body starts with [BeginLoop] *)
+  all: try (rewrite GET in FORK; apply (f_equal (option_map (next_pcs pc))) in FORK;
+    cbn [option_map next_pcs] in FORK; rewrite ?loop_fork_next, ?disjunction_fork_next in FORK;
+    injection FORK as -> ->; try solve [exfalso; eapply leads_not_begin; eauto]).
+  all: try (apply check_read_union in READ as [R1 R2]; match goal with
+    T1: bool_tree _ ?a1 _ _ ?t1, T2: bool_tree _ ?a2 _ _ ?t2 |- seqop (tree_res ?t1 _ _ _) (tree_res ?t2 _ _ _) = _ =>
+      erewrite (IH1 R1 a1), (IH2 R2 a2); eauto using cons_bc, areg_bc, jump_bc end).
   (* reading [cd] *)
   destruct (proj1 (can_read_correct _ _ _ _ _) (ex_intro _ _ READ0)) as [C _]. congruence.
 Qed.

@@ -54,7 +54,8 @@ which covers distinct characters up to canonicalization, ranges, classes and
 inversions on the other side. `Branch` peeks at the
 current input without consuming it and continues on the only alternative that
 can match; a mismatch, including end of input, selects the second one. The lead
-analysis follows groups and the left side of a sequence, and conservatively
+analysis follows groups and the left side of a sequence, leads a disjunction
+whose alternatives both have a lead with their union, and conservatively
 declines other forms. Likewise, a `?` or `*` loop whose body must start with a
 known character compiles to `LoopBranch` (or `LoopBranchLazy`), which enters the body only when that
 character can be read and always keeps the exit thread. When what follows the
