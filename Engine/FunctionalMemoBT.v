@@ -16,6 +16,11 @@ Section FunctionMemoBT.
   Context {params: LindenParameters}.
   Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
+  Local Notation compile := (compile rer false).
+  Local Notation compilation := (compilation rer false).
+  Local Notation nfa_rep := (nfa_rep rer false).
+  Local Notation action_rep := (action_rep rer false).
+  Local Notation actions_rep := (actions_rep rer false).
 (** * Functional Definition  *)
 
 (* a functional version of the small step *)
@@ -52,7 +57,7 @@ Fixpoint memobt_loop (c:code) (mbt:mbt_state) (fuel:nat) : mbt_state :=
 
 (* an upper bound for the fuel necessary to compute a result *)
 Definition memobt_fuel (r:regex) (inp:input) : nat :=
-  mbt_complexity r inp.
+  mbt_complexity rer r inp.
 
 Inductive matchres : Type :=
 | OutOfFuel

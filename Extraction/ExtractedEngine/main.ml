@@ -155,7 +155,7 @@ let run (regex : Regex.regex) (str : string) : unit =
   else
   let input = Chars.Input (chars_of_string str, []) in
   let rer = rer_of regex in
-  match FunctionalPikeVM.pike_vm_match params vmseen rer regex input with
+  match FunctionalPikeVM.pike_vm_match params vmseen rer (NFA.practical_disjointness params rer) true regex input with
   | FunctionalPikeVM.OutOfFuel -> print_endline "Out of fuel"
   | Finished None -> print_endline "NoMatch"
   | Finished (Some (inp, gm)) -> print_groups str rer.capturingGroupsCount (Chars.idx params inp) gm

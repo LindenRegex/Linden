@@ -9,5 +9,5 @@ Set Warnings "-extraction-default-directory".
 
 (** * Extracting the NFA Compiler and the PikeVM interpreter *)
 
-Separate Extraction NFA.compilation FunctionalPikeVM.pike_vm_match Regex.max_group PikeSubset.is_pike_regex
+Separate Extraction NFA.compilation NFA.practical_disjointness FunctionalPikeVM.pike_vm_match Regex.max_group PikeSubset.is_pike_regex
   RegexpTranslation.buildnm RegexpTranslation.warblre_to_linden.

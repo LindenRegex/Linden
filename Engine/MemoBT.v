@@ -72,7 +72,9 @@ Section MemoBT.
                 | CannotExit => Dead
                 | CanExit => Explore [(next, gm, b, i)]
                 end
-            | KillThread => Dead
+            | Branch cd _ _ | GuardFirst cd _ _ | GuardFirstLazy cd _ _ | GuardSecond cd _ _ | GuardSecondLazy cd _ _ =>
+                Explore (map (fun l => (l, gm, b, i)) (peek_targets pc instr (check_read rer cd i forward)))
+            | KillThread | Data _ => Dead
             end
         end
     end.

@@ -20,6 +20,12 @@ Section CodeWF.
 
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
+  Context {DJ: Disjoint rer} (branches: bool).
+  Local Notation compile := (compile rer branches).
+  Local Notation compilation := (compilation rer branches).
+  Local Notation nfa_rep := (nfa_rep rer branches).
+  Local Notation action_rep := (action_rep rer branches).
+  Local Notation actions_rep := (actions_rep rer branches).
 
   Definition size (c:code) : nat := length c.
 
@@ -58,8 +64,7 @@ Section CodeWF.
       try (apply nfa_rep_incr in REP2 as INC2);
       locate_pc pc GET;
       try solve [simpl in IN; lia
-        | unfold greedy_fork in IN;
-          repeat match type of IN with context [match ?x with _ => _ end] => destruct x end; simpl in IN; lia];
+        | fork_cases; simpl in IN; lia];
       first [apply IHREP in IN; eauto; lia
         | assert (pc < end1 \/ end1 <= pc) as [] by lia; [apply IHREP1 in IN|apply IHREP2 in IN]; eauto; lia].
   Qed.
@@ -67,7 +72,7 @@ Section CodeWF.
   Theorem compiled_wf:
     forall r, code_wf (compilation r) (size (compilation r)).
   Proof.
-    intros r.  destruct (compile r 0) as [c endl] eqn:COMP.
+    intros r.  destruct (compile r None 0) as [c endl] eqn:COMP.
     eapply compile_nfa_rep with (suffix:=[]) in COMP as REP. rewrite app_nil_r in REP.
     unfold compilation. rewrite COMP. unfold code_wf.
     apply fresh_correct in COMP as FRESH. simpl in FRESH. subst.
@@ -95,7 +100,7 @@ Section CodeWF.
       exists i, get_pc code (fst (fst t)) = Some i /\
              In (fst (fst newt)) (next_pcs (fst (fst t)) i).
   Proof.
-    unfold epsilon_step. intros [[pc gm] b] code inp newt H.
+    unfold epsilon_step, peek_targets. intros [[pc gm] b] code inp newt H.
     destruct (get_pc code pc) as [i|] eqn:GET; [exists i; split; [auto|]|discriminate].
     destruct i; repeat match type of H with context [match ?x with _ => _ end] => destruct x end; inversion H; subst; simpl; lia.
   Qed.
@@ -107,7 +112,7 @@ Section CodeWF.
       exists i, get_pc code (fst (fst t)) = Some i /\
              In (fst (fst newt)) (next_pcs (fst (fst t)) i).
   Proof.
-    unfold epsilon_step. intros [[pc gm] b] code inp next newt H IN.
+    unfold epsilon_step, peek_targets. intros [[pc gm] b] code inp next newt H IN.
     destruct (get_pc code pc) as [i|] eqn:GET; [exists i; split; [auto|]|inversion H; subst; contradiction].
     destruct i; repeat match type of H with context [match ?x with _ => _ end] => destruct x end; inversion H; subst; simpl in IN; intuition subst; simpl; lia.
   Qed.
@@ -119,7 +124,7 @@ Section CodeWF.
       exists instr, get_pc code (fst (fst (fst conf))) = Some instr /\
                  In (fst (fst (fst conf'))) (next_pcs (fst (fst (fst conf))) instr).
   Proof.
-    unfold exec_instr. intros code nextconfs [[[pc gm] b] i] conf' H IN.
+    unfold exec_instr, peek_targets. intros code nextconfs [[[pc gm] b] i] conf' H IN.
     destruct (get_pc code pc) as [instr|] eqn:GET; [exists instr; split; [auto|]|inversion H; subst; contradiction].
     destruct instr; repeat match type of H with context [match ?x with _ => _ end] => destruct x end; inversion H; subst; simpl in IN; intuition subst; simpl; lia.
   Qed.
@@ -130,6 +135,9 @@ End CodeWF.
 Section CodeSize.
 
   Context {params: LindenParameters}.
+  Context (rer: RegExpRecord) {DJ: Disjoint rer} (branches: bool).
+  Local Notation compile := (compile rer branches).
+  Local Notation compilation := (compilation rer branches).
 
   (** * Code Size  *)
 
@@ -145,25 +153,30 @@ Section CodeSize.
       size (compilation r) = codesize r.
   Proof. reflexivity. Qed.
 
+  (* a peeking instruction takes at most one more cell *)
+  Lemma gap_le: forall p, gap p <= 1.
+  Proof. intros []; cbn; lia. Qed.
+
   (* relating this compilation size to the size of the regex *)
   Theorem compile_regex_size:
-    forall r start c endl,
-      compile r start = (c, endl) -> S (length c) <= 4 * (regex_size r).
+    forall r fl start c endl,
+      compile r fl start = (c, endl) -> S (length c) <= 5 * (regex_size r).
   Proof.
-    induction r; intros start c endl COMP; cbn [compile] in COMP;
+    induction r; intros fl start c endl COMP; cbn [compile] in COMP;
       repeat match type of COMP with
-      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ => fail | _ => destruct x end
-      | context [compile ?r' ?f] => let C := fresh "C" in
-          destruct (compile r' f) eqn:C; first [apply IHr1 in C | apply IHr2 in C | apply IHr in C]
+      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ _ => fail | _ => destruct x end
+      | context [compile ?r' ?fl ?f] => let C := fresh "C" in
+          destruct (compile r' fl f) eqn:C; first [apply IHr1 in C | apply IHr2 in C | apply IHr in C]
       end;
-      injection COMP as <- <-; simpl; repeat (rewrite length_app; simpl); lia.
+      injection COMP as <- <-; simpl; repeat (rewrite length_app; simpl);
+      try (pose proof (gap_le (loop_peek rer branches r1 (lead_descr r2)))); try (pose proof (gap_le (loop_peek rer branches r fl))); unfold gap in *; lia.
   Qed.
 
   Corollary comp_size_regex_size:
     forall r, pike_regex r ->
-         size (compilation r) <= 4 * (regex_size r).
+         size (compilation r) <= 5 * (regex_size r).
   Proof.
-    intros r SUBSET. unfold size, compilation. destruct (compile r 0) eqn:COMP.
+    intros r SUBSET. unfold size, compilation. destruct (compile r None 0) eqn:COMP.
     apply compile_regex_size in COMP. rewrite length_app. simpl. lia.
   Qed.
 
@@ -292,6 +305,12 @@ Section PikeVMComplexity.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
   Context {VMS: VMSeen}.
+  Context {DJ: Disjoint rer} (branches: bool).
+  Local Notation compile := (compile rer branches).
+  Local Notation compilation := (compilation rer branches).
+  Local Notation nfa_rep := (nfa_rep rer branches).
+  Local Notation action_rep := (action_rep rer branches).
+  Local Notation actions_rep := (actions_rep rer branches).
 
   (** * Free slots  *)
   (* To define the measure, we need a notion of free slots: how many more states can the PikeVM visit *)
@@ -456,7 +475,7 @@ Section PikeVMComplexity.
       epsilon_step rer t code inp = EpsActive next ->
       length next <= 2.
   Proof.
-    unfold epsilon_step. intros [[pc gm] b] code inp next H.
+    unfold epsilon_step, peek_targets. intros [[pc gm] b] code inp next H.
     destruct (get_pc code pc) as [[]|]; repeat match type of H with context [match ?x with _ => _ end] => destruct x end; inversion H; simpl; lia.
   Qed.
 
@@ -565,7 +584,7 @@ Section PikeVMComplexity.
   (** * Initial PikeVM Measure *)
 
   Definition complexity (r:regex) (inp:input) : nat :=
-    1 + (4 * codesize r) + (inpsize inp * (2 + 4 * codesize r)).
+    1 + (4 * codesize rer branches r) + (inpsize inp * (2 + 4 * codesize rer branches r)).
 
   Theorem initial_measure:
     forall inp r,
@@ -573,16 +592,16 @@ Section PikeVMComplexity.
       vm_inv (compilation r) (pike_vm_initial_state inp) (complexity r inp).
   Proof.
     intros inp r SUBSET.
-    replace (complexity r inp) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp).
-    - unfold pike_vm_initial_state. rewrite <- compilation_size; auto.
+    replace (complexity r inp) with (measure (codesize rer branches r) [] [(0, GroupMap.empty, CanExit)] [] inp).
+    - unfold pike_vm_initial_state. rewrite <- (compilation_size rer branches); auto.
       constructor; auto.
       + intros t H. destruct H. 2: inversion H.
-        subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
+        subst. simpl. unfold compilation. destruct (compile r None 0) eqn:C. unfold size. rewrite length_app.
         simpl. lia.
       + intros t H. inversion H.
       + constructor.
       + intros n lit strs H; inversion H.
-    - unfold complexity, measure. rewrite <- compilation_size; auto. simpl.
+    - unfold complexity, measure. rewrite <- (compilation_size rer branches); auto. simpl.
       rewrite free_initial. simpl. lia.
   Qed.
 
@@ -592,16 +611,16 @@ Section PikeVMComplexity.
       vm_inv (compilation r) (pike_vm_initial_state_unanchored (extract_literal rer r) inp) (complexity r inp).
   Proof.
     intros inp r SUBSET.
-    replace (complexity r inp) with (measure (codesize r) [] [(0, GroupMap.empty, CanExit)] [] inp).
-    - unfold pike_vm_initial_state_unanchored. rewrite <- compilation_size; auto.
+    replace (complexity r inp) with (measure (codesize rer branches r) [] [(0, GroupMap.empty, CanExit)] [] inp).
+    - unfold pike_vm_initial_state_unanchored. rewrite <- (compilation_size rer branches); auto.
       constructor; auto.
       + intros t H. destruct H. 2: inversion H.
-        subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
+        subst. simpl. unfold compilation. destruct (compile r None 0) eqn:C. unfold size. rewrite length_app.
         simpl. lia.
       + intros t H. inversion H.
       + constructor.
       + intros n lit' strs' H; eapply search_in_range with (strs:=strs); eauto.
-    - unfold complexity, measure. rewrite <- compilation_size; auto. simpl.
+    - unfold complexity, measure. rewrite <- (compilation_size rer branches); auto. simpl.
       rewrite free_initial. simpl. lia.
   Qed.
 
@@ -685,6 +704,11 @@ Section MemoBTComplexity.
   Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
   Context {VMS: VMSeen}.
+  Local Notation compile := (compile rer false).
+  Local Notation compilation := (compilation rer false).
+  Local Notation nfa_rep := (nfa_rep rer false).
+  Local Notation action_rep := (action_rep rer false).
+  Local Notation actions_rep := (actions_rep rer false).
 
   (** * Valid Inputs  *)
   (* Given an original inputs, the only valid inputs that can be inseretd into the memoization set are
@@ -935,7 +959,7 @@ Section MemoBTComplexity.
       exec_instr rer c conf = Explore stk ->
       length stk <= 2.
   Proof.
-    unfold exec_instr. intros code [[[pc gm] b] inp] stk E.
+    unfold exec_instr, peek_targets. intros code [[[pc gm] b] inp] stk E.
     destruct (get_pc code pc) as [[]|]; repeat match type of E with context [match ?x with _ => _ end] => destruct x end; inversion E; simpl; lia.
   Qed.
 
@@ -947,7 +971,7 @@ Section MemoBTComplexity.
       In (pc2, b2, gm2, i2) stk ->
       validinp i2 originp.
   Proof.
-    unfold exec_instr. intros c stk originp pc1 pc2 b1 b2 gm1 gm2 i1 i2 VAL E IN.
+    unfold exec_instr, peek_targets. intros c stk originp pc1 pc2 b1 b2 gm1 gm2 i1 i2 VAL E IN.
     destruct (get_pc c pc1) as [[]|];
       repeat match type of E with context [match ?x with _ => _ end] => destruct x eqn:? end;
       inversion E; subst; simpl in IN; try solve [intuition congruence].
@@ -1003,24 +1027,24 @@ Section MemoBTComplexity.
   (** * Initial MemoBT Measure *)
 
   Definition mbt_complexity (r:regex) (inp:input) : nat :=
-    2 + 4 * (codesize r * inpsize inp).
+    2 + 4 * (codesize rer false r * inpsize inp).
 
   Theorem initial_memo_measure:
     forall inp r ms dist,
       pike_regex r ->
-      mswf ms (codesize r) inp dist  ->
+      mswf ms (codesize rer false r) inp dist  ->
       exists measure,
         measure <= mbt_complexity r inp /\
           memo_inv (compilation r) inp (initial_state inp ms) measure.
   Proof.
     intros inp r ms dist SUBSET WF.
-    exists (memo_measure (codesize r) (inpsize inp) dist [(0, GroupMap.empty, CanExit,inp)]).
+    exists (memo_measure (codesize rer false r) (inpsize inp) dist [(0, GroupMap.empty, CanExit,inp)]).
     split.
-    - unfold memo_measure, mbt_complexity. rewrite <- compilation_size; auto. simpl.
+    - unfold memo_measure, mbt_complexity. rewrite <- (compilation_size rer false); auto. simpl.
       pose proof (msfree_initial_dist (size (compilation r)) (inpsize inp) dist) as FREE. simpl. lia.
-    - unfold initial_state. rewrite <- compilation_size; auto. constructor; auto.
+    - unfold initial_state. rewrite <- (compilation_size rer false); auto. constructor; auto.
       + intros pc gm b inp0 H. inversion H; inversion H0.
-        unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
+        unfold compilation. destruct (compile r None 0) eqn:C. unfold size. rewrite length_app.
         simpl. lia.
       + intros pc gm b inp0 H. inversion H; inversion H0. subst. left.
   Qed.
@@ -1054,16 +1078,16 @@ Section MemoBTComplexity.
   Theorem memobt_complexity:
     forall (r:regex) (inp:input) (ms:memoset),
       pike_regex r ->
-      validms ms (codesize r) inp ->
+      validms ms (codesize rer false r) inp ->
       exists result finalms, steps (memobt_step rer (compilation r))
                           (initial_state inp ms) (mbt_complexity r inp) (MBT_final result finalms) /\
-                          validms finalms (codesize r) inp.
+                          validms finalms (codesize rer false r) inp.
     Proof.
       intros r inp ms SUBSET WF.
       destruct WF as [dist WF].
       specialize (initial_memo_measure inp r ms dist SUBSET WF) as [measure [LE INV]].
-      specialize (memobt_bound _ _ _ _ (compiled_wf r) INV) as [result [finalms [STEPS VALID]]].
-      exists result. exists finalms. rewrite <- compilation_size; auto. split;auto. eapply more_steps; eauto.
+      specialize (memobt_bound _ _ _ _ (compiled_wf rer false r) INV) as [result [finalms [STEPS VALID]]].
+      exists result. exists finalms. rewrite <- (compilation_size rer false); auto. split;auto. eapply more_steps; eauto.
     Qed.
 
   Theorem memobt_complexity_empty_memoset:
@@ -1073,7 +1097,7 @@ Section MemoBTComplexity.
       (* The initial state reaches a final state in at most (complexity r inp) steps. *)
       exists result finalms, steps (memobt_step rer (compilation r))
                           (initial_state inp initial_memoset) (mbt_complexity r inp) (MBT_final result finalms) /\
-                          validms finalms (codesize r) inp.
+                          validms finalms (codesize rer false r) inp.
   Proof.
     intros r inp H. eapply memobt_complexity; auto.
     exists []. apply mswf_init.

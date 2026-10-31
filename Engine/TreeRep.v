@@ -12,6 +12,12 @@ From Warblre Require Import Base RegExpRecord.
 Section TreeRep.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
+  Context {DJ: Disjoint rer} (branches: bool).
+  Local Notation compile := (compile rer branches).
+  Local Notation compilation := (compilation rer branches).
+  Local Notation nfa_rep := (nfa_rep rer branches).
+  Local Notation action_rep := (action_rep rer branches).
+  Local Notation actions_rep := (actions_rep rer branches).
 (** * Tree Rep Predicate  *)
 (* A predicate showing that a tree is represented at a given point in the code *)
 (* For a given input and boolean *)
@@ -33,11 +39,14 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
     (TR: tree_rep t code (S pc) inp CannotExit),
     tree_rep t code pc inp b
 | tr_choice:
-  forall code pc pc1 pc2 inp b t1 t2
-    (FORK: get_pc code pc = Some (Fork pc1 pc2))
+  (* the code does not fix the priority of the two branches *)
+  forall code pc pc1 pc2 inp b t1 t2 t i
+    (FORK: get_pc code pc = Some i)
+    (TARGETS: next_pcs pc i = [pc1; pc2])
     (TR1: tree_rep t1 code pc1 inp b)
-    (TR2: tree_rep t2 code pc2 inp b),
-    tree_rep (Choice t1 t2) code pc inp b
+    (TR2: tree_rep t2 code pc2 inp b)
+    (ORDER: t = Choice t1 t2 \/ t = Choice t2 t1),
+    tree_rep t code pc inp b
 | tr_read:
   forall code pc inp nextinp b cd c t
     (CONSUME: get_pc code pc = Some (Consume cd))
@@ -93,22 +102,35 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
 
 Ltac same_instr :=
   match goal with
-  | [ H1 : get_pc ?code ?pc = ?i1, H2: get_pc ?code ?pc = ?i2 |- _ ] => rewrite H1 in H2; inversion H2; subst
+  | [ H1 : get_pc ?code ?pc = ?i1, H2: get_pc ?code ?pc = ?i2 |- _ ] => rewrite H1 in H2; inversion H2; subst;
+      try match goal with H: next_pcs _ _ = [_; _] |- _ => discriminate H end
   end.
 
-(* Determinism of the tree representation *)
+(* Determinism of the tree representation, up to the order of choices *)
 Theorem tree_rep_determ:
   forall code pc inp b t1 t2,
     tree_rep t1 code pc inp b ->
     tree_rep t2 code pc inp b ->
-    t1 = t2.
+    tswap t1 t2.
 Proof.
   intros code pc inp b t1 t2 H. revert t2.
   induction H; intros t' H'; inversion H'; subst; try same_instr; try congruence.
   all: try match goal with R: read_char _ _ _ _ = _, R': read_char _ _ _ _ = _ |- _ =>
          rewrite R in R'; injection R' as <- <- end.
-  all: f_equal; eauto.
+  all: eauto using ts_refl, ts_read, ts_progress, ts_group, ts_anchor.
+  rewrite TARGETS in TARGETS0; injection TARGETS0 as <- <-.
+  destruct ORDER as [-> | ->], ORDER0 as [-> | ->]; eauto using ts_choice, ts_trans, ts_swap.
 Qed.
+
+(* a fork keeps both alternatives, in either order *)
+Lemma tr_fork:
+  forall greedy p code pc body exit inp b t1 t2 t
+    (FORK: get_pc code pc = Some (loop_fork greedy p body exit))
+    (TR1: tree_rep t1 code body inp b)
+    (TR2: tree_rep t2 code exit inp b)
+    (ORDER: t = Choice t1 t2 \/ t = Choice t2 t1),
+    tree_rep t code pc inp b.
+Proof. intros. edestruct loop_fork_next as [N|N]; eapply tr_choice; eauto; intuition. Qed.
 
 
 (** * Relation to actions_rep  *)
@@ -176,7 +198,7 @@ Proof.
       try solve[eapply tr_jmp; eauto]; clear IHACT.
     invert_rep. inversion NFA; subst.
     2: { in_subset. }
-    eapply tr_choice; eauto.
+    eapply tr_fork; [eauto| | |left; reflexivity].
     + eapply IHTREE1. pike_subset.
       eapply cons_bc with (pcmid:=end1); try constructor; eauto.
       eapply jump_bc; eauto.
@@ -211,7 +233,7 @@ Proof.
     all: match type of ACT with actions_rep ?q _ _ => remember q as qcont end.
     all: induction ACT; inversion Heqqcont; subst; try solve[eapply tr_jmp; eauto]; clear IHACT.
     all: invert_rep; inversion NFA; subst; [|in_subset].
-    all: destruct greedy; simpl; eapply tr_choice; eauto.
+    all: eapply tr_fork; [eauto| | |destruct greedy; [left|right]; reflexivity].
     all: try (eapply tr_begin; eauto; eapply tr_reset; eauto; eapply IHTREE1; eauto; [pike_subset|repeat (econstructor; eauto)]).
     all: eapply IHTREE2; eauto; pike_subset.
   (* group *)
@@ -266,7 +288,7 @@ Lemma actions_rep_unicity:
     actions_rep a2 code pc ->
     bool_tree rer a1 inp b t1 ->
     bool_tree rer a2 inp b t2 ->
-    t1 = t2.
+    tswap t1 t2.
 Proof.
   intros. eapply actions_tree_rep in H1; eauto.
   eapply actions_tree_rep in H2; eauto.

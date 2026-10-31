@@ -124,6 +124,18 @@ Section Tree.
     then Choice t1 t2
     else Choice t2 t1.
 
+  (* trees equal up to the order of the branches of choices *)
+  Inductive tswap: tree -> tree -> Prop :=
+  | ts_refl: forall t, tswap t t
+  | ts_sym: forall t1 t2, tswap t1 t2 -> tswap t2 t1
+  | ts_trans: forall t1 t2 t3, tswap t1 t2 -> tswap t2 t3 -> tswap t1 t3
+  | ts_swap: forall t1 t2, tswap (Choice t1 t2) (Choice t2 t1)
+  | ts_choice: forall t1 t2 t1' t2', tswap t1 t1' -> tswap t2 t2' -> tswap (Choice t1 t2) (Choice t1' t2')
+  | ts_read: forall c t t', tswap t t' -> tswap (Read c t) (Read c t')
+  | ts_progress: forall t t', tswap t t' -> tswap (Progress t) (Progress t')
+  | ts_anchor: forall a t t', tswap t t' -> tswap (AnchorPass a t) (AnchorPass a t')
+  | ts_group: forall g t t', tswap t t' -> tswap (GroupAction g t) (GroupAction g t').
+
   (** * Tree Results  *)
 
   Definition leaf: Type := (input * group_map).
