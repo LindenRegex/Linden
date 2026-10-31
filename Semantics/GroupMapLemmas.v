@@ -233,3 +233,55 @@ Proof.
   - rewrite gm_reset_find by assumption. constructor.
   - rewrite gm_reset_find_other by assumption. apply Hvalid.
 Qed.
+
+Lemma gm_reset_undefined:
+  forall gidl gm,
+    (forall gid, In gid gidl -> GroupMap.find gid gm = None) ->
+    GroupMap.reset gidl gm = gm.
+Proof.
+  intros gidl gm H.
+  apply GroupMap.MapS.Equal_eq. intros gid.
+  destruct (in_dec Nat.eq_dec gid gidl) as [Hin|Hnotin].
+  - rewrite gm_reset_find; auto. symmetry. auto.
+  - apply gm_reset_find_other. auto.
+Qed.
+
+(** * Reset Equivalence *)
+(* For Rewriting results, we need to characterize group_sets which produce the same
+   group map after being reset. This will allows us to equate two regexes with a
+   diffreent list of reset group ids (def_groups), and yet ensure the equivalence
+   is still contextual when the context contains a quantifier with a reset. *)
+
+(* group sets with the same elements, regardless of orde or duplicates, are equivalent *)
+Definition groups_equiv (l1 l2: group_set) : Prop :=
+  incl l1 l2 /\ incl l2 l1.
+
+Lemma groups_equiv_refl: forall l, groups_equiv l l.
+Proof. intros l. split; apply incl_refl. Qed.
+
+Lemma groups_equiv_sym: forall l1 l2, groups_equiv l1 l2 -> groups_equiv l2 l1.
+Proof. intros l1 l2 [H1 H2]. split; auto. Qed.
+
+Lemma groups_equiv_trans:
+  forall l1 l2 l3, groups_equiv l1 l2 -> groups_equiv l2 l3 -> groups_equiv l1 l3.
+Proof.
+  intros l1 l2 l3 [H12 H21] [H23 H32].
+  split; eapply incl_tran; eauto.
+Qed.
+
+#[global] Instance groups_equiv_Equivalence: RelationClasses.Equivalence groups_equiv :=
+  { Equivalence_Reflexive := groups_equiv_refl;
+    Equivalence_Symmetric := groups_equiv_sym;
+    Equivalence_Transitive := groups_equiv_trans }.
+
+(* two resets of equivalent group sets produce the same group map *)
+Lemma reset_groups_equiv_same:
+  forall l1 l2 gm,
+    groups_equiv l1 l2 ->
+    GroupMap.reset l1 gm = GroupMap.reset l2 gm.
+Proof.
+  intros l1 l2 gm [H1 H2]. apply GroupMap.MapS.Equal_eq. intros gid.
+  destruct (in_dec Nat.eq_dec gid l1) as [Hin1|Hnotin1].
+  - rewrite !gm_reset_find; auto.
+  - rewrite !gm_reset_find_other; auto.
+Qed.
