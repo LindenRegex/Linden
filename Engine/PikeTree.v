@@ -126,6 +126,13 @@ Section PikeTree.
         (TRANS: tree_acceleration (Input next (c::pref)) t2 nextinp acc t),
         tree_acceleration inp future nextinp acc t.
 
+  (* the new active trees of a step, of which those without results may be dropped *)
+  Inductive keeps (inp: input): list (tree * group_map) -> list (tree * group_map) -> Prop :=
+  | keep_nil: keeps inp [] []
+  | keep_cons: forall tgm l l', keeps inp l l' -> keeps inp (tgm::l) (tgm::l')
+  | keep_drop: forall t gm l l' (NORES: tree_res t gm inp forward = None),
+      keeps inp l l' -> keeps inp ((t,gm)::l) l'.
+
   (* Small-step semantics for the PikeTree algorithm *)
   Inductive pike_tree_step : pike_tree_state -> pike_tree_state -> Prop :=
   | pts_skip:
@@ -172,10 +179,11 @@ Section PikeTree.
       pike_tree_step (PTS inp [] best (tgm::blocked) future seen) (PTS (Input next (c::pref)) (tgm::blocked) best [] (Some t2) initial_seentrees)
   | pts_active:
     (* generated new active trees: add them in front of the low-priority ones *)
-    forall inp t gm active best blocked future nextactive seen1 seen2
+    forall inp t gm active best blocked future nextactive kept seen1 seen2
       (STEP: tree_bfs_step t gm (idx inp) = StepActive nextactive)
+      (KEEP: keeps inp nextactive kept)
       (ADD_SEEN: add_seentrees seen1 t = seen2),
-      pike_tree_step (PTS inp ((t,gm)::active) best blocked future seen1) (PTS inp (nextactive++active) best blocked future seen2)
+      pike_tree_step (PTS inp ((t,gm)::active) best blocked future seen1) (PTS inp (kept++active) best blocked future seen2)
   | pts_match:
     (* a match is found, discard remaining low-priority active trees *)
     forall inp t gm active best blocked future seen1 seen2
@@ -614,6 +622,36 @@ Section PikeTree.
       unfold first_leaf in LEAF. rewrite LEAF. reflexivity.
   Qed.
 
+  Lemma keeps_refl: forall inp l, keeps inp l l.
+  Proof. induction l; constructor; auto. Qed.
+
+  (* dropping trees without results changes no possible result *)
+  Lemma keeps_nd:
+    forall inp l kept, keeps inp l kept -> pike_list (suppl l inp) ->
+      pike_list (suppl kept inp) /\
+      forall active seen res, list_nd (suppl (kept ++ active) inp) seen res ->
+        list_nd (suppl (l ++ active) inp) seen res.
+  Proof.
+    induction 1 as [|[t gm] l l' _ IH|t gm l l' NORES _ IH]; simpl; intros PIKE;
+      rewrite ?pike_list_cons in *; [auto| |];
+      destruct PIKE as [PT PL]; destruct (IH PL) as [PK ND]; split; auto; intros * KEPT.
+    - inversion KEPT; subst. eauto using tlr_cons.
+    - eapply tlr_cons with (l1 := None); eauto. rewrite <- NORES. eauto using tree_res_nd.
+  Qed.
+
+  Lemma keeps_inv:
+    forall inp l kept active best blocked future seen res
+      (KEEP: keeps inp l kept)
+      (INVARIANT: piketreeinv (PTS inp (l ++ active) best blocked future seen) res),
+      piketreeinv (PTS inp (kept ++ active) best blocked future seen) res.
+  Proof.
+    intros. inversion INVARIANT; subst.
+    rewrite suppl_app, pike_list_app in SUBSET_AC. destruct SUBSET_AC as [PL PA].
+    destruct (keeps_nd _ _ _ KEEP PL) as [PK ND].
+    constructor; rewrite ?suppl_app, ?pike_list_app; auto.
+    intros r STATEND. inversion STATEND; subst. eauto using sr.
+  Qed.
+
   (** * Invariant Preservation  *)
 
   Theorem pts_preservation:
@@ -625,7 +663,7 @@ Section PikeTree.
     intros pts1 pts2 res PSTEP INVARIANT.
     destruct INVARIANT.
     2: { inversion PSTEP. }
-    inversion PSTEP; subst; [| | | | | |destruct t; inversion STEP; subst| |].
+    inversion PSTEP; subst; [| | | | | |eapply keeps_inv; eauto; destruct t; inversion STEP; subst| |].
     (* skipping *)
     - constructor; pike_subset; auto. intros res STATEND.
       apply SAMERES. inversion STATEND; subst.
