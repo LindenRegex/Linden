@@ -158,6 +158,7 @@ Section NFA.
   | CheckAnchor: anchor -> bytecode
   | Jmp: label -> bytecode
   | Fork: label -> label -> bytecode
+  | ForkLazy: label -> label -> bytecode (* runs the second label first *)
   | SetRegOpen: group_id -> bytecode
   | SetRegClose: group_id -> bytecode
   | ResetRegs: list group_id -> bytecode
@@ -209,7 +210,7 @@ Section NFA.
     | Accept | KillThread | Data _ => []
     | Jmp l | EndLoop l => [l]
     | Fork l1 l2 | Branch _ l1 l2 | GuardFirst _ l1 l2 | GuardSecond _ l1 l2 => [l1; l2]
-    | GuardFirstLazy _ l1 l2 | GuardSecondLazy _ l1 l2 => [l2; l1]
+    | ForkLazy l1 l2 | GuardFirstLazy _ l1 l2 | GuardSecondLazy _ l1 l2 => [l2; l1]
     end.
 
   Definition peek_targets (pc:label) (b:bytecode) (r:ReadResult) : list label :=
@@ -225,7 +226,7 @@ Section NFA.
   Definition greedy_fork (greedy:bool) (l1 l2:label) :=
     if greedy
     then Fork l1 l2
-    else Fork l2 l1.
+    else ForkLazy l1 l2.
 
   (** [branches] enables the peeking instructions: a disjunction whose first
       alternative, or a loop whose body, must start with a known character or
