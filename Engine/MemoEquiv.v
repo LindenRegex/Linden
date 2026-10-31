@@ -99,12 +99,12 @@ Section MemoEquiv.
   Proof.
     intros r code tree inp COMPILE TREE SUBSET.
     unfold compilation in COMPILE. destruct (compile r 0) as [c fresh] eqn:COMP.
-    apply compile_nfa_rep with (prev := []) in COMP as REP; auto. simpl in REP.
+    apply compile_nfa_rep with (suffix := [Accept]) in COMP as REP.
     apply fresh_correct in COMP. simpl in COMP. subst.
     subst. eapply tc_eq; eauto.
     2: { repeat (constructor; auto). }
     apply cons_bc with (pcmid := length c).
-    - constructor. apply nfa_rep_extend. auto.
+    - constructor. auto.
     - constructor. replace (length c) with (length c + 0) by auto. rewrite get_prefix. auto.
   Qed.
 
@@ -247,7 +247,7 @@ Section MemoEquiv.
   Proof.
     intros r inp tree code ts ms TREE COMPILE SUBSET INCL.
     unfold compilation in COMPILE. destruct (compile r 0) as [c fresh] eqn:COMP.
-    apply compile_nfa_rep with (prev := []) in COMP as REP; auto. simpl in REP.
+    apply compile_nfa_rep with (suffix := [Accept]) in COMP as REP.
     apply fresh_correct in COMP. simpl in COMP. subst.
     eapply memoinv; auto.
     - econstructor.
@@ -255,7 +255,7 @@ Section MemoEquiv.
       + apply tc_eq with (actions:=[Areg r]); auto.
         2: { pike_subset. }
         eapply cons_bc; constructor.
-        * apply nfa_rep_extend; eauto.
+        * eauto.
         * replace (length c) with (length c + 0) by auto.
           rewrite get_prefix. auto.
     - apply seen_inclusion_none. auto.
