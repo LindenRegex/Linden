@@ -126,6 +126,17 @@ End Disjoint.
 #[global] Instance practical_disjointness {params: LindenParameters} (rer: RegExpRecord) : Disjoint rer :=
   {| disjoint := practical_disjoint rer; disjoint_sound := practical_disjoint_sound rer |}.
 
+(* how a fork between a loop body and the loop exit, or between two
+   alternatives, peeks at the next character: [Select cd] keeps the first
+   thread where [cd] can be read and the second one elsewhere, [GuardFirst cd]
+   keeps the first thread only where [cd] can be read and the second one
+   always, and [GuardSecond cd] the second thread only where [cd] can be read
+   and the first one always *)
+Module Peek.
+  Inductive peek {params: LindenParameters} :=
+    Unguarded | Select (cd: char_descr) | GuardFirst (cd: char_descr) | GuardSecond (cd: char_descr).
+End Peek.
+
 Section NFA.
   Context {params: LindenParameters}.
 
@@ -148,6 +159,20 @@ Section NFA.
   | BeginLoop: bytecode
   | EndLoop: label -> bytecode    (* also contains the backedge instead of adding a jump *)
   | KillThread: bytecode         (* for unsupported features *)
+  (* Peek without consuming: matching descriptor selects the first target;
+     a mismatch (including end of input) selects the second. *)
+  | Branch: char_descr -> label -> label -> bytecode
+  (* Fork that peeks without consuming: the first label (a loop body or a first
+     alternative) is only kept when the descriptor matches; the second is always
+     kept, after the first for [GuardFirst] and before it for [GuardFirstLazy]. *)
+  | GuardFirst: char_descr -> label -> label -> bytecode
+  | GuardFirstLazy: char_descr -> label -> label -> bytecode
+  (* Likewise, but the second label (a loop exit or a second alternative) is the
+     one only kept when the descriptor matches. *)
+  | GuardSecond: char_descr -> label -> label -> bytecode
+  | GuardSecondLazy: char_descr -> label -> label -> bytecode
+  (* The descriptor of the branching instruction just before; never executed. *)
+  | Data: char_descr -> bytecode
   .
 
   Definition code : Type := list bytecode.
@@ -172,12 +197,14 @@ Section NFA.
     apply get_prefix.
   Qed.
 
+  (* the labels an instruction may continue at, in priority order *)
   Definition next_pcs (pc:label) (b:bytecode) : list label :=
     match b with
     | Consume _ | CheckAnchor _ | SetRegOpen _ | SetRegClose _ | ResetRegs _ | BeginLoop => [S pc]
-    | Accept | KillThread => []
+    | Accept | KillThread | Data _ => []
     | Jmp l | EndLoop l => [l]
-    | Fork l1 l2 => [l1; l2]
+    | Fork l1 l2 | Branch _ l1 l2 | GuardFirst _ l1 l2 | GuardSecond _ l1 l2 => [l1; l2]
+    | GuardFirstLazy _ l1 l2 | GuardSecondLazy _ l1 l2 => [l2; l1]
     end.
 
   (** * NFA Compilation  *)
@@ -187,28 +214,108 @@ Section NFA.
     then Fork l1 l2
     else Fork l2 l1.
 
-  (* also returns the next fresh label *)
-  Fixpoint compile (r:regex) (fresh:label) : code * label :=
+  (** [branches] enables the peeking instructions: a disjunction whose first
+      alternative, or a loop whose body, must start with a known character or
+      with a descriptor disjoint from the other side peeks instead of forking;
+      otherwise one followed by a known character peeks at it to keep its exit. *)
+  Context (rer: RegExpRecord) {DJ: Disjoint rer} (branches: bool).
+
+  Definition union_descr (d1 d2: option char_descr) : option char_descr :=
+    match d1, d2 with
+    | Some cd1, Some cd2 => Some (CdUnion cd1 cd2)
+    | _, _ => None
+    end.
+
+  (* Only a mandatory leading character qualifies, or one of either alternative.
+     We deliberately do not look through nullable prefixes or quantifiers. *)
+  Fixpoint lead_descr (r: regex) : option char_descr :=
+    match r with
+    | Regex.Character cd => Some cd
+    | Disjunction r1 r2 => union_descr (lead_descr r1) (lead_descr r2)
+    | Sequence r1 _ => lead_descr r1
+    | Group _ r1 => lead_descr r1
+    | _ => None
+    end.
+
+  (* the characters before which [$] succeeds, besides the end of the input *)
+  Definition end_descr : char_descr :=
+    if RegExpRecord.multiline rer
+    then fold_right (fun c cd => CdUnion (CdSingle c) cd) CdEmpty Character.line_terminators
+    else CdEmpty.
+
+  (* like [lead_descr], but [$] also leads with [end_descr], and what is
+     nullable leads with [fl], the follow of [r]: what follows a loop succeeds
+     only where the next character, if any, is in its follow *)
+  Fixpoint follow_descr (r: regex) (fl: option char_descr) : option char_descr :=
+    match r with
+    | Epsilon => fl
+    | Regex.Character cd => Some cd
+    | Disjunction r1 r2 => union_descr (follow_descr r1 fl) (follow_descr r2 fl)
+    | Sequence r1 r2 => follow_descr r1 (follow_descr r2 fl)
+    | Quantified _ 0 (NoI.N 0) _ => fl
+    | Quantified _ 0 (NoI.N 1) r1 | Quantified _ 0 NoI.Inf r1 => union_descr (lead_descr r1) fl
+    | Group _ r1 => follow_descr r1 fl
+    | Anchor EndInput => Some end_descr
+    | _ => None
+    end.
+
+  (* what follows a loop succeeds only where the next character, if any, is in
+     [fl]: a loop peeks at its body's lead when it is disjoint from [fl], saving
+     a thread, and otherwise only when it is a character, or else at [fl] when
+     it is a character, to keep the exit; a disjunction forks like a greedy loop
+     whose exit is its second alternative *)
+  Definition loop_peek (r1: regex) (fl: option char_descr) : Peek.peek :=
+    let guard := match lead_descr r1, fl with
+                 | Some (CdSingle c), _ => Peek.GuardFirst (CdSingle c)
+                 | _, Some (CdSingle c) => Peek.GuardSecond (CdSingle c)
+                 | _, _ => Peek.Unguarded
+                 end in
+    match branches, lead_descr r1, fl with
+    | true, Some cd1, Some cd2 => if disjoint rer cd1 cd2 then Peek.Select cd1 else guard
+    | true, _, _ => guard
+    | false, _, _ => Peek.Unguarded
+    end.
+
+  Definition loop_fork (greedy: bool) (p: Peek.peek) (body exit: label) : bytecode :=
+    match p with
+    | Peek.Unguarded => greedy_fork greedy body exit
+    | Peek.Select cd => Branch cd body exit
+    | Peek.GuardFirst cd => if greedy then GuardFirst cd body exit else GuardFirstLazy cd body exit
+    | Peek.GuardSecond cd => if greedy then GuardSecond cd body exit else GuardSecondLazy cd body exit
+    end.
+
+  (* a peeking instruction keeps its descriptor in the next cell *)
+  Definition pad (p: Peek.peek) : code :=
+    match p with Peek.Unguarded => [] | Peek.Select cd | Peek.GuardFirst cd | Peek.GuardSecond cd => [Data cd] end.
+  Definition gap (p: Peek.peek) : nat := length (pad p).
+
+  (* [fl] describes what follows [r]; also returns the next fresh label *)
+  Fixpoint compile (r:regex) (fl: option char_descr) (fresh:label) : code * label :=
     match r with
     | Epsilon => ([], fresh)
     | Regex.Character cd => ([Consume cd], S fresh)
     | Disjunction r1 r2 =>
-        let (bc1, f1) := compile r1 (S fresh) in
-        let (bc2, f2) := compile r2 (S f1) in
-        ([Fork (S fresh) (S f1)] ++ bc1 ++ [Jmp f2] ++ bc2, f2)
+        let p := loop_peek r1 (lead_descr r2) in
+        let (bc1, f1) := compile r1 fl (S (gap p + fresh)) in
+        let (bc2, f2) := compile r2 fl (S f1) in
+        ([loop_fork true p (S (gap p + fresh)) (S f1)] ++ pad p ++ bc1 ++ [Jmp f2] ++ bc2, f2)
     | Sequence r1 r2 =>
-        let (bc1, f1) := compile r1 fresh in
-        let (bc2, f2) := compile r2 f1 in
+        let (bc1, f1) := compile r1 (follow_descr r2 fl) fresh in
+        let (bc2, f2) := compile r2 fl f1 in
         (bc1 ++ bc2, f2)
     | Quantified greedy 0 (NoI.N 0) r1 => ([], fresh)
     | Quantified greedy 0 (NoI.N 1) r1 =>
-        let (bc1, f1) := compile r1 (S (S (S fresh))) in
-        ([greedy_fork greedy (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1)
+        let p := loop_peek r1 fl in
+        let (bc1, f1) := compile r1 None (S (S (S (gap p + fresh)))) in
+        ([loop_fork greedy p (S (gap p + fresh)) (S f1)] ++ pad p ++
+         [BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1)
     | Quantified greedy 0 (NoI.Inf) r1 =>
-        let (bc1, f1) := compile r1 (S (S (S fresh))) in
-        ([greedy_fork greedy (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1)
+        let p := loop_peek r1 fl in
+        let (bc1, f1) := compile r1 None (S (S (S (gap p + fresh)))) in
+        ([loop_fork greedy p (S (gap p + fresh)) (S f1)] ++ pad p ++
+         [BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1)
     | Group gid r1 =>
-        let (bc1, f1) := compile r1 (S fresh) in
+        let (bc1, f1) := compile r1 fl (S fresh) in
         ([SetRegOpen gid] ++ bc1 ++ [SetRegClose gid], S f1)
     | Anchor a => ([CheckAnchor a], S fresh)
     | _ => ([KillThread], S fresh) (* unsupported features *)
@@ -216,9 +323,21 @@ Section NFA.
 
   (* adds an accept at the end of the code *)
   Definition compilation (r:regex) : code :=
-    match (compile r 0) with
+    match (compile r None 0) with
     | (c,fresh) => c ++ [Accept]
     end.
+
+  (* [leads c pc cd]: a thread at [pc] dies where the next character is not in [cd] *)
+  Inductive leads (c: code) : label -> char_descr -> Prop :=
+  | leads_consume: forall pc cd, get_pc c pc = Some (Consume cd) -> leads c pc cd
+  | leads_jmp: forall pc l cd, get_pc c pc = Some (Jmp l) -> leads c l cd -> leads c pc cd
+  | leads_open: forall pc g cd, get_pc c pc = Some (SetRegOpen g) -> leads c (S pc) cd -> leads c pc cd
+  | leads_close: forall pc g cd, get_pc c pc = Some (SetRegClose g) -> leads c (S pc) cd -> leads c pc cd
+  | leads_fork: forall pc b l1 l2 cd1 cd2, get_pc c pc = Some b -> next_pcs pc b = [l1; l2] \/ next_pcs pc b = [l2; l1] ->
+      leads c l1 cd1 -> leads c l2 cd2 -> leads c pc (CdUnion cd1 cd2)
+  | leads_loop: forall pc b l1 l2 cd1 cd2, get_pc c pc = Some b -> next_pcs pc b = [l1; l2] \/ next_pcs pc b = [l2; l1] ->
+      get_pc c l1 = Some BeginLoop -> leads c (S (S l1)) cd1 -> leads c l2 cd2 -> leads c pc (CdUnion cd1 cd2)
+  | leads_end: forall pc, get_pc c pc = Some (CheckAnchor EndInput) -> leads c pc end_descr.
 
   (* [c] is found in [C] from label [start] on *)
   Definition code_at (C c: code) (start: label) : Prop :=
@@ -237,9 +356,11 @@ Section NFA.
       (CONSUME: get_pc c lbl = Some (Consume cd)),
       nfa_rep (Regex.Character cd) c lbl (S lbl)
   | nfa_rep_disj:
-    forall c r1 r2 start end1 end2
-      (FORK: get_pc c start = Some (Fork (S start) (S end1)))
-      (NFA1: nfa_rep r1 c (S start) end1)
+    forall c r1 r2 p start end1 end2
+      (PEEK: p = loop_peek r1 (lead_descr r2))
+      (FORK: get_pc c start = Some (loop_fork true p (S (gap p + start)) (S end1)))
+      (PAD: code_at c (pad p) (S start))
+      (NFA1: nfa_rep r1 c (S (gap p + start)) end1)
       (JMP: get_pc c end1 = Some (Jmp end2))
       (NFA2: nfa_rep r2 c (S end1) end2),
       nfa_rep
@@ -253,19 +374,25 @@ Section NFA.
     forall c r1 greedy lbl,
       nfa_rep (Quantified greedy 0 (NoI.N 0) r1) c lbl lbl
   | nfa_rep_qmark:
-    forall c r1 greedy start end1
-      (FORK: get_pc c start = Some (greedy_fork greedy (S start) (S end1)))
-      (BEGIN: get_pc c (S start) = Some (BeginLoop))
-      (RESET: get_pc c (S (S start)) = Some (ResetRegs (def_groups r1)))
-      (NFA1: nfa_rep r1 c (S (S (S start))) end1)
+    forall c r1 greedy fl p start end1
+      (PEEK: p = loop_peek r1 fl)
+      (FORK: get_pc c start = Some (loop_fork greedy p (S (gap p + start)) (S end1)))
+      (FOLLOW: forall cd, fl = Some cd -> leads c (S end1) cd)
+      (PAD: code_at c (pad p) (S start))
+      (BEGIN: get_pc c (S (gap p + start)) = Some (BeginLoop))
+      (RESET: get_pc c (S (S (gap p + start))) = Some (ResetRegs (def_groups r1)))
+      (NFA1: nfa_rep r1 c (S (S (S (gap p + start)))) end1)
       (END: get_pc c end1 = Some (EndLoop (S end1))),
       nfa_rep (Quantified greedy 0 (NoI.N 1) r1) c start (S end1)
   | nfa_rep_star:
-    forall c r1 greedy start end1
-      (FORK: get_pc c start = Some (greedy_fork greedy (S start) (S end1)))
-      (BEGIN: get_pc c (S start) = Some (BeginLoop))
-      (RESET: get_pc c (S (S start)) = Some (ResetRegs (def_groups r1)))
-      (NFA1: nfa_rep r1 c (S (S (S start))) end1)
+    forall c r1 greedy fl p start end1
+      (PEEK: p = loop_peek r1 fl)
+      (FORK: get_pc c start = Some (loop_fork greedy p (S (gap p + start)) (S end1)))
+      (FOLLOW: forall cd, fl = Some cd -> leads c (S end1) cd)
+      (PAD: code_at c (pad p) (S start))
+      (BEGIN: get_pc c (S (gap p + start)) = Some (BeginLoop))
+      (RESET: get_pc c (S (S (gap p + start))) = Some (ResetRegs (def_groups r1)))
+      (NFA1: nfa_rep r1 c (S (S (S (gap p + start)))) end1)
       (END: get_pc c end1 = Some (EndLoop start)),
       nfa_rep (Quantified greedy 0 (NoI.Inf) r1) c start (S end1)
   | nfa_rep_group:
@@ -297,50 +424,77 @@ Section NFA.
 
   (* correctness of the returned fresh label *)
   Lemma fresh_correct:
-    forall r fresh l next,
-      compile r fresh = (l, next) ->
+    forall r fl fresh l next,
+      compile r fl fresh = (l, next) ->
       fresh + List.length l = next.
   Proof.
-    intros r. induction r; intros fresh l next COMPILE; cbn [compile] in COMPILE;
+    intros r. induction r; intros fl fresh l next COMPILE; cbn [compile] in COMPILE;
       repeat match type of COMPILE with
-      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ => fail | _ => destruct x end
-      | context [compile ?r' ?f] => let C := fresh "C" in
-          destruct (compile r' f) eqn:C; first [apply IHr1 in C | apply IHr2 in C | apply IHr in C]
+      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ _ => fail | _ => destruct x end
+      | context [compile ?r' ?fl ?f] => let C := fresh "C" in
+          destruct (compile r' fl f) eqn:C; first [apply IHr1 in C | apply IHr2 in C | apply IHr in C]
       end;
-      inversion COMPILE; subst; simpl; repeat (rewrite length_app; simpl); lia.
+      inversion COMPILE; subst; unfold gap; simpl; repeat (rewrite length_app; simpl); lia.
+  Qed.
+
+  Lemma loop_fork_next:
+    forall greedy p l1 l2 pc,
+      next_pcs pc (loop_fork greedy p l1 l2) = [l1; l2] \/ next_pcs pc (loop_fork greedy p l1 l2) = [l2; l1].
+  Proof. intros. destruct p, greedy; auto. Qed.
+
+  Lemma lead_follow: forall r fl cd, lead_descr r = Some cd -> follow_descr r fl = Some cd.
+  Proof.
+    induction r; intros fl d LEAD; simpl in *; try discriminate; auto.
+    destruct (lead_descr r1) eqn:L1, (lead_descr r2) eqn:L2; try discriminate.
+    erewrite IHr1, IHr2; eauto.
   Qed.
 
   (* close a goal by a hypothesis that differs in its label, by arithmetic *)
   Local Ltac lbl := match goal with
-    | H: get_pc ?C ?l = _ |- get_pc ?C ?l' = _ => refine (eq_rect l (fun k => get_pc C k = _) H l' ltac:(lia))
-    | H: code_at ?C ?c ?l |- code_at ?C ?c ?l' => refine (eq_rect l (code_at C c) H l' ltac:(lia))
+    | H: get_pc ?C ?l = _ |- get_pc ?C ?l' = _ => refine (eq_rect l (fun k => get_pc C k = _) H l' ltac:(unfold gap; lia))
+    | H: code_at ?C ?c ?l |- code_at ?C ?c ?l' => refine (eq_rect l (code_at C c) H l' ltac:(unfold gap; lia))
+    | H: nfa_rep ?r ?C ?l ?e |- nfa_rep ?r ?C ?l' _ => refine (eq_rect l (fun k => nfa_rep r C k e) H l' ltac:(unfold gap; lia))
+    | H: leads ?C ?l ?cd |- leads ?C ?l' ?cd => refine (eq_rect l (fun k => leads C k cd) H l' ltac:(unfold gap; lia))
     end.
 
-  (* this shows that the compilation function adheres to the representation predicate *)
+  (* compiled code represents its regex and leads with its follow *)
   Theorem compile_nfa_rep_at:
-    forall r start c endl C,
-      compile r start = (c, endl) -> code_at C c start -> nfa_rep r C start endl.
+    forall r fl start c endl C,
+      compile r fl start = (c, endl) -> code_at C c start ->
+      (forall cd, fl = Some cd -> leads C endl cd) ->
+      nfa_rep r C start endl /\ forall cd, follow_descr r fl = Some cd -> leads C start cd.
   Proof.
-    induction r; intros start c endl C COMP AT; cbn [compile] in *;
+    induction r; intros fl start c endl C COMP AT FOLLOW; cbn [compile follow_descr] in *;
       repeat match type of COMP with
-      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ => fail | _ => destruct x eqn:? end
-      | context [compile ?r' ?f] => let C := fresh "C" in destruct (compile r' f) eqn:C; apply fresh_correct in C as ?
+      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ _ => fail | _ => destruct x eqn:? end
+      | context [compile ?r' ?fl ?f] => let C := fresh "C" in
+          destruct (compile r' fl f) eqn:C; apply fresh_correct in C as ?
       end;
       injection COMP as <- <-; subst;
       repeat match goal with
       | H: code_at _ (_ ++ _) _ |- _ => apply code_at_app in H as [? ?]
       | H: code_at _ [?x] _ |- _ => specialize (H 0 x eq_refl)
       | H: code_at _ (?x :: ?l) _ |- _ => change (x :: l) with ([x] ++ l) in H
-      end; cbn [length Nat.add] in *.
-    all: try (apply nfa_unsupported; [inversion 1|lbl]).
-    all: econstructor; try lbl; first [eapply IHr1|eapply IHr2|eapply IHr]; first [eassumption|lbl].
+      end; cbn [length Nat.add] in *; unfold gap in *.
+    (* the sub-regexes, the last one first, as it leads what precedes it *)
+    all: repeat match goal with
+      | IH: forall fl s c e C, compile ?r fl s = (c, e) -> _, CO: compile ?r _ _ = _ |- _ =>
+          edestruct IH with (C := C) as [? ?]; [exact CO|lbl|first [exact FOLLOW|eassumption|solve [intros; first [discriminate
+            |eapply leads_jmp; [lbl|eauto]|eapply leads_close; [lbl|eauto]]]]|]; clear IH
+      end.
+    all: split; try solve [econstructor; try reflexivity; try exact FOLLOW; try lbl; intro N; inversion N].
+    all: intros d F; unfold union_descr in F; repeat match type of F with context [match ?x with _ => _ end] => destruct x eqn:? end;
+      try discriminate; try injection F as <-.
+    all: solve [eauto | apply leads_consume; lbl | apply leads_end; lbl | eapply leads_open; [lbl|eauto]
+      | eapply leads_fork; [lbl|apply loop_fork_next|eauto..]
+      | eapply leads_loop; [lbl|apply loop_fork_next|lbl|eauto using lead_follow|eauto]].
   Qed.
 
   Corollary compile_nfa_rep:
     forall r c endl suffix,
-      compile r 0 = (c, endl) -> nfa_rep r (c ++ suffix) 0 endl.
+      compile r None 0 = (c, endl) -> nfa_rep r (c ++ suffix) 0 endl.
   Proof.
-    intros. eapply compile_nfa_rep_at; eauto.
+    intros. eapply compile_nfa_rep_at; eauto; [|discriminate].
     intros i x N. unfold get_pc. rewrite PeanoNat.Nat.add_0_r, nth_error_app1; auto. apply nth_error_Some. congruence.
   Qed.
 
@@ -403,6 +557,11 @@ Section NFA.
     | _ => false
     end.
 
+  Lemma loop_fork_no_stutter:
+    forall greedy p l1 l2 pc code,
+      get_pc code pc = Some (loop_fork greedy p l1 l2) -> stutters pc code = false.
+  Proof. intros. unfold stutters. rewrite H. destruct p, greedy; auto. Qed.
+
   Lemma does_stutter:
     forall pc code, stutters pc code = true ->
               get_pc code pc = Some BeginLoop \/ (exists next, get_pc code pc = Some (Jmp next)) \/ get_pc code pc = Some KillThread.
@@ -440,11 +599,16 @@ Ltac no_stutter :=
 
 Ltac stutter :=
   match goal with
+  | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some (loop_fork _ _ _ _) |- _ ] =>
+      rewrite (loop_fork_no_stutter _ _ _ _ _ _ H1) in H; discriminate
   | [ H : stutters ?pc ?code = true, H1: get_pc ?code ?pc = Some _ |- _ ] =>
       try solve[unfold stutters in H; rewrite H1 in H; inversion H]
   end.
 
 Ltac locate_pc pc GET :=
+  try match goal with PAD: code_at _ (pad ?p) _ |- _ =>
+    unfold gap, pad in *; destruct p; try pose proof (PAD 0 _ eq_refl) as DATA; cbn [length Nat.add] in *
+  end;
   repeat match goal with
   | H : get_pc ?cc ?l = Some ?j, G : get_pc ?cc pc = Some _ |- _ =>
       assert (pc = l \/ pc <> l) as [->|] by lia;
@@ -453,19 +617,19 @@ Ltac locate_pc pc GET :=
 
 Ltac invert_rep :=
    match goal with
-   | [ H : actions_rep (Areg _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : actions_rep (Aclose _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : actions_rep (Acheck _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : actions_rep [] _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : action_rep (Areg _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : action_rep (Aclose _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : action_rep (Acheck _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Epsilon) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Regex.Character _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Disjunction _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Sequence _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Quantified _ _ _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Group _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
-   | [ H : nfa_rep (Anchor _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : actions_rep _ _ (Areg _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : actions_rep _ _ (Aclose _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : actions_rep _ _ (Acheck _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : actions_rep _ _ [] _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : action_rep _ _ (Areg _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : action_rep _ _ (Aclose _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : action_rep _ _ (Acheck _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Epsilon) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Regex.Character _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Disjunction _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Sequence _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Quantified _ _ _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Group _ _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
+   | [ H : nfa_rep _ _ (Anchor _) _ _ _ |- _ ] => inversion H; clear H; subst; try no_stutter
    | _ => try no_stutter
    end.

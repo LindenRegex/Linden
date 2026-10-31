@@ -72,7 +72,30 @@ Section MemoBT.
                 | CannotExit => Dead
                 | CanExit => Explore [(next, gm, b, i)]
                 end
-            | KillThread => Dead
+            | Branch cd l1 l2 =>
+                Explore [(match check_read rer cd i forward with
+                          | CanRead => l1 | CannotRead => l2 end, gm, b, i)]
+            | GuardFirst cd body exit =>
+                match check_read rer cd i forward with
+                | CanRead => Explore [(body, gm, b, i); (exit, gm, b, i)]
+                | CannotRead => Explore [(exit, gm, b, i)]
+                end
+            | GuardFirstLazy cd body exit =>
+                match check_read rer cd i forward with
+                | CanRead => Explore [(exit, gm, b, i); (body, gm, b, i)]
+                | CannotRead => Explore [(exit, gm, b, i)]
+                end
+            | GuardSecond cd body exit =>
+                match check_read rer cd i forward with
+                | CanRead => Explore [(body, gm, b, i); (exit, gm, b, i)]
+                | CannotRead => Explore [(body, gm, b, i)]
+                end
+            | GuardSecondLazy cd body exit =>
+                match check_read rer cd i forward with
+                | CanRead => Explore [(exit, gm, b, i); (body, gm, b, i)]
+                | CannotRead => Explore [(body, gm, b, i)]
+                end
+            | KillThread | Data _ => Dead
             end
         end
     end.

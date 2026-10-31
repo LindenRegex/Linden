@@ -136,10 +136,11 @@ Section PikeTree.
   (* Small-step semantics for the PikeTree algorithm *)
   Inductive pike_tree_step : pike_tree_state -> pike_tree_state -> Prop :=
   | pts_skip:
-  (* skip an active tree if it has been seen before *)
+  (* skip an active tree if it has been seen before, up to the order of choices *)
   (* this is non-deterministic, we can also not skip it by using the other rules *)
-    forall inp t gm active best blocked future seen
-      (SEEN: inseen seen t = true),
+    forall inp t ts gm active best blocked future seen
+      (SEEN: inseen seen ts = true)
+      (SWAP: tswap t ts),
       pike_tree_step (PTS inp ((t,gm)::active) best blocked future seen) (PTS inp active best blocked future seen)
   | pts_acc:
   (* if there are no more active or blocked trees and we have some future, *)
@@ -204,8 +205,9 @@ Section PikeTree.
   (* any possible result after skipping or not any sub-tree in the seen set *)
   Inductive tree_nd: tree -> group_map -> input -> seentrees -> option leaf -> Prop :=
   | tr_skip:
-    forall seen t gm inp
-      (SEEN: inseen seen t = true),
+    forall seen t ts gm inp
+      (SEEN: inseen seen ts = true)
+      (SWAP: tswap t ts),
       tree_nd t gm inp seen None
   | tr_mismatch:
     forall gm inp seen, tree_nd Mismatch gm inp seen None
@@ -455,13 +457,25 @@ Section PikeTree.
       tree_nd t gm2 inp2 seen None.
   Proof.
     intros t. induction t; intros;
-      try solve[inversion NORES; subst; try solve[constructor; auto]; try solve [constructor; eapply IHt; eauto]].
+      try solve[inversion NORES; subst; try solve[econstructor; eauto]; try solve [constructor; eapply IHt; eauto]].
     inversion NORES; subst.
-    + apply tr_skip. auto.
+    + eapply tr_skip; eauto.
     + destruct l1; destruct l2; inversion H.
       apply tr_choice; auto.
       * eapply IHt1; eauto.
       * eapply IHt2; eauto.
+  Qed.
+
+  (* trees equal up to the order of choices have the same absence of results *)
+  Lemma tswap_nd:
+    forall t t', tswap t t' ->
+      forall gm inp seen, tree_nd t gm inp seen None <-> tree_nd t' gm inp seen None.
+  Proof.
+    induction 1; intros; [tauto|rewrite IHtswap; tauto|rewrite IHtswap1; auto|..];
+      split; intros ND; inversion ND; subst;
+      try solve [eapply tr_skip; eauto using ts_trans, ts_sym, ts_swap, ts_choice, ts_read, ts_progress, ts_anchor, ts_group].
+    all: try solve [constructor; apply IHtswap; auto].
+    all: destruct l1, l2; try discriminate; constructor; try apply IHtswap1; try apply IHtswap2; auto.
   Qed.
 
   (* skipping over a new tree doesn't change the result if the tree that is being skipped does not have results *)
@@ -477,8 +491,9 @@ Section PikeTree.
     induction TREEND; subst; try solve[constructor; auto];
       try solve [constructor; apply IHTREEND; auto; eapply no_tree_result; eauto].
     apply in_add in SEEN as [EQ | SEEN].
-    + subst. rewrite <- NORES. apply tree_res_nd; auto.
-    + apply tr_skip. auto.
+    + subst. apply (tswap_nd _ _ SWAP). eapply no_tree_result_nd.
+      rewrite <- NORES. apply tree_res_nd; auto.
+    + eapply tr_skip; eauto.
   Qed.
 
   (* same lemma generalizes to lists of trees *)
@@ -507,8 +522,8 @@ Section PikeTree.
     induction TREEND; subst; try solve[constructor; auto];
       try solve [constructor; apply IHTREEND; auto; eapply no_tree_result_nd; eauto].
     - apply in_add in SEEN as [EQ | SEEN].
-      + subst. apply NORES.
-      + apply tr_skip. auto.
+      + subst. apply (tswap_nd _ _ SWAP). eapply no_tree_result_nd; eauto.
+      + eapply tr_skip; eauto.
   Qed.
 
   (* same lemma generalizes to lists of trees *)
@@ -577,6 +592,9 @@ Section PikeTree.
     | LK _ tlk t1 => 1 + size t1
     end.
 
+  Lemma tswap_size: forall t t', tswap t t' -> size t = size t'.
+  Proof. induction 1; simpl; lia. Qed.
+
   (* skipping over a new tree does not change the result of another tree if we know that the newly *)
   (* skipped over tree cannot appear in the tree we compute the result of *)
   Lemma add_parent_tree:
@@ -590,8 +608,8 @@ Section PikeTree.
     induction TREEND; subst; simpl in SIZE;
       try solve [constructor; apply IHTREEND; auto; lia].
     - apply in_add in SEEN as [EQ | SEEN].
-      + subst. exfalso. eapply PeanoNat.Nat.lt_irrefl. eauto.
-      + apply tr_skip. auto.
+      + subst. apply tswap_size in SWAP. lia.
+      + eapply tr_skip; eauto.
     - constructor.
       + apply IHTREEND1; auto. lia.
       + apply IHTREEND2; auto. lia.
@@ -668,7 +686,7 @@ Section PikeTree.
     - constructor; pike_subset; auto. intros res STATEND.
       apply SAMERES. inversion STATEND; subst.
       econstructor; eauto. replace r2 with (seqop None r2) by (simpl; auto).
-      eapply tlr_cons; eauto. apply tr_skip. auto.
+      eapply tlr_cons; eauto. eapply tr_skip; eauto.
     (* acceleration *)
     - pose proof (tree_acceleration_pike_subtree _ _ _ _ _ ACC SUBSET_NE) as [SUBSET_ACC SUBSET_T].
       constructor; pike_subset; auto.

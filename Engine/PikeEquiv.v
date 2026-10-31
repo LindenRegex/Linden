@@ -17,6 +17,13 @@ Section PikeEquiv.
   Context {TS: TSeen params}.
   Context {VMS: VMSeen}.
   Context (rer: RegExpRecord).
+  Context {DJ: Disjoint rer} (branches: bool).
+  Local Notation compile := (compile rer branches).
+  Local Notation compilation := (compilation rer branches).
+  Local Notation nfa_rep := (nfa_rep rer branches).
+  Local Notation action_rep := (action_rep rer branches).
+  Local Notation actions_rep := (actions_rep rer branches).
+  Local Notation leads := (leads rer).
 
 (** * Simulation Invariant  *)
 
@@ -51,7 +58,7 @@ Lemma initial_tree_thread:
     tree_thread code inp (tree, GroupMap.empty) (0, GroupMap.empty, CanExit).
 Proof.
   intros r code tree inp COMPILE TREE SUBSET.
-  unfold compilation in COMPILE. destruct (compile r 0) as [c fresh] eqn:COMP.
+  unfold compilation in COMPILE. destruct (compile r None 0) as [c fresh] eqn:COMP.
   apply compile_nfa_rep with (suffix := [Accept]) in COMP as REP.
   apply fresh_correct in COMP. simpl in COMP. subst.
   subst. eapply tt_eq; eauto.
@@ -282,14 +289,193 @@ Proof.
 Qed.
 
 
+Lemma check_read_union: forall cd1 cd2 inp,
+  check_read rer (CdUnion cd1 cd2) inp forward = CannotRead ->
+  check_read rer cd1 inp forward = CannotRead /\ check_read rer cd2 inp forward = CannotRead.
+Proof.
+  intros cd1 cd2 [[|c next] pref]; cbn [check_read]; auto. unfold char_match. cbn [char_match'].
+  destruct (char_match' _ _ cd1), (char_match' _ _ cd2); simpl; auto; discriminate.
+Qed.
+
+(* a regex whose mandatory first character cannot be read has no result *)
+Lemma lead_dead:
+  forall r cd cont inp b t gm
+    (LEAD: lead_descr r = Some cd)
+    (READ: check_read rer cd inp forward = CannotRead)
+    (TREE: bool_tree rer (Areg r :: cont) inp b t),
+    tree_res t gm inp forward = None.
+Proof.
+  induction r; intros; simpl in LEAD; try discriminate; inversion TREE; subst; simpl; eauto.
+  - inversion LEAD; subst.
+    destruct inp as [[|h n] p]; simpl in *; try discriminate. destruct char_match; discriminate.
+  - destruct (lead_descr r1) eqn:L1, (lead_descr r2) eqn:L2; inversion LEAD; subst.
+    apply check_read_union in READ as [R1 R2]. erewrite IHr1, IHr2; eauto.
+Qed.
+
+Lemma disjoint_read: forall cd1 cd2 inp,
+  disjoint rer cd1 cd2 = true ->
+  check_read rer cd1 inp forward = CanRead -> check_read rer cd2 inp forward = CannotRead.
+Proof.
+  intros cd1 cd2 [[|x next] pref] D READ; cbn [check_read] in *; [discriminate|].
+  pose proof (disjoint_sound _ _ _ D x) as E. destruct (char_match rer x cd1); [|discriminate]. cbn in E. now rewrite E.
+Qed.
+
+Lemma leads_not_begin: forall code pc cd,
+  leads code pc cd -> get_pc code pc = Some BeginLoop -> False.
+Proof.
+  inversion 1; intros; try congruence.
+  all: match goal with N: next_pcs _ ?b = _ \/ _ |- _ => replace b with BeginLoop in N by congruence; destruct N; discriminate end.
+Qed.
+
+(* no compiled regex starts with [BeginLoop], unless it is empty *)
+Lemma nfa_rep_begin: forall r code s e,
+  nfa_rep r code s e -> get_pc code s = Some BeginLoop -> s = e.
+Proof.
+  induction 1; intros; unfold loop_fork, greedy_fork in *;
+    repeat match goal with H: get_pc _ _ = Some (match ?x with _ => _ end) |- _ => destruct x end;
+    try congruence.
+  pose proof (IHnfa_rep1 H1) as <-. auto.
+Qed.
+
+(* nor does any continuation *)
+Lemma actions_rep_not_begin: forall acts code pc,
+  actions_rep acts code pc -> get_pc code pc = Some BeginLoop -> False.
+Proof.
+  induction 1; intros; try congruence. inversion ACTION; subst; try congruence.
+  apply nfa_rep_begin in NFA as <-; auto.
+Qed.
+
+Lemma can_read_next: forall cd inp,
+  check_read rer cd inp forward = CanRead -> next_str inp <> [].
+Proof. intros cd [[|x next] pref]; simpl; congruence. Qed.
+
+(* [$] fails before a character that its follow does not match *)
+Lemma end_descr_dead: forall inp,
+  check_read rer (end_descr rer) inp forward = CannotRead -> next_str inp <> [] ->
+  anchor_satisfied rer EndInput inp = false.
+Proof.
+  intros [[|x next] pref] READ NEXT; simpl in *; [congruence|].
+  unfold end_descr in READ. destruct (RegExpRecord.multiline rer); simpl; auto.
+  destruct (Utils.List.inb _ _) eqn:IN; auto. exfalso. apply Utils.List.inb_spec in IN.
+  revert IN READ. generalize Character.line_terminators as l.
+  induction l as [|c l IH]; [intros []|intros [<-|IN] READ]; unfold char_match in *; simpl in *.
+  - rewrite EqDec.reflb in READ. discriminate.
+  - destruct (_ == _); [discriminate|]. eauto.
+Qed.
+
+Lemma end_descr_not_single: forall c, end_descr rer <> CdSingle c.
+Proof.
+  unfold end_descr. destruct RegExpRecord.multiline; [|discriminate].
+  destruct Character.line_terminators; discriminate.
+Qed.
+
+(* a thread at [pc] dies where the next character, if any, is not in [cd],
+   and also at the end of the input when [cd] is a character *)
+Lemma leads_dead:
+  forall code pc cd inp
+    (LEADS: leads code pc cd)
+    (READ: check_read rer cd inp forward = CannotRead)
+    (NOTEND: next_str inp <> [] \/ exists c, cd = CdSingle c)
+    acts b t gm
+    (REP: actions_rep acts code pc)
+    (TREE: bool_tree rer acts inp b t),
+    tree_res t gm inp forward = None.
+Proof.
+  intros until 1.
+  induction LEADS as [pc cd GET|pc l cd GET _ IH|pc g cd GET _ IH|pc g cd GET _ IH|pc i l1 l2 cd1 cd2 GET NEXT L1 IH1 L2 IH2
+    |pc i l1 l2 cd1 cd2 GET NEXT BEGIN L1 IH1 L2 IH2|pc GET];
+    [| | | |intros READ [NOTEND|[? ?]]; [revert READ NOTEND|discriminate];
+      destruct i; destruct NEXT as [NEXT|NEXT]; inversion NEXT; subst
+    |intros READ [NOTEND|[? ?]]; [revert READ NOTEND|discriminate];
+      destruct i; destruct NEXT as [NEXT|NEXT]; inversion NEXT; subst
+    |intros READ [NOTEND|[? E]]; [revert READ NOTEND|exfalso; eapply end_descr_not_single; eauto]];
+    intros; pose proof TREE as TREE0; revert gm REP TREE0; induction TREE; intros; inversion REP; subst;
+    (* past a jump *)
+    try solve [eapply IH; [exact READ|exact NOTEND|replace l with pcstart by congruence; eassumption|exact TREE0]];
+    simpl; auto;
+    try (inversion ACTION; subst); try (inversion NFA; subst); try (destruct plus; discriminate);
+    (* the instruction at [pc] is not the one [leads] reads *)
+    try solve [unfold loop_fork, greedy_fork in *;
+      repeat match goal with H: get_pc _ _ = Some (match ?x with _ => _ end) |- _ => destruct x end; congruence];
+    (* nothing executed yet *)
+    try solve [eapply IHTREE; eauto using cons_bc, areg_bc];
+    (* past an opening or a closing *)
+    try solve [eapply IH; eauto using cons_bc, areg_bc, aclose_bc].
+  (* past a fork: a [leads_fork] is not a loop's, whose body starts with [BeginLoop] *)
+  all: try (pose proof FORK as NEXTS; rewrite GET in NEXTS; apply (f_equal (option_map (next_pcs pc))) in NEXTS;
+    cbn [option_map next_pcs] in NEXTS;
+    match type of NEXTS with _ = Some (next_pcs _ (loop_fork ?g ?p ?a ?b)) => destruct (loop_fork_next g p a b pc) as [N|N] end;
+    rewrite N in NEXTS; injection NEXTS as -> ->; try solve [congruence | exfalso; eauto using leads_not_begin]).
+  (* a fork that reaches [BeginLoop] is a loop's, whose body and exit are both dead *)
+  all: try solve [apply nfa_rep_begin in NFA1; subst; congruence].
+  all: try solve [apply nfa_rep_begin in NFA2; [subst; exfalso; eauto using actions_rep_not_begin|congruence]].
+  all: try (apply check_read_union in READ as [R1 R2]; destruct greedy; simpl;
+    erewrite (IH1 R1 (or_introl NOTEND) _ _ titer), (IH2 R2 (or_introl NOTEND) _ _ tskip); eauto using jump_bc).
+  all: try (lazymatch goal with |- actions_rep _ _ _ => destruct plus as [[]|] end; try discriminate; apply cons_bc with (pcmid := end1); [constructor; auto|];
+    eapply cons_bc; [eapply acheck_bc; eauto|]; eapply cons_bc; [constructor; econstructor; eauto|auto]).
+  all: try (apply check_read_union in READ as [R1 R2]; match goal with
+    T1: bool_tree _ ?a1 _ _ ?t1, T2: bool_tree _ ?a2 _ _ ?t2 |- seqop (tree_res ?t1 _ _ _) (tree_res ?t2 _ _ _) = _ =>
+      first [solve [erewrite (IH1 R1 (or_introl NOTEND) a1 _ t1), (IH2 R2 (or_introl NOTEND) a2 _ t2); eauto using cons_bc, areg_bc, jump_bc]
+        | solve [erewrite (IH1 R1 (or_introl NOTEND) a2 _ t2), (IH2 R2 (or_introl NOTEND) a1 _ t1); eauto using cons_bc, areg_bc, jump_bc]] end).
+  (* passing [$] *)
+  all: try (replace a with EndInput in * by congruence; rewrite end_descr_dead in ANCHOR; auto; discriminate).
+  (* reading [cd] *)
+  destruct (proj1 (can_read_correct _ _ _ _ _) (ex_intro _ _ READ0)) as [C _]. congruence.
+Qed.
+
+(* what a peek needs to drop a thread: the first thread has no result where
+   [cd] cannot be read, and for [Peek.Select cd] the second none where it can;
+   for [Peek.GuardSecond cd], the second has none where [cd] cannot be read *)
+Definition peek_dead (p: Peek.peek) (tbody texit: tree) (gm: group_map) (inp: input) : Prop :=
+  match p with
+  | Peek.Unguarded => True
+  | Peek.Select cd =>
+      (check_read rer cd inp forward = CannotRead -> tree_res tbody gm inp forward = None) /\
+      (check_read rer cd inp forward = CanRead -> tree_res texit gm inp forward = None)
+  | Peek.GuardFirst cd => check_read rer cd inp forward = CannotRead -> tree_res tbody gm inp forward = None
+  | Peek.GuardSecond cd => check_read rer cd inp forward = CannotRead -> tree_res texit gm inp forward = None
+  end.
+
+(* forks keep both threads, and peeks only drop threads that have no result *)
+Lemma loop_fork_step:
+  forall greedy p code pc body exit gm b inp t1 t2 tbody texit
+    (FORK: get_pc code pc = Some (loop_fork greedy p body exit))
+    (CHOICE: Choice t1 t2 = greedy_choice greedy tbody texit)
+    (BODY: tree_thread code inp (tbody,gm) (body,gm,b))
+    (EXIT: tree_thread code inp (texit,gm) (exit,gm,b))
+    (DEAD: peek_dead p tbody texit gm inp),
+  exists threadactive kept,
+    epsilon_step rer (pc,gm,b) code inp = EpsActive threadactive /\
+      keeps inp [(t1,gm);(t2,gm)] kept /\ list_tree_thread code inp kept threadactive.
+Proof.
+  intros. unfold epsilon_step. rewrite FORK.
+  destruct p as [|cd|cd|cd], greedy; inversion CHOICE; subst; simpl in *;
+    try match type of DEAD with _ /\ _ => destruct DEAD end; try destruct (check_read rer cd inp forward) eqn:READ.
+  all: do 2 eexists; split; [reflexivity|]; eauto 6 using keep_drop, keep_cons, keep_nil, ltt_cons, ltt_nil.
+Qed.
+
+(* a fork peeks only at a descriptor that its body or its exit must start with *)
+Lemma loop_peek_sound:
+  forall r1 fl tbody texit gm inp
+    (BODY: forall cd, lead_descr r1 = Some cd -> check_read rer cd inp forward = CannotRead ->
+       tree_res tbody gm inp forward = None)
+    (EXIT: forall cd, fl = Some cd -> check_read rer cd inp forward = CannotRead ->
+       next_str inp <> [] \/ (exists c, cd = CdSingle c) -> tree_res texit gm inp forward = None),
+    peek_dead (loop_peek rer branches r1 fl) tbody texit gm inp.
+Proof.
+  intros. unfold loop_peek. destruct branches; [|exact I].
+  destruct (lead_descr r1) as [cd1|], fl as [cd2|]; try destruct (disjoint rer cd1 cd2) eqn:D;
+    try destruct cd1; try destruct cd2; simpl; try split; intros; eauto using disjoint_read, can_read_next, or_introl, or_intror.
+Qed.
+
 Theorem generate_choice:
   forall tree1 tree2 gm inp code pc b treeactive
     (TREESTEP: tree_bfs_step (Choice tree1 tree2) gm (idx inp) = StepActive treeactive)
     (NOSTUTTER: stutters pc code = false)
     (TT: tree_thread code inp (Choice tree1 tree2, gm) (pc, gm, b)),
-  exists threadactive,
+  exists threadactive kept,
     epsilon_step rer (pc, gm, b) code inp = EpsActive threadactive /\
-      list_tree_thread code inp treeactive threadactive.
+      keeps inp treeactive kept /\ list_tree_thread code inp kept threadactive.
 Proof.
   intros tree1 tree2 gm inp code pc b treeactive TREESTEP NOSTUTTER TT.
   unfold tree_bfs_step in TREESTEP. inversion TREESTEP. subst. clear TREESTEP.
@@ -297,18 +483,13 @@ Proof.
   remember (Choice tree1 tree2) as TCHOICE.
   induction TREE; intros; subst; try inversion HeqTCHOICE; subst.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-  - repeat invert_rep. exists [(S pc,gm,b);(S end1,gm,b)]. split.
-    + unfold epsilon_step. rewrite FORK. auto.
-    + constructor.
-      * constructor. constructor.
-        apply tt_eq with (actions:=Areg r2::cont); auto.
-        2: { pike_subset. }
-        repeat (econstructor; eauto).
-      * apply tt_eq with (actions:=Areg r1::cont); auto.
-        2: { pike_subset. }
-        eapply cons_bc with (pcmid:=end1).
-        ** constructor; auto.
-        ** eapply jump_bc; eauto.
+  - (* a disjunction forks like a greedy loop whose exit is its second alternative *)
+    repeat invert_rep. eapply loop_fork_step with (greedy := true); eauto.
+    + apply tt_eq with (actions:=Areg r1::cont); auto; [|pike_subset].
+      eapply cons_bc with (pcmid:=end1); [constructor; auto|eapply jump_bc; eauto].
+    + apply tt_eq with (actions:=Areg r2::cont); auto; [|pike_subset].
+      repeat (econstructor; eauto).
+    + apply loop_peek_sound; intros; eapply lead_dead; eauto.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     repeat (econstructor; eauto). pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
@@ -320,14 +501,13 @@ Proof.
     3: { rewrite DUN in SUBSET. inversion SUBSET; subst. inversion H1; subst. inversion H0; subst; lia. }
     (* Question Mark and Star *)
     all: destruct plus; try discriminate; repeat invert_rep.
-    all: assert (BODY: tree_thread code inp (GroupAction (Reset (def_groups r1)) titer, gm) (S pc, gm, b));
-      [apply tt_begin; auto; apply tt_reset; [|rewrite <- RESET; f_equal; lia];
+    all: eapply loop_fork_step; eauto.
+    all: try (apply tt_begin; auto; apply tt_reset; [|rewrite <- RESET; f_equal; lia];
        eapply tt_eq; [eauto| |pike_subset]; apply cons_bc with (pcmid:=end1);
-       [constructor; replace (S pc+1+1) with (S (S (S pc))) by lia; auto|];
-       repeat (econstructor; eauto); rewrite <- RESET; f_equal; lia|].
-    all: assert (EXIT: tree_thread code inp (tskip, gm) (S end1, gm, b)) by (eapply tt_eq; eauto; pike_subset).
-    all: destruct greedy; inversion CHOICE; subst.
-    all: unfold epsilon_step; rewrite FORK; eexists; split; [reflexivity|]; eauto using ltt_cons, ltt_nil.
+       [constructor; rewrite !PeanoNat.Nat.add_1_r; auto|];
+       repeat (econstructor; eauto); rewrite <- RESET; f_equal; lia).
+    all: try (eapply tt_eq; eauto; pike_subset).
+    all: apply loop_peek_sound; intros; [simpl; eapply lead_dead|eapply leads_dead]; eauto.
 Qed.
 
 
@@ -337,33 +517,28 @@ Theorem generate_active:
     (TREESTEP: tree_bfs_step tree gm (idx inp) = StepActive treeactive)
     (NOSTUTTER: stutters pc code = false)
     (TT: tree_thread code inp (tree, gm) (pc, gm, b)),
-  exists threadactive,
+  exists threadactive kept,
     epsilon_step rer (pc, gm, b) code inp = EpsActive threadactive /\
-      list_tree_thread code inp treeactive threadactive.
+      keeps inp treeactive kept /\ list_tree_thread code inp kept threadactive.
 Proof.
   intros tree gm inp code pc b treeactive TREESTEP NOSTUTTER TT.
   destruct tree; simpl in TREESTEP; inversion TREESTEP; subst.
-  - eapply generate_mismatch in TT; auto. exists []. split; eauto. constructor.
+  - eapply generate_mismatch in TT; auto. eexists _, _; eauto using keep_nil, ltt_nil.
   - eapply generate_choice; eauto.
   - inversion TT; subst; try no_stutter.
     eapply subset_semantics in TREE as SUBSETTREE; auto.
     inversion SUBSETTREE.
   - eapply generate_checkpass in TT as [nextpc [STEP EQ]]; auto.
-    exists [(nextpc,gm,CanExit)]. split; eauto.
-    constructor; auto. constructor.
+    eexists _, _; eauto using keeps_refl, ltt_cons, ltt_nil.
   - eapply generate_anchorpass in TT as [STEP EQ]; auto.
-    exists [(pc+1,gm,b)]. split; eauto.
-    constructor; auto. constructor.
+    eexists _, _; eauto using keeps_refl, ltt_cons, ltt_nil.
   - destruct g.
     + eapply generate_open in TT as [STEP EQ]; auto.
-      exists [(pc+1,GroupMap.open (idx inp) g gm,b)]. split; eauto.
-      constructor; auto. constructor.
+      eexists _, _; eauto using keeps_refl, ltt_cons, ltt_nil.
     + eapply generate_close in TT as [STEP EQ]; auto.
-      exists [(pc+1,GroupMap.close (idx inp) g gm,b)]. split; eauto.
-      constructor; auto. constructor.
+      eexists _, _; eauto using keeps_refl, ltt_cons, ltt_nil.
     + eapply generate_reset in TT as [STEP EQ]; auto.
-      exists [(pc + 1, GroupMap.reset gl gm, b)]. split; eauto.
-      constructor; auto. constructor.
+      eexists _, _; eauto using keeps_refl, ltt_cons, ltt_nil.
   - inversion TT; subst; try no_stutter.
     eapply subset_semantics in TREE as SUBSETTREE; auto.
     inversion SUBSETTREE.
@@ -499,8 +674,8 @@ Qed.
 Definition seen_inclusion (c:code) (inp:input) (treeseen:seentrees) (threadseen:seenpcs) (current:option (tree*group_map)) (currentpc:label): Prop :=
   forall pc b
     (SEEN: inseenpc threadseen pc b = true),
-  (exists t gm,
-      inseen treeseen t = true /\
+  (exists t ts gm,
+      inseen treeseen ts = true /\ tswap t ts /\
         tree_thread c inp (t, gm) (pc, gm, b))
   \/
     (stutters pc c = true /\
@@ -600,6 +775,11 @@ Inductive start_rep: bytecode -> Prop :=
 | start_chkanch: forall a, start_rep (CheckAnchor a)
 | start_jmp: forall lbl, start_rep (Jmp lbl)
 | start_fork: forall l1 l2, start_rep (Fork l1 l2)
+| start_branch: forall cd l1 l2, start_rep (Branch cd l1 l2)
+| start_guardfirst: forall cd l1 l2, start_rep (GuardFirst cd l1 l2)
+| start_guardfirstlazy: forall cd l1 l2, start_rep (GuardFirstLazy cd l1 l2)
+| start_guardsecond: forall cd l1 l2, start_rep (GuardSecond cd l1 l2)
+| start_guardsecondlazy: forall cd l1 l2, start_rep (GuardSecondLazy cd l1 l2)
 | start_open: forall gid, start_rep (SetRegOpen gid)
 | start_close: forall gid, start_rep (SetRegClose gid)
 | start_end: forall lbl, start_rep (EndLoop lbl)
@@ -613,14 +793,13 @@ Lemma nfa_rep_start:
 Proof.
   intros r code pc pcend H. induction H;
     try solve[left; simpl; auto];
-    try solve[right; eexists; split; eauto; constructor].
+    try solve[right; eexists; split; [eauto|]; unfold loop_fork, greedy_fork;
+      repeat match goal with |- context [match ?x with _ => _ end] => destruct x end; constructor].
   - destruct IHnfa_rep1 as [SAME1 | [i [START1 REP1]]]; subst.
     2: { right. eexists. split; eauto. }
     destruct IHnfa_rep2 as [SAME2 | [i [START2 REP2]]]; subst.
     + left. auto.
     + right. eexists. split; eauto.
-  - right. destruct greedy; inversion FORK; eexists; split; eauto; constructor.
-  - right. destruct greedy; inversion FORK; eexists; split; eauto; constructor.
 Qed.
 
 Lemma action_rep_start:
@@ -658,7 +837,7 @@ Lemma tt_same_interm:
     (SAMEB: snd thread1 = snd thread2)
     (SAMEGM1: snd (fst thread1) = snd treegm1)
     (SAMEGM2: snd (fst thread2) = snd treegm2),
-    fst treegm1 = fst treegm2.
+    tswap (fst treegm1) (fst treegm2).
 Proof.
   intros code inp treegm1 treegm2 thread1 thread2 TT1.
   generalize dependent thread2. generalize dependent treegm2.
@@ -666,30 +845,29 @@ Proof.
   - inversion TT2; subst;
       simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
       try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
-    simpl. subst. symmetry. eapply actions_rep_unicity in CONT; eauto.
+    simpl. subst. apply ts_sym. eapply actions_rep_unicity in CONT; eauto.
   - inversion TT2; subst;
       simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
       try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
     2: { rewrite BEGIN in RESET. inversion RESET. }
     rewrite RESET in RESET0. inversion RESET0. subst.
     specialize (IHTT1 _ _ TT (eq_refl _) (eq_refl _) (eq_refl _) (eq_refl _)).
-    simpl in IHTT1. destruct IHTT1. subst. simpl. auto.
+    simpl in *. auto using ts_group.
   - inversion TT2; subst;
       simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
       try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
     { rewrite BEGIN in RESET. inversion RESET. }
     specialize (IHTT1 _ _ TT (eq_refl _) (eq_refl _) (eq_refl _) (eq_refl _)).
-    simpl in IHTT1. destruct IHTT1. subst. simpl. auto.
+    auto.
 Qed.
 
 Lemma tt_same_tree:
   forall code inp t1 gm1 t2 gm2 pc b
     (TT1: tree_thread code inp (t1,gm1) (pc,gm1,b))
     (TT2: tree_thread code inp (t2,gm2) (pc,gm2,b)),
-    t1 = t2.
+    tswap t1 t2.
 Proof.
-  intros code inp t1 gm1 t2 gm2 pc b TT1 TT2.
-  eapply tt_same_interm in TT1; eauto. simpl in TT1. auto.
+  intros. apply (tt_same_interm _ _ _ _ _ _ TT1 TT2); auto.
 Qed.
 
 (** * Seen Inclusion Lemmas *)
@@ -711,28 +889,27 @@ Proof.
   intros treeseen threadseen c inp t pc gm b nextcurrent nextpc INCL TT.
   unfold seen_inclusion in *.
   intros pc0 b0 SEEN. apply inpc_add in SEEN. destruct SEEN as [EQ|SEEN].
-  - inversion EQ. subst. left. exists t. exists gm. split; auto. apply in_add. left. auto.
+  - inversion EQ. subst. left. exists t, t, gm. rewrite in_add. auto using ts_refl.
   - specialize (INCL pc0 b0 SEEN).
-    destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
-    + left. exists ts. exists gms. split; auto. apply in_add. right; auto.
-    + left. exists ts. exists gms. split; auto.
-      apply in_add. left; auto. inversion EQ. auto.
+    destruct INCL as [[ts [tss [gms [SEENs [SWs TTs]]]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
+    + left. exists ts, tss, gms. rewrite in_add. auto.
+    + inversion EQ. subst. left. exists ts, ts, gms. rewrite in_add. auto using ts_refl.
 Qed.
 
 Lemma skip_inclusion:
-  forall code inp treeseen threadseen tree gm currentpc
+  forall code inp treeseen threadseen tree ts gm currentpc
     (INCL: seen_inclusion code inp treeseen threadseen (Some (tree, gm)) currentpc)
-    (SEEN: inseen treeseen tree = true),
+    (SEEN: inseen treeseen ts = true)
+    (SWAP: tswap tree ts),
   forall current nextpc,
     seen_inclusion code inp treeseen threadseen current nextpc.
 Proof.
-  intros code inp treeseen threadseen tree gm currentpc INCL SEEN current nextpc.
-  unfold seen_inclusion in *.
+  intros. unfold seen_inclusion in *.
   intros pc b SEENPC.
   specialize (INCL pc b SEENPC).
-  destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
-  - left. exists ts. exists gms. split; auto.
-  - left. exists ts. exists gms. split; auto. inversion EQ. subst. auto.
+  destruct INCL as [[t' [tss [gms [SEENs [SWs TTs]]]]] | [ST [t' [gms [GEQ [EQ TTS]]]]]].
+  - left. exists t', tss, gms. auto.
+  - inversion EQ. subst. left. exists t', ts, gms. auto.
 Qed.
 
 Lemma stutter_inclusion:
@@ -750,8 +927,8 @@ Proof.
   { inversion EQ. subst. right. split; auto.
     exists t. exists gm. split; auto. }
   specialize (INCL pc0 b0 SEEN).
-  destruct INCL as [[ts [gms [SEENs TTs]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
-  - left. exists ts. exists gms. split; auto.
+  destruct INCL as [[ts [tss [gms [SEENs [SWs TTs]]]]] | [ST [ts [gms [GEQ [EQ TTS]]]]]].
+  - left. exists ts, tss, gms. auto.
   - right. split; auto. exists ts. exists gms. split; auto. lia.
 Qed.
 
@@ -900,7 +1077,7 @@ Proof.
     try (apply nfa_rep_incr in REP2 as INC2);
     locate_pc pc GET;
     try solve [lia | discriminate | injection J; lia
-      | unfold greedy_fork in J;
+      | unfold loop_fork, greedy_fork in J;
         repeat match type of J with context [match ?x with _ => _ end] => destruct x end; discriminate];
     subst j;
     first [eapply IHREP; eauto; lia
@@ -911,7 +1088,7 @@ Qed.
 (* every compiled code is well-formed *)
 Lemma compile_stutter_wf:
   forall r code fresh,
-    compile r 0 = (code, fresh) ->
+    compile r None 0 = (code, fresh) ->
     stutter_wf code.
 Proof.
   intros r code fresh H.
@@ -932,7 +1109,7 @@ Theorem compilation_stutter_wf:
     stutter_wf code.
 Proof.
   unfold compilation. intros r code H.
-  destruct (compile r 0) as [r_code fresh] eqn:COMP. subst.
+  destruct (compile r None 0) as [r_code fresh] eqn:COMP. subst.
   apply compile_stutter_wf in COMP.
   unfold stutter_wf, stutters, get_pc.
   intros pc gm b nextpc nextgm nextb inp H H0.
@@ -1037,13 +1214,11 @@ Proof.
     destruct treeactive as [|[tree gmt] treeactive]; inversion ACTIVE; subst.
     inversion VMSTEP; subst; try simpl in UNSEEN;
       try rewrite UNSEEN in SKIP; inversion SKIP.
-    apply SEEN in SKIP as [[teq [gmeq [SEENEQ TTEQ]]] | [STUTTER [t' [gm' [GEQ [EQ TTS]]]]]].
-    - assert (teq = tree).
-      { eapply tt_same_tree; eauto. }
-      subst.
+    apply SEEN in SKIP as [[teq [ts [gmeq [SEENEQ [SW TTEQ]]]]] | [STUTTER [t' [gm' [GEQ [EQ TTS]]]]]].
+    - assert (SWAP: tswap tree ts) by eauto using ts_trans, tt_same_tree.
       exists (PTS inp treeactive best treeblocked future treeseen).
       split.
-      + apply pts_skip; auto.
+      + eapply pts_skip; eauto.
       + eapply pikeinv; eauto.
         simpl in SEEN. eapply skip_inclusion; eauto.
     - simpl in GEQ. lia.
@@ -1128,11 +1303,11 @@ Proof.
   }
   destruct (tree_bfs_step t gm (idx inp)) eqn:TREESTEP.
   (* active *)
-  - left. eapply generate_active in TREESTEP as H; eauto. destruct H as [newthreads [EPS LTT2]].
+  - left. eapply generate_active in TREESTEP as H; eauto. destruct H as [newthreads [kept [EPS [KEEP LTT2]]]].
     assert (pvs2 = PVS inp (newthreads ++ threadactive) best threadblocked nextprefix (add_thread threadseen (pc,gm,b))).
     { eapply pikevm_deterministic; eauto. constructor; auto. }
-    subst. exists (PTS inp (l ++ treeactive) best treeblocked future (add_seentrees treeseen t)). split.
-    + eapply pts_active; eauto using keeps_refl.
+    subst. exists (PTS inp (kept ++ treeactive) best treeblocked future (add_seentrees treeseen t)). split.
+    + eapply pts_active; eauto.
     + eapply pikeinv; try (eapply add_inclusion; eauto); try constructor; eauto.
       apply ltt_app; eauto.
   (* match *)

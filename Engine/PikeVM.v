@@ -126,7 +126,31 @@ Definition epsilon_step (t:thread) (c:code) (i:input): epsilon_result :=
                            | CannotExit => EpsDead
                            | CanExit => EpsActive [upd_label t next]
                            end
-          | KillThread => EpsDead
+          | Branch cd l1 l2 =>
+              EpsActive [upd_label t
+                (match check_read rer cd i forward with
+                 | CanRead => l1 | CannotRead => l2 end)]
+          | GuardFirst cd body exit =>
+              match check_read rer cd i forward with
+              | CanRead => EpsActive [upd_label t body; upd_label t exit]
+              | CannotRead => EpsActive [upd_label t exit]
+              end
+          | GuardFirstLazy cd body exit =>
+              match check_read rer cd i forward with
+              | CanRead => EpsActive [upd_label t exit; upd_label t body]
+              | CannotRead => EpsActive [upd_label t exit]
+              end
+          | GuardSecond cd body exit =>
+              match check_read rer cd i forward with
+              | CanRead => EpsActive [upd_label t body; upd_label t exit]
+              | CannotRead => EpsActive [upd_label t body]
+              end
+          | GuardSecondLazy cd body exit =>
+              match check_read rer cd i forward with
+              | CanRead => EpsActive [upd_label t exit; upd_label t body]
+              | CannotRead => EpsActive [upd_label t body]
+              end
+          | KillThread | Data _ => EpsDead
           end
       end
   end.

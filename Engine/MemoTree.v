@@ -57,8 +57,9 @@ Section MemoTree.
       memotree_step (MTree [] ts) (MTree_final None ts)
   (* the memoization allows to skip the current configuration *)
   | mtree_skip:
-    forall ts t gm i stk
-      (SEEN: inseen ts t = true),
+    forall ts t t' gm i stk
+      (SEEN: inseen ts t' = true)
+      (SWAP: tswap t t'),
       memotree_step (MTree ((t,gm,i)::stk) ts) (MTree stk ts)
   (* a match is found, we discard the stack *)
   | mtree_match:
@@ -98,6 +99,9 @@ Section MemoTree.
         | false => orb (negb (noleaftree tlk)) (noleaftree t1)
         end
     end.
+
+  Lemma tswap_noleaf: forall t t', tswap t t' -> noleaftree t = noleaftree t'.
+  Proof. induction 1; simpl; try congruence. apply Bool.andb_comm. Qed.
 
   (* tree without matching leaves *)
   Lemma noleaf_tree:
@@ -220,7 +224,7 @@ Section MemoTree.
       tree_nd t gm inp initial_seentrees res.
   Proof.
     intros t gm inp ts res SUB NL ND. induction ND; try solve[constructor; auto; pike_subset].
-    - apply NL in SEEN. apply noleaftree_nd; auto.
+    - apply NL in SEEN. apply tswap_noleaf in SWAP. apply noleaftree_nd; congruence.
   Qed.
 
   Lemma init_memotree_inv_noleaf:
@@ -270,7 +274,7 @@ Section MemoTree.
       2:{ intros N. apply NOLEAF in N as [N1 N2]. split; auto. inversion N1; auto. }
       intros res LISTND.
       apply SAMERES. eapply tlr_cons with (l1:=None); eauto.
-      apply tr_skip. auto.
+      eapply tr_skip; eauto.
     (* match found *)
     - destruct t; inversion MATCH; subst.
       assert (Some (i,gm) = result).
