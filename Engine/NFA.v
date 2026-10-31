@@ -1,11 +1,135 @@
-From Stdlib Require Import List Lia.
+From Stdlib Require Import List Lia Bool.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree.
 From Linden Require Import Semantics PikeSubset.
-From Linden Require Import Parameters.
-From Warblre Require Import Numeric.
+From Linden Require Import Parameters LWParameters.
+From Warblre Require Import Base Numeric RegExpRecord.
+From Linden.Rewriting Require Import Anchors.
+
+Section Disjoint.
+  Context {params: LindenParameters} (rer: RegExpRecord).
+
+  (* no character matches both descriptors *)
+  Definition cd_disjoint (cd1 cd2: char_descr) : Prop :=
+    forall c, char_match rer c cd1 && char_match rer c cd2 = false.
+
+  (* the compiler relies only on a sound check of disjointness *)
+  Class Disjoint := {
+    disjoint: char_descr -> char_descr -> bool;
+    disjoint_sound: forall cd1 cd2, disjoint cd1 cd2 = true -> cd_disjoint cd1 cd2
+  }.
+
+  (* the numeric bounds of a character or a range *)
+  Definition bounds (cd: char_descr) : option (nat * nat) :=
+    match cd with
+    | CdSingle c => Some (Character.numeric_value c, Character.numeric_value c)
+    | CdRange l h => Some (Character.numeric_value l, Character.numeric_value h)
+    | _ => None
+    end.
+
+  (* the classes whose characters the default check enumerates *)
+  Definition class_set (cd: char_descr) : option CharSet :=
+    match cd with
+    | CdDigits => Some Characters.digits
+    | CdWhitespace => Some (CharSet.union Characters.white_spaces Characters.line_terminators)
+    | CdWordChar => Some Characters.ascii_word_characters
+    | _ => None
+    end.
+
+  Definition complements (cd1 cd2: char_descr) : bool :=
+    match cd1, cd2 with
+    | CdDigits, CdNonDigits | CdWhitespace, CdNonWhitespace | CdWordChar, CdNonWordChar => true
+    | _, _ => false
+    end.
+
+  Definition outside (l h: nat) (s: CharSet) : bool :=
+    forallb (fun e => orb (Nat.ltb (Character.numeric_value e) l) (Nat.ltb h (Character.numeric_value e)))
+      (CharSet.elements s).
+
+  (* without ignoreCase: characters and ranges whose bounds do not overlap, a
+     class and the characters and ranges that none of its characters falls in,
+     two classes that share no character, and a class and its complement *)
+  Definition sets_disjoint (cd1 cd2: char_descr) : bool :=
+    match bounds cd1, bounds cd2, class_set cd1, class_set cd2 with
+    | Some (l1, h1), Some (l2, h2), _, _ => Nat.ltb h1 l2 || Nat.ltb h2 l1
+    | Some (l, h), _, _, Some s | _, Some (l, h), Some s, _ => outside l h s
+    | _, _, Some s1, Some s2 => forallb (fun e => negb (CharSet.contains s2 e)) (CharSet.elements s1)
+    | _, _, _, _ => complements cd1 cd2 || complements cd2 cd1
+    end.
+
+  (* the default check, on descriptors other than unions: the empty class, a
+     descriptor and its inversion, distinct characters and, without ignoreCase,
+     [sets_disjoint] *)
+  Definition atoms_disjoint (cd1 cd2: char_descr) : bool :=
+    match cd1, cd2 with
+    | CdEmpty, _ | _, CdEmpty => true
+    | CdInv a, _ => if char_descr_eq_dec a cd2 then true else false
+    | _, CdInv b => if char_descr_eq_dec cd1 b then true else false
+    | CdSingle c, CdSingle d => negb (Character.canonicalize rer c == Character.canonicalize rer d)
+    | _, _ => if RegExpRecord.ignoreCase rer then false else sets_disjoint cd1 cd2
+    end.
+
+  (* without ignoreCase, a class matches its characters *)
+  Lemma ec_contains: forall s x, RegExpRecord.ignoreCase rer = false ->
+    CharSet.exist_canonicalized rer s x = CharSet.contains s x.
+  Proof.
+    intros s x IC. apply eq_true_iff_eq.
+    rewrite CharSet.exist_canonicalized_equiv, CharSet.exist_spec, CharSet.contains_spec.
+    split; [intros [e [I E]]|exists x; split]; rewrite ?Character.canonicalize_casesenst, ?EqDec.inversion_true in * by auto; subst; auto.
+  Qed.
+
+  Lemma word_contains: forall x, RegExpRecord.ignoreCase rer = false ->
+    CharSet.In x (wordCharacters rer) <-> CharSet.In x Characters.ascii_word_characters.
+  Proof. intros x IC. rewrite wordCharacters_spec, Character.canonicalize_casesenst by auto. tauto. Qed.
+
+  Lemma atoms_disjoint_sound: forall cd1 cd2, atoms_disjoint cd1 cd2 = true -> cd_disjoint cd1 cd2.
+  Proof.
+    intros cd1 cd2 D x. destruct (char_match rer x cd1) eqn:M, (char_match rer x cd2) eqn:M2; auto. exfalso.
+    unfold char_match in *.
+    destruct cd1, cd2; cbn [atoms_disjoint] in D; try discriminate;
+      repeat match type of D with context [char_descr_eq_dec ?a ?b] => destruct (char_descr_eq_dec a b); subst end;
+      cbn [char_match'] in *; try discriminate.
+    all: try (first [rewrite M in M2|rewrite M2 in M]; discriminate).
+    all: try (rewrite ?EqDec.inversion_true in M, M2; rewrite <- M, <- M2, EqDec.reflb in D; discriminate).
+    all: destruct (RegExpRecord.ignoreCase rer) eqn:IC; try discriminate.
+    all: unfold sets_disjoint, outside, bounds, class_set, complements in D;
+      rewrite ?Character.canonicalize_casesenst, ?ec_contains, ?EqDec.inversion_true, ?CharSet.contains_spec,
+        ?Character.numeric_pseudo_bij, ?CharSet.range_spec, ?CharSet.remove_all_spec, ?word_contains in * by auto; subst.
+    all: try (rewrite forallb_forall in D; match goal with I: CharSet.In ?y _ |- _ =>
+      specialize (D y (proj2 (CharSet.elements_spec1 _ _) I)) end).
+    all: rewrite ?orb_true_iff, ?negb_true_iff, <- ?not_true_iff_false, ?PeanoNat.Nat.ltb_lt, ?CharSet.contains_spec,
+      ?CharSet.union_spec in *; intuition (try lia).
+  Qed.
+
+  Fixpoint excludes (cd1 cd2: char_descr) : bool :=
+    match cd2 with
+    | CdUnion a b => excludes cd1 a && excludes cd1 b
+    | _ => atoms_disjoint cd1 cd2
+    end.
+
+  Fixpoint practical_disjoint (cd1 cd2: char_descr) : bool :=
+    match cd1 with
+    | CdUnion a b => practical_disjoint a cd2 && practical_disjoint b cd2
+    | _ => excludes cd1 cd2
+    end.
+
+  Lemma practical_disjoint_sound: forall cd1 cd2, practical_disjoint cd1 cd2 = true -> cd_disjoint cd1 cd2.
+  Proof.
+    assert (E: forall cd2 cd1, excludes cd1 cd2 = true -> cd_disjoint cd1 cd2).
+    { induction cd2; intros cd1 D; try exact (atoms_disjoint_sound _ _ D).
+      apply andb_prop in D as [D1 D2]. intros x.
+      change (char_match rer x (CdUnion ?a ?b)) with (char_match rer x a || char_match rer x b). rewrite andb_orb_distrib_r. now rewrite (IHcd2_1 _ D1), (IHcd2_2 _ D2). }
+    induction cd1; intros cd2 D; try exact (E _ _ D).
+    apply andb_prop in D as [D1 D2]. intros x.
+    change (char_match rer x (CdUnion ?a ?b)) with (char_match rer x a || char_match rer x b). rewrite andb_orb_distrib_l. now rewrite (IHcd1_1 _ D1), (IHcd1_2 _ D2).
+  Qed.
+End Disjoint.
+
+(* the compiler's default check of disjointness *)
+#[global] Instance practical_disjointness {params: LindenParameters} (rer: RegExpRecord) : Disjoint rer :=
+  {| disjoint := practical_disjoint rer; disjoint_sound := practical_disjoint_sound rer |}.
 
 Section NFA.
   Context {params: LindenParameters}.
@@ -72,7 +196,7 @@ Section NFA.
   Fixpoint compile (r:regex) (fresh:label) : code * label :=
     match r with
     | Epsilon => ([], fresh)
-    | Character cd => ([Consume cd], S fresh)
+    | Regex.Character cd => ([Consume cd], S fresh)
     | Disjunction r1 r2 =>
         let (bc1, f1) := compile r1 (S fresh) in
         let (bc2, f2) := compile r2 (S f1) in
@@ -116,7 +240,7 @@ Section NFA.
   | nfa_rep_char:
     forall c cd lbl
       (CONSUME: get_pc c lbl = Some (Consume cd)),
-      nfa_rep (Character cd) c lbl (S lbl)
+      nfa_rep (Regex.Character cd) c lbl (S lbl)
   | nfa_rep_disj:
     forall c r1 r2 start end1 end2
       (FORK: get_pc c start = Some (Fork (S start) (S end1)))
