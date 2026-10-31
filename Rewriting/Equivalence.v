@@ -2,7 +2,7 @@ From Stdlib Require Export Bool Arith List Equivalence Lia.
 From Warblre Require Import Base RegExpRecord.
 From Linden Require Import Regex Chars Groups Tree Semantics
   FunctionalSemantics FunctionalUtils ComputeIsTree Parameters
-  LWParameters LeavesEquivalence FlatMap.
+  LWParameters LeavesEquivalence FlatMap GroupMapLemmas.
 
 Export ListNotations.
 
@@ -59,10 +59,10 @@ Section Definitions.
 
     (** * Regex equivalence *)
 
-    (* Two regexes are equivalent when they define the same groups and
-      yield equivalent lists of leaves when matched on the same input. *)
+    (* Two regexes are equivalent when they define equivalent groups
+      and yield equivalent lists of leaves when matched on the same input. *)
     Definition tree_equiv_dir dir r1 r2 :=
-      def_groups r1 = def_groups r2 /\
+      groups_equiv (def_groups r1) (def_groups r2) /\
       actions_equiv_dir dir [Areg r1] [Areg r2].
 
     (* Stating for all directions *)
@@ -88,7 +88,7 @@ Section Definitions.
   (** * Equivalence and non-equivalence definitions using compute_tr *)
   Section ComputeTree.
     Definition tree_equiv_compute_dir dir r1 r2 :=
-      def_groups r1 = def_groups r2 /\
+      groups_equiv (def_groups r1) (def_groups r2) /\
       forall i gm,
         tree_equiv_tr_dir
           i gm dir
@@ -237,9 +237,15 @@ Ltac tree_equiv_simpl :=
       simpl; intros
     ).
 
+(* Proves [groups_equiv a b] when [a = b] holds by congruence *)
+Ltac groups_equiv_eq :=
+  match goal with
+  | |- groups_equiv ?a ?b => replace a with b by congruence; reflexivity
+  end.
+
 Ltac tree_equiv_prepare :=
   tree_equiv_simpl;
-  try (apply conj; [ try congruence | ]).
+  try (apply conj; [ try groups_equiv_eq; try solve_groups_equiv | ]).
 
 Ltac tree_equiv_rw :=
   try setoid_rewrite tree_equiv_compute_dir_iff;
@@ -437,23 +443,21 @@ Section Relation.
       Relation_Definitions.reflexive regex (tree_equiv_dir rer dir).
     Proof.
       unfold Relation_Definitions.reflexive, tree_equiv_dir.
-      intros x; split; auto. reflexivity.
+      intros x; split; reflexivity.
     Qed.
 
     Lemma tree_equiv_dir_symmetric:
       Relation_Definitions.symmetric regex (tree_equiv_dir rer dir).
     Proof.
       unfold Relation_Definitions.symmetric, tree_equiv_dir.
-      intros x y [DEF_GROUPS Hequiv]; split; try solve[congruence].
-      symmetry. auto.
+      intros x y [DEF_GROUPS Hequiv]; split; symmetry; auto.
     Qed.
 
     Lemma tree_equiv_dir_transitive:
       Relation_Definitions.transitive regex (tree_equiv_dir rer dir).
     Proof.
       unfold Relation_Definitions.transitive, tree_equiv_dir.
-      intros x y z [DEF_GROUPS12 H12] [DEF_GROUPS23 H23]; split; try solve[congruence].
-      transitivity [Areg y]; auto.
+      intros x y z [DEF_GROUPS12 H12] [DEF_GROUPS23 H23]; split; etransitivity; eauto.
     Qed.
 
     #[global] Add Relation regex (tree_equiv_dir rer dir)
@@ -468,24 +472,22 @@ Section Relation.
       Relation_Definitions.reflexive regex (tree_equiv_compute_dir rer dir).
     Proof.
       unfold Relation_Definitions.reflexive, tree_equiv_compute_dir.
-      intros x; split; auto. reflexivity.
+      intros; split; [reflexivity|]. intros. reflexivity.
     Qed.
 
     Lemma tree_equiv_compute_dir_symmetric:
       Relation_Definitions.symmetric regex (tree_equiv_compute_dir rer dir).
     Proof.
       unfold Relation_Definitions.symmetric, tree_equiv_compute_dir, tree_equiv_tr_dir.
-      intros x y [DEF_GROUPS Hequiv]; split; try solve[congruence].
-      symmetry. auto.
+      intros x y [DEF_GROUPS Hequiv]; split; [symmetry; auto|].
+      intros. symmetry. auto.
     Qed.
 
     Lemma tree_equiv_compute_dir_transitive:
       Relation_Definitions.transitive regex (tree_equiv_compute_dir rer dir).
     Proof.
       unfold Relation_Definitions.transitive, tree_equiv_compute_dir, tree_equiv_tr_dir.
-      intros x y z [DEF_GROUPSxy Hxy] [DEF_GROUPSyz Hyz]; split; try solve[congruence].
-      intros i gm.
-      etransitivity; eauto.
+      intros x y z [DEF_GROUPSxy Hxy] [DEF_GROUPSyz Hyz]; split; etransitivity; eauto.
     Qed.
 
     #[global] Add Relation regex (tree_equiv_compute_dir rer dir)
@@ -1034,8 +1036,8 @@ Section Congruence.
     induction min as [|min' IH]. 1: split; assumption.
     unfold tree_equiv_dir. split; try assumption. intros inp gm t1 t2 TREE1 TREE2.
     inversion TREE1; subst; inversion TREE2; subst.
-    rewrite <- DEF_GROUPS in *.
     unfold tree_equiv_tr_dir. simpl.
+    rewrite <- (reset_groups_equiv_same _ _ gm DEF_GROUPS) in *.
     apply app_eq_both with (a1 := [Areg r1]) (a2 := [Areg r2]) (b1 := [Areg (Quantified greedy min' delta r1)]) (b2 := [Areg (Quantified greedy min' delta r2)]).
     - unfold actions_equiv_dir. unfold tree_equiv_dir in EQUIV.
       apply EQUIV.
@@ -1048,11 +1050,11 @@ Section Congruence.
   (* Done case *)
   Lemma regex_equiv_quant_done:
     forall r1 r2 dir greedy,
-      def_groups r1 = def_groups r2 ->
+      groups_equiv (def_groups r1) (def_groups r2) ->
       tree_equiv_dir rer dir (Quantified greedy 0 (NoI.N 0) r1) (Quantified greedy 0 (NoI.N 0) r2).
   Proof.
     intros. unfold tree_equiv_dir.
-    split; auto. intros inp gm t1 t2 TREE1 TREE2.
+    split; [simpl; auto|]. intros inp gm t1 t2 TREE1 TREE2.
     inversion TREE1; subst; inversion TREE2; subst.
     - inversion SKIP; subst; inversion SKIP0; subst. unfold tree_equiv_tr_dir. reflexivity.
     - destruct plus; discriminate.
@@ -1142,7 +1144,7 @@ Section Congruence.
         subst plus0. clear H1.
         inversion SKIP; subst inp0 gm0 dir0 tskip. inversion SKIP0; subst inp0 gm0 dir0 tskip0.
         unfold tree_equiv_tr_dir.
-        rewrite <- DEF_GROUPS in *.
+        rewrite <- (reset_groups_equiv_same _ _ gm DEF_GROUPS) in ISTREE0.
         assert (leaves_equiv [] (tree_leaves titer (GroupMap.reset (def_groups r1) gm) inp dir)
           (tree_leaves titer0 (GroupMap.reset (def_groups r1) gm) inp dir)). {
           eapply actions_equiv_interm_prop with
@@ -1160,7 +1162,7 @@ Section Congruence.
              apply IHn with (delta := plus); auto.
              pose proof strict_suffix_remaining_length _ _ _ STRICT_SUFFIX. lia.
         }
-        destruct greedy; simpl.
+        destruct greedy; simpl; rewrite <- (reset_groups_equiv_same _ _ gm DEF_GROUPS).
         * (* Greedy *)
           apply leaves_equiv_app. 2: reflexivity. auto.
         * (* Lazy *)
@@ -1205,7 +1207,7 @@ Section Congruence.
     - (* Disjunction left *)
       simpl in *. unfold tree_equiv_dir, actions_equiv_dir in *. specialize (IHctx Hctxdir).
       destruct IHctx as [IHgroups IHctx]. split.
-      1: { simpl. f_equal. auto. }
+      1: { simpl. apply groups_equiv_app; auto. reflexivity. }
       intros inp gm t1 t2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst.
       unfold tree_equiv_tr_dir in *.
@@ -1215,7 +1217,7 @@ Section Congruence.
     - (* Disjunction right *)
       simpl in *. unfold tree_equiv_dir, actions_equiv_dir in *. specialize (IHctx Hctxdir).
       destruct IHctx as [IHgroups IHctx]. split.
-      1: { simpl. f_equal. auto. }
+      1: { simpl. apply groups_equiv_app; auto. reflexivity. }
       intros inp gm t1 t2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst.
       unfold tree_equiv_tr_dir in *.
@@ -1225,7 +1227,7 @@ Section Congruence.
     - (* Sequence left *)
       simpl in *. unfold tree_equiv_dir in *. specialize (IHctx Hctxdir).
       destruct IHctx as [IHgroups IHctx]. split.
-      1: { simpl. f_equal. auto. }
+      1: { simpl. apply groups_equiv_app; auto. reflexivity. }
       intros inp gm t1 t2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst.
       destruct dir.
@@ -1239,7 +1241,7 @@ Section Congruence.
     - (* Sequence right *)
       simpl in *. unfold tree_equiv_dir, actions_equiv_dir in *. specialize (IHctx Hctxdir).
       destruct IHctx as [IHgroups IHctx]. split.
-      1: { simpl. f_equal. auto. }
+      1: { simpl. apply groups_equiv_app; auto. reflexivity. }
       intros inp gm t1 t2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst.
       destruct dir.
@@ -1259,7 +1261,7 @@ Section Congruence.
     - (* Group *)
       simpl in *. unfold tree_equiv_dir, actions_equiv_dir in *. specialize (IHctx Hctxdir).
       destruct IHctx as [IHgroups IHctx]. split.
-      1: { simpl. f_equal. auto. }
+      1: { simpl. apply groups_equiv_cons. auto. }
       intros inp gm t1 t2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst.
       unfold tree_equiv_tr_dir in *. simpl.

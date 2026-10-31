@@ -30,7 +30,7 @@ Section ForcedQuant.
     forall r n,
       (Quantified true n (NoI.N 0) r) ≅[rer] (Quantified false n (NoI.N 0) r).
   Proof.
-    unfold tree_equiv, tree_equiv_dir. intros. split; auto. apply forced_actions.
+    unfold tree_equiv, tree_equiv_dir. intros. split; [reflexivity | apply forced_actions].
   Qed.
 
   Theorem forced_equiv_true:

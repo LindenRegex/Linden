@@ -44,7 +44,7 @@ Section SeqAssoc.
       Sequence r1 (Sequence r2 r3) ≅[rer] Sequence (Sequence r1 r2) r3.
   Proof.
     unfold tree_equiv, tree_equiv_dir. intros r1 r2 r3 dir. split.
-    { simpl. apply app_assoc. }
+    { simpl. rewrite app_assoc. reflexivity. }
     unfold actions_equiv_dir. intros. destruct dir.
     - inversion TREE1; inversion TREE2; subst. simpl in *. inversion CONT0; subst. simpl in *.
       pose proof (seq_assoc_actions_fwd r1 r2 r3). auto.
