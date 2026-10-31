@@ -120,6 +120,75 @@ Section Disjoint.
     apply andb_prop in D as [D1 D2]. intros x.
     change (char_match rer x (CdUnion ?a ?b)) with (char_match rer x a || char_match rer x b). rewrite andb_orb_distrib_l. now rewrite (IHcd1_1 _ D1), (IHcd1_2 _ D2).
   Qed.
+
+  (* the descriptors whose characters can be enumerated, as sets *)
+  Fixpoint cd_set (cd: char_descr) : option CharSet :=
+    match cd with
+    | CdEmpty => Some CharSet.empty
+    | CdSingle c => Some (CharSet.singleton c)
+    | CdUnion a b =>
+        match cd_set a, cd_set b with Some s1, Some s2 => Some (CharSet.union s1 s2) | _, _ => None end
+    | CdAll | CdInv _ => None
+    | CdDot => Some (if RegExpRecord.dotAll rer then Characters.all
+                    else CharSet.remove_all Characters.all Characters.line_terminators)
+    | CdDigits => Some Characters.digits
+    | CdNonDigits => Some (CharSet.remove_all Characters.all Characters.digits)
+    | CdWhitespace => Some (CharSet.union Characters.white_spaces Characters.line_terminators)
+    | CdNonWhitespace =>
+        Some (CharSet.remove_all Characters.all (CharSet.union Characters.white_spaces Characters.line_terminators))
+    | CdWordChar => Some (wordCharacters rer)
+    | CdNonWordChar => Some (CharSet.remove_all Characters.all (wordCharacters rer))
+    | CdUnicodeProp p => Some (CharSet.from_list (Property.code_points_for p))
+    | CdNonUnicodeProp p => Some (CharSet.remove_all Characters.all (CharSet.from_list (Property.code_points_for p)))
+    | CdRange l h => Some (CharSet.range (Character.from_numeric_value (Character.numeric_value l))
+                                        (Character.from_numeric_value (Character.numeric_value h)))
+    end.
+
+  Lemma cd_set_match: forall cd s x, cd_set cd = Some s ->
+    char_match rer x cd = true <-> exists e, CharSet.In e s /\ Character.canonicalize rer e = Character.canonicalize rer x.
+  Proof.
+    unfold char_match. induction cd; intros s x S; cbn in S |- *; try discriminate.
+    13: { destruct (cd_set cd1) as [s1|], (cd_set cd2) as [s2|]; try discriminate. injection S as <-.
+      rewrite orb_true_iff, IHcd1, IHcd2 by reflexivity. setoid_rewrite CharSet.union_spec. firstorder. }
+    all: injection S as <-; unfold dot_matches; destruct (RegExpRecord.dotAll rer);
+      rewrite ?CharSet.exist_canonicalized_equiv, ?CharSet.exist_spec; unfold CharSet.Exists;
+      try setoid_rewrite EqDec.inversion_true; try setoid_rewrite CharSet.singleton_spec; try reflexivity.
+    all: split; [discriminate + eauto|intros [e [I E]]; first [destruct (CharSet.empty_spec _ I)|subst; auto]].
+  Qed.
+
+  (* exact when one of the descriptors can be enumerated, but too slow for the compiler *)
+  Definition exact_disjoint (cd1 cd2: char_descr) : bool :=
+    match cd_set cd1, cd_set cd2 with
+    | Some s, _ => forallb (fun e => negb (char_match rer e cd2)) (CharSet.elements s)
+    | None, Some s => forallb (fun e => negb (char_match rer e cd1)) (CharSet.elements s)
+    | None, None => false
+    end.
+
+  Lemma enumerated_disjoint: forall cd1 cd2 s, cd_set cd1 = Some s ->
+    forallb (fun e => negb (char_match rer e cd2)) (CharSet.elements s) = true <-> cd_disjoint cd1 cd2.
+  Proof.
+    intros cd1 cd2 s S. rewrite forallb_forall. split.
+    - intros F x. destruct (char_match rer x cd1) eqn:M; auto. apply (cd_set_match _ _ _ S) in M as [e [I E]].
+      apply CharSet.elements_spec1, F, negb_true_iff in I. unfold char_match in *. rewrite <- E. exact I.
+    - intros D e I. specialize (D e). apply CharSet.elements_spec1 in I.
+      rewrite (proj2 (cd_set_match _ _ _ S)) in D by eauto. cbn in D. now rewrite D.
+  Qed.
+
+  (* exact disjointness meets the specification precisely when one of the
+     descriptors can be enumerated, which all can but [CdAll], [CdInv] and their unions *)
+  Theorem exact_disjoint_spec: forall cd1 cd2, cd_set cd1 <> None \/ cd_set cd2 <> None ->
+    exact_disjoint cd1 cd2 = true <-> cd_disjoint cd1 cd2.
+  Proof.
+    intros cd1 cd2 FIN. unfold exact_disjoint.
+    destruct (cd_set cd1) eqn:S1, (cd_set cd2) eqn:S2; rewrite ?(enumerated_disjoint _ _ _ S1), ?(enumerated_disjoint _ _ _ S2); try tauto.
+    split; intros D c; rewrite andb_comm; apply D.
+  Qed.
+
+  Definition exact_disjointness : Disjoint := {|
+    disjoint := exact_disjoint;
+    disjoint_sound cd1 cd2 D := proj1 (exact_disjoint_spec cd1 cd2
+      ltac:(unfold exact_disjoint in D; destruct (cd_set cd1), (cd_set cd2); [left|left|right|]; congruence)) D
+  |}.
 End Disjoint.
 
 (* the compiler's default check of disjointness *)
