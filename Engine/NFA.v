@@ -325,6 +325,13 @@ Ltac stutter :=
       try solve[unfold stutters in H; rewrite H1 in H; inversion H]
   end.
 
+Ltac locate_pc pc GET :=
+  repeat match goal with
+  | H : get_pc ?cc ?l = Some ?j, G : get_pc ?cc pc = Some _ |- _ =>
+      assert (pc = l \/ pc <> l) as [->|] by lia;
+      [rewrite H in GET; injection GET as <-; clear H|clear H]
+  end.
+
 Ltac invert_rep :=
    match goal with
    | [ H : actions_rep (Areg _ :: _) _ _ |- _ ] => inversion H; clear H; subst; try no_stutter

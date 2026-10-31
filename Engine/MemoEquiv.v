@@ -490,72 +490,22 @@ Section MemoEquiv.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
       repeat (econstructor; eauto). pike_subset.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    - (* when the choice comes from a quantifier *)
+    - (* when the choice comes from a quantifier: the fork keeps the body and the exit *)
       destruct (destruct_delta (NoI.N 1 + plus)%NoI) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]].
       (* Zero Repetition *)
-      + destruct plus; inversion DZ.
-      + { (* Question Mark *)
-          destruct plus; inversion D1. subst.
-          repeat invert_rep. destruct greedy; inversion CHOICE; subst.
-          +                           (* greedy qmark *)
-            simpl. rewrite FORK. exists [(S pc, gm, b, inp); (S end1, gm, b, inp)]. split; auto.
-            econstructor.
-            * econstructor. constructor.
-              apply tc_eq with (actions:=cont); auto. pike_subset.
-            * apply tc_begin; auto.
-              replace (S (S pc)) with (S pc +1) in RESET by lia.
-              apply tc_reset; auto.
-              apply tc_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 (NoI.N 0) r1)::cont); auto.
-              2: { pike_subset. }
-              apply cons_bc with (pcmid:=end1).
-              { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-              repeat (econstructor; eauto).
-          +                           (* lazy qmark *)
-            simpl. rewrite FORK. exists [(S end1, gm, b, inp); (S pc, gm, b, inp)]. split; auto.
-            econstructor.
-            * constructor. constructor. apply tc_begin; auto.
-              replace (S (S pc)) with (S pc + 1) in RESET by lia.
-              apply tc_reset; auto.
-              apply tc_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 (NoI.N 0) r1)::cont); auto.
-              2: { pike_subset. }
-              apply cons_bc with (pcmid:=end1).
-              { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-              repeat (econstructor; eauto).
-            * apply tc_eq with (actions:=cont); auto. pike_subset.
-        }
-      + { (* Star *)
-          destruct plus; inversion DINF.
-          repeat invert_rep. destruct greedy; inversion CHOICE; subst.
-          +                           (* greedy star *)
-            simpl. rewrite FORK. exists [(S pc, gm, b, inp); (S end1, gm, b, inp)]. split; auto.
-            econstructor.
-            * econstructor. constructor.
-              apply tc_eq with (actions:=cont); auto. pike_subset.
-            * apply tc_begin; auto.
-              replace (S (S pc)) with (S pc +1) in RESET by lia.
-              apply tc_reset; auto.
-              apply tc_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 +∞ r1)::cont); auto.
-              2: { pike_subset. }
-              apply cons_bc with (pcmid:=end1).
-              { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-              repeat (econstructor; eauto).
-              replace (S (S pc)) with (S pc + 1) by lia. auto.
-          +                           (* lazy star *)
-            simpl. rewrite FORK. exists [(S end1, gm, b, inp); (S pc, gm, b, inp)]. split; auto.
-            econstructor.
-            * constructor. constructor. apply tc_begin; auto.
-              replace (S (S pc)) with (S pc + 1) in RESET by lia.
-              apply tc_reset; auto.
-              apply tc_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 +∞ r1)::cont); auto.
-              2: { pike_subset. }
-              apply cons_bc with (pcmid:=end1).
-              { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-              repeat (econstructor; eauto).
-              replace (S (S pc)) with (S pc + 1) by lia. auto.
-            * apply tc_eq with (actions:=cont); auto. pike_subset.
-        }
+      1: destruct plus; inversion DZ.
       (* Unsupported *)
-      + rewrite DUN in SUBSET. inversion SUBSET; subst. inversion H1; subst. inversion H0; subst; lia.
+      3: { rewrite DUN in SUBSET. inversion SUBSET; subst. inversion H1; subst. inversion H0; subst; lia. }
+      (* Question Mark and Star *)
+      all: destruct plus; try discriminate; repeat invert_rep.
+      all: assert (BODY: tree_config code (GroupAction (Reset (def_groups r1)) titer, gm, inp) (S pc, gm, b, inp));
+        [apply tc_begin; auto; apply tc_reset; [|rewrite <- RESET; f_equal; lia];
+         eapply tc_eq; [eauto| |pike_subset]; apply cons_bc with (pcmid:=end1);
+         [constructor; replace (S pc+1+1) with (S (S (S pc))) by lia; auto|];
+         repeat (econstructor; eauto); rewrite <- RESET; f_equal; lia|].
+      all: assert (EXIT: tree_config code (tskip, gm, inp) (S end1, gm, b, inp)) by (eapply tc_eq; eauto; pike_subset).
+      all: destruct greedy; inversion CHOICE; subst.
+      all: unfold exec_instr; rewrite FORK; eexists; split; [reflexivity|]; eauto using ltc_cons, ltc_nil.
   Qed.
 
   (* next we combine the exec lemmas together, for the general non-stuttering case *)
@@ -729,17 +679,9 @@ Section MemoEquiv.
     intros code pc gm b nextpc nextgm nextb inp nextinp WF STUTTERS EXEC.
     unfold stutter_wf in WF. unfold exec_instr in EXEC.
     destruct (get_pc code pc) eqn:GET; [|inversion EXEC].
-    destruct b0; try solve[inversion EXEC; lia].
-    - destruct read_char; try destruct p; inversion EXEC. lia.
-    - destruct anchor_satisfied; inversion EXEC. lia.
-    - inversion EXEC; subst.
-      eapply (WF pc nextgm nextb nextpc nextgm nextb nextinp); eauto.
-      unfold PikeVM.epsilon_step. rewrite GET.
-      unfold PikeVM.upd_label. eauto.
-    - destruct b; inversion EXEC; subst.
-      eapply (WF pc nextgm CanExit nextpc nextgm CanExit nextinp); eauto.
-      unfold PikeVM.epsilon_step. rewrite GET.
-      unfold PikeVM.upd_label. eauto.
+    destruct b0; try solve[inversion EXEC; lia | unfold stutters in STUTTERS; rewrite GET in STUTTERS; discriminate].
+    inversion EXEC; subst. eapply (WF pc nextgm nextb nextpc nextgm nextb nextinp); eauto.
+    unfold PikeVM.epsilon_step. rewrite GET. reflexivity.
   Qed.
 
 

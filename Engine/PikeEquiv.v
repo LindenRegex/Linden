@@ -312,72 +312,22 @@ Proof.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     repeat (econstructor; eauto). pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-  - (* when the choice comes from a quantifier *)
+  - (* when the choice comes from a quantifier: the fork keeps the body and the exit *)
     destruct (destruct_delta (NoI.N 1 + plus)%NoI) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]].
     (* Zero Repetition *)
-    + destruct plus; inversion DZ.
-    + { (* Question Mark *)
-        destruct plus; inversion D1. subst.
-        repeat invert_rep. destruct greedy; inversion CHOICE; subst.
-        +                           (* greedy qmark *)
-          simpl. rewrite FORK. exists [(S pc, gm, b); (S end1, gm, b)]. split; auto.
-          econstructor.
-          * econstructor. constructor.
-            apply tt_eq with (actions:=cont); auto. pike_subset.
-          * apply tt_begin; auto.
-            replace (S (S pc)) with (S pc +1) in RESET by lia.
-            apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 (NoI.N 0) r1)::cont); auto.
-            2: { pike_subset. }
-            apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-            repeat (econstructor; eauto).
-        +                           (* lazy qmark *)
-          simpl. rewrite FORK. exists [(S end1, gm, b); (S pc, gm, b)]. split; auto.
-          econstructor.
-          * constructor. constructor. apply tt_begin; auto.
-            replace (S (S pc)) with (S pc + 1) in RESET by lia.
-            apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 (NoI.N 0) r1)::cont); auto.
-            2: { pike_subset. }
-            apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-            repeat (econstructor; eauto).
-          * apply tt_eq with (actions:=cont); auto. pike_subset.
-      }
-    + { (* Star *)
-        destruct plus; inversion DINF.
-        repeat invert_rep. destruct greedy; inversion CHOICE; subst.
-        +                           (* greedy star *)
-          simpl. rewrite FORK. exists [(S pc, gm, b); (S end1, gm, b)]. split; auto.
-          econstructor.
-          * econstructor. constructor.
-            apply tt_eq with (actions:=cont); auto. pike_subset.
-          * apply tt_begin; auto.
-            replace (S (S pc)) with (S pc +1) in RESET by lia.
-            apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 +∞ r1)::cont); auto.
-            2: { pike_subset. }
-            apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-            repeat (econstructor; eauto).
-            replace (S (S pc)) with (S pc + 1) by lia. auto.
-        +                           (* lazy star *)
-          simpl. rewrite FORK. exists [(S end1, gm, b); (S pc, gm, b)]. split; auto.
-          econstructor.
-          * constructor. constructor. apply tt_begin; auto.
-            replace (S (S pc)) with (S pc + 1) in RESET by lia.
-            apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 +∞ r1)::cont); auto.
-            2: { pike_subset. }
-            apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
-            repeat (econstructor; eauto).
-            replace (S (S pc)) with (S pc + 1) by lia. auto.
-          * apply tt_eq with (actions:=cont); auto. pike_subset.
-      }
+    1: destruct plus; inversion DZ.
     (* Unsupported *)
-        + rewrite DUN in SUBSET. inversion SUBSET; subst. inversion H1; subst. inversion H0; subst; lia.
+    3: { rewrite DUN in SUBSET. inversion SUBSET; subst. inversion H1; subst. inversion H0; subst; lia. }
+    (* Question Mark and Star *)
+    all: destruct plus; try discriminate; repeat invert_rep.
+    all: assert (BODY: tree_thread code inp (GroupAction (Reset (def_groups r1)) titer, gm) (S pc, gm, b));
+      [apply tt_begin; auto; apply tt_reset; [|rewrite <- RESET; f_equal; lia];
+       eapply tt_eq; [eauto| |pike_subset]; apply cons_bc with (pcmid:=end1);
+       [constructor; replace (S pc+1+1) with (S (S (S pc))) by lia; auto|];
+       repeat (econstructor; eauto); rewrite <- RESET; f_equal; lia|].
+    all: assert (EXIT: tree_thread code inp (tskip, gm) (S end1, gm, b)) by (eapply tt_eq; eauto; pike_subset).
+    all: destruct greedy; inversion CHOICE; subst.
+    all: unfold epsilon_step; rewrite FORK; eexists; split; [reflexivity|]; eauto using ltt_cons, ltt_nil.
 Qed.
 
 
@@ -928,75 +878,17 @@ Lemma compile_jumps:
     get_pc code pc = Some (Jmp next) ->
     pc < next.
 Proof.
-  intros r code start endl pc next REP GE LT GET.
-  generalize dependent pc. induction REP; intros.
-  - lia.
-  - assert (pc = lbl) by lia. subst.
-    rewrite CONSUME in GET. inversion GET.
-  - apply nfa_rep_incr in REP1 as INCR1.
-    apply nfa_rep_incr in REP2 as INCR2.
-    assert (pc = start \/ pc >= S start) as [ST|H] by lia.
-    (* Fork *)
-    { subst. rewrite FORK in GET. inversion GET. }
-    assert (pc < end1 \/ pc >= end1) as [R1|H1] by lia.
-    (* in r1 *)
-    { apply IHREP1; auto. }
-    assert (pc = end1 \/ pc >= S end1) as [J|H2] by lia.
-    (* the jmp *)
-    { subst. rewrite JMP in GET. inversion GET. lia. }
-    (* in r2 *)
-    apply IHREP2; auto.
-  - apply nfa_rep_incr in REP1 as INCR1.
-    apply nfa_rep_incr in REP2 as INCR2.
-    assert (pc < end1 \/ pc >= end1) as [H1|H2] by lia.
-    (* in r1 *)
-    { apply IHREP1; auto. }
-    (* in r2 *)
-    apply IHREP2; auto.
-  - lia.
-  - apply nfa_rep_incr in REP as INC.
-    assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
-    (* fork *)
-    { subst. rewrite FORK in GET. destruct greedy; inversion GET. }
-    assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
-    (* Begin *)
-    { subst. rewrite BEGIN in GET. inversion GET. }
-    assert (pc = S (S start) \/ pc >= S (S (S start))) as [RES|H2] by lia.
-    (* Reset *)
-    { subst. rewrite RESET in GET. inversion GET. }
-    assert (pc < end1 \/ pc = end1) as [R1|H3] by lia.
-    (* in r1 *)
-    { apply IHREP; auto. }
-    (* endloop *)
-    subst. rewrite END in GET. inversion GET.
-  - apply nfa_rep_incr in REP as INC.
-    assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
-    (* fork *)
-    { subst. rewrite FORK in GET. destruct greedy; inversion GET. }
-    assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
-    (* Begin *)
-    { subst. rewrite BEGIN in GET. inversion GET. }
-    assert (pc = S (S start) \/ pc >= S (S (S start))) as [RES|H2] by lia.
-    (* Reset *)
-    { subst. rewrite RESET in GET. inversion GET. }
-    assert (pc < end1 \/ pc = end1) as [R1|H3] by lia.
-    (* in r1 *)
-    { apply IHREP; auto. }
-    (* endloop *)
-    subst. rewrite END in GET. inversion GET.
-  - apply nfa_rep_incr in REP as INC.
-    assert (pc = start \/ pc >= S start) as [ST|H] by lia.
-    (* open *)
-    { subst. rewrite OPEN in GET. inversion GET. }
-    assert (pc = end1 \/ pc < end1) as [END|H1] by lia.
-    (* close *)
-    { subst. rewrite CLOSE in GET. inversion GET. }
-    (* in r1 *)
-    apply IHREP; auto.
-  - assert (pc = lbl) by lia. subst.
-    rewrite CHECK in GET. inversion GET.
-  - assert (pc = lbl) by lia. subst.
-    rewrite KILL in GET. inversion GET.
+  intros r code start endl pc next REP. revert pc.
+  induction REP; intros pc GE LT GET; remember (Jmp next) as j eqn:J in GET;
+    try (apply nfa_rep_incr in REP as INC); try (apply nfa_rep_incr in REP1 as INC1);
+    try (apply nfa_rep_incr in REP2 as INC2);
+    locate_pc pc GET;
+    try solve [lia | discriminate | injection J; lia
+      | unfold greedy_fork in J;
+        repeat match type of J with context [match ?x with _ => _ end] => destruct x end; discriminate];
+    subst j;
+    first [eapply IHREP; eauto; lia
+      | assert (pc < end1 \/ end1 <= pc) as [] by lia; [eapply IHREP1|eapply IHREP2]; eauto; lia].
 Qed.
 
 
