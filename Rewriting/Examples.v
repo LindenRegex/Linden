@@ -42,6 +42,14 @@ Section Utilities.
     rewrite <- app_assoc in IHis_tree; eauto with is_tree.
   Qed.
 
+  Lemma is_tree_skip_quant_zero_r a i gm dir tr greedy r:
+    is_tree rer a i gm dir tr ->
+    is_tree rer (a ++ [Areg (Quantified greedy 0 (NoI.N 0) r)]) i gm dir tr.
+  Proof.
+    induction 1; subst; simpl; eauto with is_tree.
+    rewrite <- app_assoc in IHis_tree; eauto with is_tree.
+  Qed.
+
   Lemma seq_equiv_dir: forall x x' y y' dir, x ≅[rer][dir] x' -> y ≅[rer][dir] y' -> Sequence x y ≅[rer][dir] Sequence x' y'.
   Proof.
     intros x x' y y' [] EQUIV_x EQUIV_y.
@@ -98,6 +106,32 @@ Section Examples.
   Proof.
     tree_equiv_rw; compute_tr_simpl.
     reflexivity.
+  Qed.
+
+  (* above, we need no groups, because epsilon doesn't define any.
+     still, if a 0 quantifier is used in sequence with a regex that
+     defines the same group, we can remove the 0 quantifier (without
+     first rewriting to epsilon) *)
+  Lemma quantified_zero_seq_left r s greedy:
+    incl (def_groups r) (def_groups s) ->
+    Sequence (Quantified greedy 0 (NoI.N 0) r) s ≅[rer] s.
+  Proof.
+    intros INCL dir. split.
+    1: { simpl. split; [apply incl_app; [auto | apply incl_refl] | apply incl_appr, incl_refl]. }
+    destruct dir; tree_equiv_simpl; tree_inv TREE1; [tree_inv TREE2 | ..].
+    all: try apply (is_tree_skip_quant_zero_r rer [Areg s]); eauto using compute_tr_is_tree.
+    all: reflexivity.
+  Qed.
+
+  Lemma quantified_zero_seq_right r s greedy:
+    incl (def_groups r) (def_groups s) ->
+    Sequence s (Quantified greedy 0 (NoI.N 0) r) ≅[rer] s.
+  Proof.
+    intros INCL dir. split.
+    1: { simpl. split; [apply incl_app; [apply incl_refl | auto] | apply incl_appl, incl_refl]. }
+    destruct dir; tree_equiv_simpl; tree_inv TREE1; [tree_inv TREE2 | ..].
+    all: try apply (is_tree_skip_quant_zero_r rer [Areg s]); eauto using compute_tr_is_tree.
+    all: reflexivity.
   Qed.
 
   Lemma quantified_S_equiv_forward n:

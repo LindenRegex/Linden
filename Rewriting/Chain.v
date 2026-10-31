@@ -9,9 +9,6 @@ Section EquivalenceChain.
 
 Theorem equivalence_chain:
   forall r min0 min1 Delta1 Delta2,
-    (* when r defines no groups *)
-    def_groups r = [] ->
-
     (* r{min,0,0,false} *)
     (Sequence (Quantified false min0 0 r)
        (* r{min1,Delta1,true} *)
@@ -25,14 +22,14 @@ Theorem equivalence_chain:
       (* r{min0+min1,Delta1+Delta2,true} *)
       (Quantified true (min0+min1) (Delta1+Delta2)%NoI r).
 Proof.
-  intros r min0 min1 Delta1 Delta2 NOGROUPS.
+  intros r min0 min1 Delta1 Delta2.
   (* transforms the false into a true *)
   etransitivity.
   { apply seq_equiv. symmetry. apply forced_equiv. reflexivity. }
   (* splits r {min1,Delta1} in two *)
   etransitivity.
   { apply seq_equiv_dir. reflexivity. apply seq_equiv_dir.
-    - symmetry. apply bounded_atmost_equiv. auto.
+    - symmetry. apply bounded_atmost_equiv.
     - reflexivity. }
   (* associativity of the sequence *)
   etransitivity.
@@ -42,10 +39,10 @@ Proof.
   (* merges the first two, and last two, quantifiers *)
   etransitivity.
   { apply seq_equiv.
-    - apply bounded_bounded_equiv. auto.
-    - apply atmost_atmost_equiv. auto. }
+    - apply bounded_bounded_equiv.
+    - apply atmost_atmost_equiv. }
   (* merges the two resulting quantifiers *)
-  apply bounded_atmost_equiv. auto.
+  apply bounded_atmost_equiv.
 Qed.
 
 
