@@ -274,6 +274,21 @@ Qed.
     Equivalence_Symmetric := groups_equiv_sym;
     Equivalence_Transitive := groups_equiv_trans }.
 
+Lemma groups_equiv_app:
+  forall l1 l1' l2 l2',
+    groups_equiv l1 l1' -> groups_equiv l2 l2' ->
+    groups_equiv (l1 ++ l2) (l1' ++ l2').
+Proof.
+  intros l1 l1' l2 l2' [H1 H1'] [H2 H2'].
+  split; apply incl_app_app; auto.
+Qed.
+
+Lemma groups_equiv_cons:
+  forall g l l', groups_equiv l l' -> groups_equiv (g :: l) (g :: l').
+Proof.
+  intros g l l' [H H']. split; intros x [->|Hx]; simpl; auto.
+Qed.
+
 (* two resets of equivalent group sets produce the same group map *)
 Lemma reset_groups_equiv_same:
   forall l1 l2 gm,

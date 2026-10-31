@@ -12,7 +12,7 @@ Section Utilities.
     (* autounfold with tree_equiv; destruct dir; tree_equiv_inv. *)
     (*tree_equiv_rw; destruct dir; compute_tr_simpl.*)
     unfold tree_equiv. intros [].
-    - unfold tree_equiv_dir. split. 1: simpl; apply app_assoc.
+    - unfold tree_equiv_dir. split. 1: simpl; rewrite app_assoc; reflexivity.
       intros i gm tr1 tr2 TREE1 TREE2. inversion TREE1; subst. inversion TREE2; subst. simpl in *.
       clear TREE1 TREE2.
       inversion CONT0; subst. simpl in CONT1.
@@ -21,7 +21,7 @@ Section Utilities.
       apply app_eq_left with (acts := [Areg r0]).
       unfold actions_equiv_dir. intros inp gm t1 t2 TREE1 TREE2.
       inversion TREE1; subst. simpl in CONT. replace t2 with t1 by (eapply is_tree_determ; eauto). reflexivity.
-    - unfold tree_equiv_dir. split. 1: simpl; apply app_assoc.
+    - unfold tree_equiv_dir. split. 1: simpl; rewrite app_assoc; reflexivity.
       intros i gm tr1 tr2 TREE1 TREE2. inversion TREE1; subst. inversion TREE2; subst. simpl in *.
       clear TREE1 TREE2.
       inversion CONT; subst. simpl in CONT1.
@@ -46,7 +46,7 @@ Section Utilities.
   Proof.
     intros x x' y y' [] EQUIV_x EQUIV_y.
     - destruct EQUIV_x as [DEF_GROUPS_x EQUIV_x]. destruct EQUIV_y as [DEF_GROUPS_y EQUIV_y].
-      split. 1: { simpl. rewrite <- DEF_GROUPS_x, DEF_GROUPS_y. reflexivity. }
+      split. 1: { simpl. apply groups_equiv_app; auto. }
       intros i gm tr1 tr2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst. simpl in *. clear TREE1 TREE2.
       revert i gm tr1 tr2 CONT CONT0.
@@ -55,7 +55,7 @@ Section Utilities.
       change (actions_equiv_dir rer forward [Areg y] [Areg y']) in EQUIV_y.
       apply app_eq_both with (a1 := [Areg x]) (a2 := [Areg x']) (b1 := [Areg y]) (b2 := [Areg y']) (dir := forward); auto.
     - destruct EQUIV_x as [DEF_GROUPS_x EQUIV_x]. destruct EQUIV_y as [DEF_GROUPS_y EQUIV_y].
-      split. 1: { simpl. rewrite <- DEF_GROUPS_x, DEF_GROUPS_y. reflexivity. }
+      split. 1: { simpl. apply groups_equiv_app; auto. }
       intros i gm tr1 tr2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst. simpl in *. clear TREE1 TREE2.
       revert i gm tr1 tr2 CONT CONT0.
