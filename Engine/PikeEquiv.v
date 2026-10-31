@@ -775,6 +775,7 @@ Inductive start_rep: bytecode -> Prop :=
 | start_chkanch: forall a, start_rep (CheckAnchor a)
 | start_jmp: forall lbl, start_rep (Jmp lbl)
 | start_fork: forall l1 l2, start_rep (Fork l1 l2)
+| start_forklazy: forall l1 l2, start_rep (ForkLazy l1 l2)
 | start_branch: forall cd l1 l2, start_rep (Branch cd l1 l2)
 | start_guardfirst: forall cd l1 l2, start_rep (GuardFirst cd l1 l2)
 | start_guardfirstlazy: forall cd l1 l2, start_rep (GuardFirstLazy cd l1 l2)

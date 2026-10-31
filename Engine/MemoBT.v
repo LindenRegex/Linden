@@ -63,6 +63,7 @@ Section MemoBT.
                 end
             | Jmp next => Explore [(next, gm, b, i)]
             | Fork lbl1 lbl2 => Explore [(lbl1, gm, b, i); (lbl2, gm, b, i)]
+            | ForkLazy lbl1 lbl2 => Explore [(lbl2, gm, b, i); (lbl1, gm, b, i)]
             | SetRegOpen gid => Explore [(pc+1, GroupMap.open (idx i) gid gm, b, i)]
             | SetRegClose gid => Explore [(pc+1, GroupMap.close (idx i) gid gm, b, i)]
             | ResetRegs gidl => Explore [(pc+1, GroupMap.reset gidl gm, b, i)]
