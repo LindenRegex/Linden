@@ -52,12 +52,12 @@ Lemma initial_tree_thread:
 Proof.
   intros r code tree inp COMPILE TREE SUBSET.
   unfold compilation in COMPILE. destruct (compile r 0) as [c fresh] eqn:COMP.
-  apply compile_nfa_rep with (prev := []) in COMP as REP; auto. simpl in REP.
+  apply compile_nfa_rep with (suffix := [Accept]) in COMP as REP.
   apply fresh_correct in COMP. simpl in COMP. subst.
   subst. eapply tt_eq; eauto.
   2: { repeat (constructor; auto). }
   apply cons_bc with (pcmid := length c).
-  - constructor. apply nfa_rep_extend. auto.
+  - constructor. auto.
   - constructor. replace (length c) with (length c + 0) by auto. rewrite get_prefix. auto.
 Qed.
 
@@ -1007,8 +1007,7 @@ Lemma compile_stutter_wf:
     stutter_wf code.
 Proof.
   intros r code fresh H.
-  eapply compile_nfa_rep with (prev:=[]) in H as REP; simpl; auto.
-  simpl in REP. apply fresh_correct in H. simpl in H. subst.
+  eapply compile_nfa_rep with (suffix:=[]) in H as REP. rewrite app_nil_r in REP. apply fresh_correct in H. simpl in H. subst.
   unfold stutter_wf. unfold stutters. unfold get_pc.
   intros pc gm b nextpc nextgm nextb inp H H0.
   destruct (nth_error code pc) eqn:NTH.

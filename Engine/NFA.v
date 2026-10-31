@@ -53,50 +53,6 @@ Section NFA.
     apply get_prefix.
   Qed.
 
-  Corollary get_first_0:
-    forall c prev x,
-      x = length prev ->
-      get_pc (prev ++ c) (x) = get_pc c 0.
-  Proof.
-    intros. subst. apply get_first.
-  Qed.
-
-  Corollary get_second:
-    forall c prev,
-      get_pc (prev ++ c) (S (length prev)) = get_pc c 1.
-  Proof.
-    intros. replace (S (length prev)) with (length prev + 1) by lia.
-    apply get_prefix.
-  Qed.
-
-  Corollary get_third:
-    forall c prev,
-      get_pc (prev ++ c) (S (S (length prev))) = get_pc c 2.
-  Proof.
-    intros. replace (S (S (length prev))) with (length prev + 2) by lia.
-    apply get_prefix.
-  Qed.
-
-  Lemma get_suffix:
-    forall c suffix pc i,
-      get_pc c pc = Some i ->
-      get_pc (c++suffix) pc = Some i.
-  Proof.
-    unfold get_pc. intros c suffix pc i H.
-    assert (pc < length c).
-    { apply nth_error_Some. rewrite H. unfold not. intros. inversion H0. }
-    rewrite nth_error_app1; auto.
-  Qed.
-
-  Lemma get_prev:
-    forall prev suffix pc i,
-      get_pc (prev ++ suffix) pc = Some i ->
-      pc < length prev ->
-      get_pc prev pc = Some i.
-  Proof.
-    unfold get_pc. intros. rewrite nth_error_app1 in H; auto.
-  Qed.
-
   Definition next_pcs (pc:label) (b:bytecode) : list label :=
     match b with
     | Consume _ | CheckAnchor _ | SetRegOpen _ | SetRegClose _ | ResetRegs _ | BeginLoop => [S pc]
@@ -144,6 +100,10 @@ Section NFA.
     match (compile r 0) with
     | (c,fresh) => c ++ [Accept]
     end.
+
+  (* [c] is found in [C] from label [start] on *)
+  Definition code_at (C c: code) (start: label) : Prop :=
+    forall i x, nth_error c i = Some x -> get_pc C (i + start) = Some x.
 
   (** * Inductive NFA characterization *)
   (* like a representation predicate *)
@@ -207,22 +167,14 @@ Section NFA.
 
   (** * Compile Characterization  *)
 
-  Lemma cons_app:
-    forall A (x:A) l, x::l = [x] ++ l.
-  Proof. intros. simpl. auto. Qed.
-
-  Lemma nfa_rep_extend:
-    forall r c start endl suffix,
-      nfa_rep r c start endl ->
-      nfa_rep r (c++suffix) start endl.
+  Lemma code_at_app:
+    forall C a b start, code_at C (a ++ b) start -> code_at C a start /\ code_at C b (length a + start).
   Proof.
-    intros r c start endl suffix H. generalize dependent suffix.
-    induction H; intros; econstructor;
-      try (erewrite get_suffix; eauto); try apply IHnfa_rep;
-      try apply IHnfa_rep1; try apply IHnfa_rep2. auto.
+    intros C a b start H. split; intros i x N.
+    - apply H. rewrite nth_error_app1; auto. apply nth_error_Some. congruence.
+    - replace (i + (length a + start)) with (length a + i + start) by lia.
+      apply H. rewrite nth_error_app2 by lia. now replace (length a + i - length a) with i by lia.
   Qed.
-
-
 
   (* correctness of the returned fresh label *)
   Lemma fresh_correct:
@@ -230,135 +182,48 @@ Section NFA.
       compile r fresh = (l, next) ->
       fresh + List.length l = next.
   Proof.
-    Ltac inv_comp H := inversion H; subst; simpl; lia.
-    intros r.
-    induction r; intros fresh l next COMPILE; try solve[inv_comp COMPILE].
-    - inversion COMPILE.
-      destruct (compile r1 (S fresh)) as [bc1 f1] eqn:COMP1. destruct (compile r2 (S f1)) as [bc2 f2] eqn:COMP2.
-      inversion H0. subst f2. apply IHr1 in COMP1. apply IHr2 in COMP2. simpl.
-      rewrite <- COMP1 in COMP2. simpl in COMP2. rewrite length_app. simpl. lia.
-    - inversion COMPILE.
-      destruct (compile r1 fresh) as [bc1 f1] eqn:COMP1. destruct (compile r2 f1) as [bc2 f2] eqn:COMP2.
-      inversion H0. subst f2. apply IHr1 in COMP1. apply IHr2 in COMP2.
-      rewrite <- COMP1 in COMP2. rewrite length_app. lia.
-    - inversion COMPILE. destruct min.
-      2: { inversion H0. simpl. lia. }
-      destruct delta.
-      + destruct n; try destruct n; try solve[inversion H0; simpl; lia].
-        destruct (compile r (S (S (S fresh)))) as [bc1 f1] eqn:COMP1.
-        inversion H0. apply IHr in COMP1.
-        subst. simpl. rewrite length_app. simpl. lia.
-      + destruct (compile r (S (S (S fresh)))) as [bc1 f1] eqn:COMP1.
-        inversion H0. apply IHr in COMP1.
-        subst. simpl. rewrite length_app. simpl. lia.
-    - inversion COMPILE.
-      destruct (compile r (S fresh)) as [bc1 f1] eqn:COMP1. inversion H0. apply IHr in COMP1.
-      subst. simpl. rewrite length_app. simpl. lia.
+    intros r. induction r; intros fresh l next COMPILE; cbn [compile] in COMPILE;
+      repeat match type of COMPILE with
+      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ => fail | _ => destruct x end
+      | context [compile ?r' ?f] => let C := fresh "C" in
+          destruct (compile r' f) eqn:C; first [apply IHr1 in C | apply IHr2 in C | apply IHr in C]
+      end;
+      inversion COMPILE; subst; simpl; repeat (rewrite length_app; simpl); lia.
   Qed.
+
+  (* close a goal by a hypothesis that differs in its label, by arithmetic *)
+  Local Ltac lbl := match goal with
+    | H: get_pc ?C ?l = _ |- get_pc ?C ?l' = _ => refine (eq_rect l (fun k => get_pc C k = _) H l' ltac:(lia))
+    | H: code_at ?C ?c ?l |- code_at ?C ?c ?l' => refine (eq_rect l (code_at C c) H l' ltac:(lia))
+    end.
 
   (* this shows that the compilation function adheres to the representation predicate *)
-  Theorem compile_nfa_rep:
-    forall r c start endl prev,
-      compile r start = (c, endl) ->
-      start = List.length prev ->
-      nfa_rep r (prev ++ c) start endl.
+  Theorem compile_nfa_rep_at:
+    forall r start c endl C,
+      compile r start = (c, endl) -> code_at C c start -> nfa_rep r C start endl.
   Proof.
-    intros r. induction r; intros.
-    - inversion H. subst. rewrite app_nil_r. constructor.
-    - inversion H. subst. constructor. apply get_first.
-    - inversion H. destruct (compile r1 (S start)) as [bc1 end1] eqn:COMP1. destruct (compile r2 (S end1)) as [bc2 end2] eqn:COMP2.
-      inversion H2. subst. apply nfa_rep_disj with (end1:=end1).
-      + rewrite get_first. simpl. auto.
-      + apply IHr1 with (prev:=prev ++ [Fork (S (length prev)) (S end1)]) in COMP1.
-        2: { rewrite length_app. simpl. lia. }
-        replace (prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
-          (((prev ++ [Fork (S (length prev)) (S end1)]) ++ bc1) ++ (Jmp endl :: bc2)).
-        2:{ rewrite <- app_assoc. rewrite <- app_assoc. auto. }
-        apply nfa_rep_extend. auto.
-      + apply fresh_correct in COMP1. rewrite <- COMP1.
-        replace (S (length prev) + length bc1) with (length prev + (S (length bc1))) by lia.
-        rewrite get_prefix. rewrite cons_app. rewrite app_assoc. apply get_first.
-      + apply IHr2 with (prev:= prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) in COMP2.
-        * replace (prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
-            ((prev ++ Fork (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) ++ bc2).
-          2: { rewrite <- app_assoc. simpl. apply f_equal. apply f_equal. rewrite <- app_assoc. auto. }
-          auto.
-        * apply fresh_correct in COMP1. rewrite <- COMP1. simpl.
-          rewrite length_app. simpl. rewrite length_app. simpl. lia.
-    - inversion H. destruct (compile r1 start) as [bc1 end1] eqn:COMP1. destruct (compile r2 end1) as [bc2 end2] eqn:COMP2.
-      inversion H2. subst. econstructor.
-      + apply IHr1 with (prev:=prev) in COMP1; auto.
-        rewrite app_assoc. apply nfa_rep_extend. eauto.
-      + apply IHr2 with (prev:=prev ++ bc1) in COMP2; auto.
-        * rewrite app_assoc. auto.
-        * apply fresh_correct in COMP1. rewrite length_app. lia.
-    - inversion H. destruct min.
-      2: { inversion H2. subst. apply nfa_unsupported.
-          - unfold not. intros. inversion H0.
-          - rewrite get_first. simpl. auto. }
-      destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst delta.
-      (* Zero repetitions *)
-      + inversion H2. subst. constructor.
-      (* Question Mark *)
-      + destruct (compile r (S (S (S start)))) as [bc1 end1] eqn:COMP1. inversion H2. subst. constructor.
-        * rewrite get_first. simpl. auto.
-        * rewrite get_second. simpl. auto.
-        * rewrite get_third. simpl. auto.
-        * apply IHr with (prev:=prev ++ [greedy_fork greedy (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
-          ** rewrite <- app_assoc in COMP1. simpl in COMP1.
-             replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
-               ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
-             2: { rewrite <- app_assoc. auto. }
-             apply nfa_rep_extend. auto.
-          ** rewrite length_app. simpl. lia.
-        * replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
-            ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
-          2: { rewrite <- app_assoc. auto. }
-          apply fresh_correct in COMP1. subst. apply get_first_0.
-          simpl. rewrite length_app. simpl. lia.
-      (* Star *)
-      + destruct (compile r (S (S (S start)))) as [bc1 end1] eqn:COMP1. inversion H2. subst. constructor.
-        * rewrite get_first. simpl. auto.
-        * rewrite get_second. simpl. auto.
-        * rewrite get_third. simpl. auto.
-        * apply IHr with (prev:=prev ++ [greedy_fork greedy (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
-          ** rewrite <- app_assoc in COMP1. simpl in COMP1.
-             replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
-               ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
-             2: { rewrite <- app_assoc. auto. }
-             apply nfa_rep_extend. auto.
-          ** rewrite length_app. simpl. lia.
-        * replace (prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
-            ((prev ++ greedy_fork greedy (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
-          2: { rewrite <- app_assoc. auto. }
-          apply fresh_correct in COMP1. subst. apply get_first_0.
-          simpl. rewrite length_app. simpl. lia.
-      (* Unsupported *)
-      + assert (([KillThread], S start) = (c,endl)).
-        { destruct delta'; auto. lia. destruct delta'; auto. lia. }
-        inversion H1. subst. apply nfa_unsupported.
-        * unfold not. intros. inversion H0; subst; lia.
-        * rewrite get_first. simpl. auto.
-    - inversion H. subst. apply nfa_unsupported.
-      + unfold not. intros. inversion H0.
-      + rewrite get_first. simpl. auto.
-    - inversion H. destruct (compile r (S start)) as [bc1 end1] eqn:COMP1. inversion H2. subst.
-      constructor.
-      + rewrite get_first. simpl. auto.
-      +  apply IHr with (prev:=prev ++ [SetRegOpen id]) in COMP1.
-        2: { rewrite length_app. simpl. lia. }
-        replace (prev ++ SetRegOpen id :: bc1 ++ [SetRegClose id]) with ((prev ++ SetRegOpen id :: bc1) ++ [SetRegClose id]).
-        2:{ rewrite <- app_assoc. auto. }
-        apply nfa_rep_extend. rewrite <- app_assoc in COMP1. simpl in COMP1. auto.
-      + replace (prev ++ SetRegOpen id :: bc1 ++ [SetRegClose id]) with ((prev ++ SetRegOpen id :: bc1) ++ [SetRegClose id]).
-        2:{ rewrite <- app_assoc. auto. }
-        apply get_first_0. apply fresh_correct in COMP1. subst. rewrite length_app. simpl. lia.
-    - inversion H. subst. constructor. apply get_first.
-    - inversion H. subst. apply nfa_unsupported.
-      + unfold not. intros. inversion H0.
-      + rewrite get_first. simpl. auto.
+    induction r; intros start c endl C COMP AT; cbn [compile] in *;
+      repeat match type of COMP with
+      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ => fail | _ => destruct x eqn:? end
+      | context [compile ?r' ?f] => let C := fresh "C" in destruct (compile r' f) eqn:C; apply fresh_correct in C as ?
+      end;
+      injection COMP as <- <-; subst;
+      repeat match goal with
+      | H: code_at _ (_ ++ _) _ |- _ => apply code_at_app in H as [? ?]
+      | H: code_at _ [?x] _ |- _ => specialize (H 0 x eq_refl)
+      | H: code_at _ (?x :: ?l) _ |- _ => change (x :: l) with ([x] ++ l) in H
+      end; cbn [length Nat.add] in *.
+    all: try (apply nfa_unsupported; [inversion 1|lbl]).
+    all: econstructor; try lbl; first [eapply IHr1|eapply IHr2|eapply IHr]; first [eassumption|lbl].
   Qed.
 
+  Corollary compile_nfa_rep:
+    forall r c endl suffix,
+      compile r 0 = (c, endl) -> nfa_rep r (c ++ suffix) 0 endl.
+  Proof.
+    intros. eapply compile_nfa_rep_at; eauto.
+    intros i x N. unfold get_pc. rewrite PeanoNat.Nat.add_0_r, nth_error_app1; auto. apply nth_error_Some. congruence.
+  Qed.
 
   (** * Lifting the representation predicate to continuations  *)
   (* This is useful to relate the continuations used in the tree semantics to the code produced by the NFA compiler *)

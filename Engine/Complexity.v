@@ -143,7 +143,7 @@ Section CodeWF.
     forall r, code_wf (compilation r) (size (compilation r)).
   Proof.
     intros r.  destruct (compile r 0) as [c endl] eqn:COMP.
-    eapply compile_nfa_rep with (prev:=[]) in COMP as REP; simpl in *; auto.
+    eapply compile_nfa_rep with (suffix:=[]) in COMP as REP. rewrite app_nil_r in REP.
     unfold compilation. rewrite COMP. unfold code_wf.
     apply fresh_correct in COMP as FRESH. simpl in FRESH. subst.
     intros pc i next GET IN.
