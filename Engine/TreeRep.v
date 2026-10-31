@@ -103,43 +103,11 @@ Theorem tree_rep_determ:
     tree_rep t2 code pc inp b ->
     t1 = t2.
 Proof.
-  intros code pc inp b t1 t2 H H0.
-  generalize dependent t2.
-  induction H; intros.
-  - inversion H0; subst; auto; same_instr.
-  - inversion H0; subst; auto; same_instr.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-  - inversion H1; subst; auto; same_instr.
-    specialize (IHtree_rep1 _ TR1) as EQT1.
-    specialize (IHtree_rep2 _ TR2) as EQT2.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr;
-      rewrite READ0 in READ; inversion READ; subst.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr;
-      rewrite CHECK0 in CHECK; inversion CHECK; subst.
-    specialize (IHtree_rep _ TR) as EQT.
-    subst. split; auto.
-  - inversion H0; subst; auto; same_instr.
-    rewrite CHECK0 in CHECK. discriminate.
-  - inversion H0; subst; auto; same_instr.
-    rewrite READ0 in READ. inversion READ.
-  - inversion H0; subst; auto; same_instr.
+  intros code pc inp b t1 t2 H. revert t2.
+  induction H; intros t' H'; inversion H'; subst; try same_instr; try congruence.
+  all: try match goal with R: read_char _ _ _ _ = _, R': read_char _ _ _ _ = _ |- _ =>
+         rewrite R in R'; injection R' as <- <- end.
+  all: f_equal; eauto.
 Qed.
 
 
@@ -234,52 +202,18 @@ Proof.
   (* quantified, free *)
   - destruct (destruct_delta (NoI.N 1 + plus)%NoI) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]].
     (* Zero repetitions *)
-    + destruct plus; inversion DZ.
-    (* Question Mark *)
-    + destruct plus; inversion D1. subst.
-      simpl in ACT.
-      remember (Areg (Quantified greedy 0 (NoI.N 1) r1) :: cont) as qmarkcont.
-      induction ACT; inversion Heqqmarkcont; subst;
-        try solve[eapply tr_jmp; eauto]; clear IHACT.
-      invert_rep. inversion NFA; subst.
-      2: { in_subset. }
-      destruct greedy; simpl.
-      * eapply tr_choice; eauto.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
-        ** eapply IHTREE2; eauto. pike_subset.
-      * eapply tr_choice; eauto.
-        ** eapply IHTREE2; eauto. pike_subset.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
-    (* Star *)
-    + destruct plus; inversion DINF. clear DINF.
-      simpl in ACT.
-      remember (Areg (Quantified greedy 0 +∞ r1) :: cont) as starcont.
-      induction ACT; inversion Heqstarcont; subst;
-        try solve[eapply tr_jmp; eauto]; clear IHACT.
-      invert_rep. inversion NFA; subst.
-      2: { in_subset. }
-      destruct greedy; simpl.
-      * eapply tr_choice; eauto.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
-        ** eapply IHTREE2; eauto. pike_subset.
-      * eapply tr_choice; eauto.
-        ** eapply IHTREE2; eauto. pike_subset.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+    1: destruct plus; inversion DZ.
     (* Unsupported *)
-    + rewrite DUN in SUBSET. inversion SUBSET; subst.
-      inversion H1; subst. inversion H0; subst; lia.
+    3: { rewrite DUN in SUBSET. inversion SUBSET; subst.
+         inversion H1; subst. inversion H0; subst; lia. }
+    (* Question Mark and Star *)
+    all: destruct plus; try discriminate; simpl in ACT.
+    all: match type of ACT with actions_rep ?q _ _ => remember q as qcont end.
+    all: induction ACT; inversion Heqqcont; subst; try solve[eapply tr_jmp; eauto]; clear IHACT.
+    all: invert_rep; inversion NFA; subst; [|in_subset].
+    all: destruct greedy; simpl; eapply tr_choice; eauto.
+    all: try (eapply tr_begin; eauto; eapply tr_reset; eauto; eapply IHTREE1; eauto; [pike_subset|repeat (econstructor; eauto)]).
+    all: eapply IHTREE2; eauto; pike_subset.
   (* group *)
   - remember (Areg (Group gid r1) :: cont) as groupcont.
     induction ACT; inversion Heqgroupcont; subst;
