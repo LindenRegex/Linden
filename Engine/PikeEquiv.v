@@ -1035,6 +1035,23 @@ Proof.
   intros r code start endl H. induction H; try lia.
 Qed.
 
+Lemma nfa_rep_instr:
+  forall r code start endl pc i,
+    nfa_rep r code start endl -> start <= pc < endl -> get_pc code pc = Some i ->
+    (forall next, In next (next_pcs pc i) -> next <= endl) /\
+      match i with Jmp next => pc < next | _ => True end /\ next_first code pc i.
+Proof.
+  intros r code start endl pc i REP. revert pc.
+  induction REP; intros pc RANGE GET;
+    try (apply nfa_rep_incr in REP as INC); try (apply nfa_rep_incr in REP1 as INC1);
+    try (apply nfa_rep_incr in REP2 as INC2);
+    locate_pc pc GET;
+    try solve [lia | fork_cases; cbn [next_pcs next_first In]; repeat split; try (apply (PAD 0); reflexivity); intros; intuition lia];
+    first [destruct (IHREP pc) as [N ?]
+      | assert (pc < end1 \/ end1 <= pc) as [] by lia; [destruct (IHREP1 pc) as [N ?]|destruct (IHREP2 pc) as [N ?]]];
+    try lia; auto; (split; [intros n IN; apply N in IN; lia|auto]).
+Qed.
+
 (* every jump in the code jumps to a strictly bigger label *)
 (* this will help prevent loops of stuttering steps in the PikeVM *)
 Lemma compile_jumps:
@@ -1044,19 +1061,29 @@ Lemma compile_jumps:
     pc < endl ->
     get_pc code pc = Some (Jmp next) ->
     pc < next.
-Proof.
-  intros r code start endl pc next REP. revert pc.
-  induction REP; intros pc GE LT GET; remember (Jmp next) as j eqn:J in GET;
-    try (apply nfa_rep_incr in REP as INC); try (apply nfa_rep_incr in REP1 as INC1);
-    try (apply nfa_rep_incr in REP2 as INC2);
-    locate_pc pc GET;
-    try solve [lia | discriminate | injection J; lia
-      | fork_cases; discriminate];
-    subst j;
-    first [eapply IHREP; eauto; lia
-      | assert (pc < end1 \/ end1 <= pc) as [] by lia; [eapply IHREP1|eapply IHREP2]; eauto; lia].
-Qed.
+Proof. intros. edestruct nfa_rep_instr as (_ & J & _); eauto; lia. Qed.
 
+
+(* every forking instruction continues at the next label first *)
+Lemma nfa_rep_next_first:
+  forall r code start endl pc i,
+    nfa_rep r code start endl -> start <= pc < endl ->
+    get_pc code pc = Some i -> next_first code pc i.
+Proof. intros. edestruct nfa_rep_instr as (_ & _ & F); eauto. Qed.
+
+Lemma compilation_next_first:
+  forall r pc i,
+    get_pc (compilation r) pc = Some i -> next_first (compilation r) pc i.
+Proof.
+  intros r pc i GET. unfold compilation, NFA.compilation in *.
+  destruct (NFA.compile rer branches r None 0) as [c endl] eqn:COMP.
+  apply fresh_correct in COMP as LEN. simpl in LEN.
+  apply compile_nfa_rep with (suffix:=[Accept]) in COMP.
+  assert (pc < length c \/ pc >= length c) as [IN|OUT] by lia.
+  - eapply nfa_rep_next_first; [exact COMP| |exact GET]. lia.
+  - unfold get_pc in GET. rewrite nth_error_app2 in GET by lia.
+    destruct (pc - length c) as [|[]]; inversion GET; simpl; auto.
+Qed.
 
 (* every compiled code is well-formed *)
 Lemma compile_stutter_wf:

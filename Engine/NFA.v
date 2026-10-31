@@ -289,6 +289,16 @@ Section NFA.
     | _, _ => next_pcs pc b
     end.
 
+  (* the compiler places the first label of every forking instruction right after it,
+     past the descriptor cell of a branching instruction *)
+  Definition next_first (c:code) (pc:label) (b:bytecode) : Prop :=
+    match b with
+    | Fork l _ | ForkLazy l _ => l = S pc
+    | Branch cd l _ | GuardFirst cd l _ | GuardFirstLazy cd l _ | GuardSecond cd l _ | GuardSecondLazy cd l _ =>
+        l = S (S pc) /\ get_pc c (S pc) = Some (Data cd)
+    | _ => True
+    end.
+
   (** * NFA Compilation  *)
 
   Definition greedy_fork (greedy:bool) (l1 l2:label) :=

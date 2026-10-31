@@ -57,17 +57,7 @@ Section CodeWF.
       get_pc c pc = Some i ->
       In next (next_pcs pc i) ->
       next <= endl.
-  Proof.
-    intros r c startl endl pc next i REP. revert pc.
-    induction REP; intros pc GE LT GET IN;
-      try (apply nfa_rep_incr in REP as INC); try (apply nfa_rep_incr in REP1 as INC1);
-      try (apply nfa_rep_incr in REP2 as INC2);
-      locate_pc pc GET;
-      try solve [simpl in IN; lia
-        | fork_cases; simpl in IN; lia];
-      first [apply IHREP in IN; eauto; lia
-        | assert (pc < end1 \/ end1 <= pc) as [] by lia; [apply IHREP1 in IN|apply IHREP2 in IN]; eauto; lia].
-  Qed.
+  Proof. intros. edestruct nfa_rep_instr as (N & _); eauto. Qed.
 
   Theorem compiled_wf:
     forall r, code_wf (compilation r) (size (compilation r)).
