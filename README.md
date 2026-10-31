@@ -55,7 +55,10 @@ that no character matches both descriptors; its default,
 descriptor and its inversion, distinct characters and, without ignoreCase,
 characters and ranges whose bounds do not overlap, `\d`, `\s` and `\w` against
 characters, ranges and classes that share none of their characters, and a
-class against its complement, through unions. `Branch` peeks at the
+class against its complement, through unions. `NFA.exact_disjoint` meets the
+specification exactly when one descriptor can be enumerated, as all can but
+`CdAll`, inversions and their unions, but is too slow to compute for the
+compiler to use. `Branch` peeks at the
 current input without consuming it and continues on the only alternative that
 can match; a mismatch, including end of input, selects the second one. The lead
 analysis follows groups and the left side of a sequence, leads a disjunction
