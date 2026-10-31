@@ -300,3 +300,7 @@ Proof.
   - rewrite !gm_reset_find; auto.
   - rewrite !gm_reset_find_other; auto.
 Qed.
+
+(* proves group equivalence for lists built with app and cons *)
+Ltac solve_groups_equiv :=
+  unfold groups_equiv, incl; split; intros ?; rewrite ?in_app_iff; simpl; tauto.

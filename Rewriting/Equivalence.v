@@ -245,7 +245,7 @@ Ltac groups_equiv_eq :=
 
 Ltac tree_equiv_prepare :=
   tree_equiv_simpl;
-  try (apply conj; [ try groups_equiv_eq | ]).
+  try (apply conj; [ try groups_equiv_eq; try solve_groups_equiv | ]).
 
 Ltac tree_equiv_rw :=
   try setoid_rewrite tree_equiv_compute_dir_iff;
