@@ -33,12 +33,10 @@ Section RegexpTree.
       - etransitivity.
         { apply seq_equiv_dir.
           apply quantified_S_equiv_forward.
-          auto.
           reflexivity. }
         etransitivity; cycle 1.
         { symmetry.
-          eapply quantified_S_equiv_forward.
-          auto. }
+          eapply quantified_S_equiv_forward. }
         etransitivity.
         { symmetry.
           eapply sequence_assoc_equiv. }
@@ -64,12 +62,10 @@ Section RegexpTree.
       - etransitivity.
         { apply seq_equiv_dir.
           reflexivity.
-          apply quantified_S_equiv_backward.
-          auto. }
+          apply quantified_S_equiv_backward. }
         etransitivity; cycle 1.
         { symmetry.
-          eapply quantified_S_equiv_backward.
-          auto. }
+          eapply quantified_S_equiv_backward. }
         etransitivity.
         { eapply sequence_assoc_equiv. }
         eapply seq_equiv_dir.
@@ -145,12 +141,10 @@ Section RegexpTree.
       - etransitivity.
         { apply seq_equiv_dir.
           apply quantified_S_equiv_forward.
-          auto.
           reflexivity. }
         etransitivity; cycle 1.
         { symmetry.
-          eapply quantified_S_equiv_forward.
-          auto. }
+          eapply quantified_S_equiv_forward. }
         etransitivity.
         { symmetry.
           eapply sequence_assoc_equiv. }
@@ -184,12 +178,10 @@ Section RegexpTree.
       - etransitivity.
         { apply seq_equiv_dir.
           reflexivity.
-          apply quantified_S_equiv_backward.
-          auto. }
+          apply quantified_S_equiv_backward. }
         etransitivity; cycle 1.
         { symmetry.
-          eapply quantified_S_equiv_backward.
-          auto. }
+          eapply quantified_S_equiv_backward. }
         etransitivity.
         { eapply sequence_assoc_equiv. }
         eapply seq_equiv_dir.

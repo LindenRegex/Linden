@@ -102,11 +102,10 @@ Section Examples.
 
   Lemma quantified_S_equiv_forward n:
     forall delta r greedy,
-      def_groups r = [] ->
       (Quantified greedy (S n) delta r)
         ≅[rer][forward] (Sequence (Quantified greedy 1 (NoI.N 0) r) (Quantified greedy n delta r)).
   Proof.
-    split. 1: { simpl. rewrite H. reflexivity. }
+    intros. split. 1: { simpl. solve_groups_equiv. }
     intros i gm tr1 tr2 TREE1 TREE2.
     inversion TREE1; subst. inversion TREE2; subst. simpl in CONT. inversion CONT; subst.
     clear TREE1 TREE2 CONT.
@@ -124,11 +123,10 @@ Section Examples.
 
   Lemma quantified_S_equiv_backward n:
     forall delta r greedy,
-      def_groups r = [] ->
       (Quantified greedy (S n) delta r)
         ≅[rer][backward] (Sequence (Quantified greedy n delta r) (Quantified greedy 1 (NoI.N 0) r)).
   Proof.
-    split. 1: { simpl. rewrite H. reflexivity. }
+    intros. split. 1: { simpl. solve_groups_equiv. }
     intros i gm tr1 tr2 TREE1 TREE2.
     inversion TREE1; subst. inversion TREE2; subst. simpl in CONT. inversion CONT; subst.
     clear TREE1 TREE2 CONT.
