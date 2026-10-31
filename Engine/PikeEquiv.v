@@ -1086,6 +1086,38 @@ Proof.
 Qed.
 
 
+(* every forking instruction continues at the next label first *)
+Lemma nfa_rep_next_first:
+  forall r code start endl pc i,
+    nfa_rep r code start endl -> start <= pc < endl ->
+    get_pc code pc = Some i -> next_first code pc i.
+Proof.
+  intros r code start endl pc i REP. revert pc.
+  induction REP; intros pc RANGE GET;
+    try (apply nfa_rep_incr in REP as INC); try (apply nfa_rep_incr in REP1 as INC1);
+    try (apply nfa_rep_incr in REP2 as INC2);
+    locate_pc pc GET;
+    try solve [lia | simpl; auto | eauto with lia
+      | unfold loop_fork, greedy_fork; repeat match goal with |- context [match ?x with _ => _ end] => destruct x end;
+        cbn [next_first]; repeat split; auto; apply (PAD 0); reflexivity];
+    first [eapply IHREP; eauto; lia
+      | assert (pc < end1 \/ end1 <= pc) as [] by lia; [eapply IHREP1|eapply IHREP2]; eauto; lia].
+Qed.
+
+Lemma compilation_next_first:
+  forall r pc i,
+    get_pc (compilation r) pc = Some i -> next_first (compilation r) pc i.
+Proof.
+  intros r pc i GET. unfold compilation, NFA.compilation in *.
+  destruct (NFA.compile rer branches r None 0) as [c endl] eqn:COMP.
+  apply fresh_correct in COMP as LEN. simpl in LEN.
+  apply compile_nfa_rep with (suffix:=[Accept]) in COMP.
+  assert (pc < length c \/ pc >= length c) as [IN|OUT] by lia.
+  - eapply nfa_rep_next_first; [exact COMP| |exact GET]. lia.
+  - unfold get_pc in GET. rewrite nth_error_app2 in GET by lia.
+    destruct (pc - length c) as [|[]]; inversion GET; simpl; auto.
+Qed.
+
 (* every compiled code is well-formed *)
 Lemma compile_stutter_wf:
   forall r code fresh,
