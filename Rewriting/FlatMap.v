@@ -33,6 +33,11 @@ Proof.
   - rewrite <- app_assoc, <- app_comm_cons. constructor; auto.
 Qed.
 
+(* Flat mapping a relation that maps each element to its image by [g] is [map g]. *)
+Lemma FlatMap_map {X Y: Type} (g: X -> Y) (f: X -> list Y -> Prop) lbase lmapped :
+  (forall x ly, f x ly -> ly = [g x]) -> FlatMap lbase f lmapped -> lmapped = map g lbase.
+Proof. intros SINGLE FM. induction FM; [reflexivity|]. rewrite (SINGLE _ _ HEAD), IHFM; auto. Qed.
+
 (* Determinism of a propositional function *)
 Definition determ {A B: Type} (f: A -> B -> Prop) :=
   forall x y1 y2, f x y1 -> f x y2 -> y1 = y2.
