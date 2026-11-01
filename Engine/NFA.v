@@ -396,7 +396,7 @@ Section NFA.
     | Quantified greedy 0 (NoI.N 0) r1 => ([], fresh)
     | Quantified greedy 0 (NoI.N 1) r1 =>
         let p := loop_peek r1 fl in
-        let (bc1, f1) := compile r1 None (S (S (S (gap p + fresh)))) in
+        let (bc1, f1) := compile r1 fl (S (S (S (gap p + fresh)))) in
         ([loop_fork greedy p (S (gap p + fresh)) (S f1)] ++ pad p ++
          [BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1)
     | Quantified greedy 0 (NoI.Inf) r1 =>
@@ -423,6 +423,7 @@ Section NFA.
   | leads_jmp: forall pc l cd, get_pc c pc = Some (Jmp l) -> leads c l cd -> leads c pc cd
   | leads_open: forall pc g cd, get_pc c pc = Some (SetRegOpen g) -> leads c (S pc) cd -> leads c pc cd
   | leads_close: forall pc g cd, get_pc c pc = Some (SetRegClose g) -> leads c (S pc) cd -> leads c pc cd
+  | leads_check: forall pc l cd, get_pc c pc = Some (EndLoop l) -> leads c l cd -> leads c pc cd
   | leads_fork: forall pc b l1 l2 cd1 cd2, get_pc c pc = Some b -> next_pcs pc b = [l1; l2] \/ next_pcs pc b = [l2; l1] ->
       leads c l1 cd1 -> leads c l2 cd2 -> leads c pc (CdUnion cd1 cd2)
   | leads_loop: forall pc b l1 l2 cd1 cd2, get_pc c pc = Some b -> next_pcs pc b = [l1; l2] \/ next_pcs pc b = [l2; l1] ->
@@ -570,7 +571,7 @@ Section NFA.
     all: repeat match goal with
       | IH: forall fl s c e C, compile ?r fl s = (c, e) -> _, CO: compile ?r _ _ = _ |- _ =>
           edestruct IH with (C := C) as [? ?]; [exact CO|lbl|first [exact FOLLOW|eassumption|solve [intros; first [discriminate
-            |eapply leads_jmp; [lbl|eauto]|eapply leads_close; [lbl|eauto]]]]|]; clear IH
+            |eapply leads_jmp; [lbl|eauto]|eapply leads_close; [lbl|eauto]|eapply leads_check; [lbl|eauto]]]]|]; clear IH
       end.
     all: split; try solve [econstructor; try reflexivity; try exact FOLLOW; try lbl; intro N; inversion N].
     all: intros d F; unfold union_descr in F; repeat match type of F with context [match ?x with _ => _ end] => destruct x eqn:? end;

@@ -377,9 +377,9 @@ Lemma leads_dead:
     tree_res t gm inp forward = None.
 Proof.
   intros until 1.
-  induction LEADS as [pc cd GET|pc l cd GET _ IH|pc g cd GET _ IH|pc g cd GET _ IH|pc i l1 l2 cd1 cd2 GET NEXT L1 IH1 L2 IH2
+  induction LEADS as [pc cd GET|pc l cd GET _ IH|pc g cd GET _ IH|pc g cd GET _ IH|pc l cd GET _ IH|pc i l1 l2 cd1 cd2 GET NEXT L1 IH1 L2 IH2
     |pc i l1 l2 cd1 cd2 GET NEXT BEGIN L1 IH1 L2 IH2|pc GET];
-    [| | | |intros READ [NOTEND|[? ?]]; [revert READ NOTEND|discriminate];
+    [| | | | |intros READ [NOTEND|[? ?]]; [revert READ NOTEND|discriminate];
       destruct i; destruct NEXT as [NEXT|NEXT]; inversion NEXT; subst
     |intros READ [NOTEND|[? ?]]; [revert READ NOTEND|discriminate];
       destruct i; destruct NEXT as [NEXT|NEXT]; inversion NEXT; subst
@@ -393,8 +393,8 @@ Proof.
     try solve [fork_cases; congruence];
     (* nothing executed yet *)
     try solve [eapply IHTREE; eauto using cons_bc, areg_bc];
-    (* past an opening or a closing *)
-    try solve [eapply IH; eauto using cons_bc, areg_bc, aclose_bc].
+    (* past an opening, a closing or the end of an iteration *)
+    try solve [eapply IH; eauto using cons_bc, areg_bc, aclose_bc; replace l with pcmid by congruence; eauto].
   (* past a fork: a [leads_fork] is not a loop's, whose body starts with [BeginLoop] *)
   all: try (pose proof FORK as NEXTS; rewrite GET in NEXTS; apply (f_equal (option_map (next_pcs pc))) in NEXTS;
     cbn [option_map next_pcs] in NEXTS;

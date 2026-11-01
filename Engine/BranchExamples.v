@@ -212,6 +212,19 @@ Example nullable_follow_branch_runs:
     [[$ "a"; $ "b"; $ "c"]; [$ "a"; $ "a"]; [$ "b"; $ "b"]; [$ "a"; $ "c"]; [$ "a"; $ "b"; $ "a"]; []].
 Proof. vm_compute. reflexivity. Qed.
 
+(* the body of an optional regex is followed by what follows it: (?:a(?:a)?)?b,
+   as a{0,2}b unrolls, peeks at a before each a *)
+Definition branch_upto_two := Sequence (greedy_qmark (Sequence (Group 1 a_char) (greedy_qmark (Group 2 a_char)))) b_char.
+
+Example optional_body_follow_branch_compile:
+  nth 7 (NFA.compilation branch_flags true branch_upto_two) KillThread = Branch (CdSingle ($ "a")) 9 15.
+Proof. vm_compute. reflexivity. Qed.
+
+Example optional_body_follow_branch_runs:
+  map (run true branch_upto_two) [[$ "a"; $ "a"; $ "b"]; [$ "a"; $ "b"]; [$ "b"]; [$ "a"; $ "a"; $ "a"; $ "b"]; [$ "a"]] =
+  map (run false branch_upto_two) [[$ "a"; $ "a"; $ "b"]; [$ "a"; $ "b"]; [$ "b"]; [$ "a"; $ "a"; $ "a"; $ "b"]; [$ "a"]].
+Proof. vm_compute. reflexivity. Qed.
+
 (* without ignoreCase, \d, \s and \w are disjoint from the characters, ranges
    and classes that share none of their characters, and from their complements *)
 Definition branch_w : regex := Regex.Character CdWordChar.
