@@ -153,7 +153,7 @@ Section CodeSize.
     | Disjunction r1 r2 => 2 + gap (loop_peek rer branches r1 (lead_descr r2)) + compsize r1 fl + compsize r2 fl
     | Sequence r1 r2 => compsize r1 (follow_descr rer r2 fl) + compsize r2 fl
     | Quantified g 0 (NoI.N 0) r1 => 0
-    | Quantified g 0 (NoI.N 1) r1 => 4 + gap (loop_peek rer branches r1 fl) + compsize r1 None
+    | Quantified g 0 (NoI.N 1) r1 => 4 + gap (loop_peek rer branches r1 fl) + compsize r1 fl
     | Quantified g 0 (NoI.Inf) r1 => 4 + gap (loop_peek rer branches r1 fl) + compsize r1 None
     | Group _ r1 => 2 + compsize r1 fl
     | Anchor _ => 1
@@ -212,11 +212,9 @@ Section CodeSize.
     forall (r:regex) fl,
       S (compsize r fl) <= 5 * (regex_size r).
   Proof.
-    intros r. induction r; intros; simpl;
+    intros r. induction r; intros; simpl; try destruct min, delta as [[|[|n]]|]; simpl;
       repeat match goal with IH: forall _, S (compsize ?r _) <= _ |- context[compsize ?r ?f] => specialize (IH f) end;
-      try (pose proof (gap_le (loop_peek rer branches r1 (lead_descr r2)))); try lia.
-    pose proof (gap_le (loop_peek rer branches r fl)).
-    destruct min, delta as [[|[|n]]|]; simpl; lia.
+      try (pose proof (gap_le (loop_peek rer branches r1 (lead_descr r2)))); try (pose proof (gap_le (loop_peek rer branches r fl))); lia.
   Qed.
 
   Corollary comp_size_regex_size:
