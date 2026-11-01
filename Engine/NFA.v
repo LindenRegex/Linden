@@ -58,16 +58,16 @@ Section Disjoint.
     | _, _, _, _ => complements cd1 cd2 || complements cd2 cd1
     end.
 
-  (* the default check, on descriptors other than unions: the empty class, a
-     descriptor and its inversion, distinct characters and, without ignoreCase,
+  (* the default check, on descriptors other than unions and only without
+     ignoreCase: the empty class, a descriptor and its inversion, and
      [sets_disjoint] *)
   Definition atoms_disjoint (cd1 cd2: char_descr) : bool :=
+    negb (RegExpRecord.ignoreCase rer) &&
     match cd1, cd2 with
     | CdEmpty, _ | _, CdEmpty => true
     | CdInv a, _ => if char_descr_eq_dec a cd2 then true else false
     | _, CdInv b => if char_descr_eq_dec cd1 b then true else false
-    | CdSingle c, CdSingle d => negb (Character.canonicalize rer c == Character.canonicalize rer d)
-    | _, _ => if RegExpRecord.ignoreCase rer then false else sets_disjoint cd1 cd2
+    | _, _ => sets_disjoint cd1 cd2
     end.
 
   (* without ignoreCase, a class matches its characters *)
@@ -82,13 +82,11 @@ Section Disjoint.
   Lemma atoms_disjoint_sound: forall cd1 cd2, atoms_disjoint cd1 cd2 = true -> cd_disjoint cd1 cd2.
   Proof.
     intros cd1 cd2 D x. destruct (char_match rer x cd1) eqn:M, (char_match rer x cd2) eqn:M2; auto. exfalso.
-    unfold char_match in *.
-    destruct cd1, cd2; cbn [atoms_disjoint] in D; try discriminate;
+    unfold atoms_disjoint in D; destruct (RegExpRecord.ignoreCase rer) eqn:IC; [discriminate|]. unfold char_match in *.
+    destruct cd1, cd2; cbn [negb andb] in D; try discriminate;
       repeat match type of D with context [char_descr_eq_dec ?a ?b] => destruct (char_descr_eq_dec a b); subst end;
       cbn [char_match'] in *; try discriminate.
     all: try (first [rewrite M in M2|rewrite M2 in M]; discriminate).
-    all: try (rewrite ?EqDec.inversion_true in M, M2; rewrite <- M, <- M2, EqDec.reflb in D; discriminate).
-    all: destruct (RegExpRecord.ignoreCase rer) eqn:IC; try discriminate.
     all: unfold sets_disjoint, outside, bounds, class_set, complements in D;
       rewrite ?Character.canonicalize_casesenst, ?ec_contains, ?EqDec.inversion_true, ?CharSet.contains_spec,
         ?Character.numeric_pseudo_bij, ?CharSet.range_spec, ?CharSet.remove_all_spec in * by auto; subst.
@@ -113,7 +111,7 @@ Section Disjoint.
   Lemma practical_disjoint_sound: forall cd1 cd2, practical_disjoint cd1 cd2 = true -> cd_disjoint cd1 cd2.
   Proof.
     assert (E: forall cd2 cd1, excludes cd1 cd2 = true -> cd_disjoint cd1 cd2).
-    { induction cd2; intros cd1 D; try exact (atoms_disjoint_sound _ _ D).
+    { induction cd2; intros cd1 D; try (apply atoms_disjoint_sound; exact D).
       apply andb_prop in D as [D1 D2]. intros x.
       change (char_match rer x (CdUnion ?a ?b)) with (char_match rer x a || char_match rer x b). rewrite andb_orb_distrib_r. now rewrite (IHcd2_1 _ D1), (IHcd2_2 _ D2). }
     induction cd1; intros cd2 D; try exact (E _ _ D).

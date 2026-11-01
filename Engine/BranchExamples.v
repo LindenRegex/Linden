@@ -70,6 +70,13 @@ Example case_folded_follow_loops:
     GuardFirst (CdSingle ($ "a")) 2 6.
 Proof. vm_compute. reflexivity. Qed.
 
+(* under ignoreCase, the default check never finds descriptors disjoint, even distinct characters *)
+Example case_folded_distinct_follow_guards:
+  let rer := RegExpRecord.make true false false tt 0 in
+  hd KillThread (NFA.compilation rer true (Sequence (greedy_star branch_a) branch_b)) =
+    GuardFirst (CdSingle ($ "a")) 2 6.
+Proof. vm_compute. reflexivity. Qed.
+
 Example follow_branch_runs:
   map (branch_run (Sequence (greedy_star branch_a) branch_b)) [[$ "a"; $ "a"; $ "b"]; [$ "b"]; [$ "a"]] =
   map (reference_run (Sequence (greedy_star branch_a) branch_b)) [[$ "a"; $ "a"; $ "b"]; [$ "b"]; [$ "a"]].
