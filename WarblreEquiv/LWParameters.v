@@ -66,11 +66,11 @@ Section LWParameters.
 
 
   (* Some lemmas *)
-  (* Lemma contains_all:
+  Lemma contains_all:
     forall c, CharSet.contains Characters.all c = true.
   Proof.
-    intro c. rewrite CharSet.contains_spec. unfold Characters.all. rewrite CharSet.from_list_spec. apply char_all_in.
-  Qed. *)
+    intro c. rewrite CharSet.contains_spec. unfold Characters.all. rewrite CharSet.from_list_spec. apply Character.all_complete.
+  Qed.
 
   Lemma from_list_contains_inb: forall (c: Character) (l: list Character), CharSet.contains (CharSet.from_list l) c = List.inb c l.
   Proof.
