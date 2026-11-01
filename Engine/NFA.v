@@ -307,7 +307,7 @@ Section NFA.
   (** [branches] enables the peeking instructions: a disjunction whose first
       alternative, or a loop whose body, must start with a known character or
       with a descriptor disjoint from the other side peeks instead of forking;
-      otherwise one followed by a known character peeks at it to keep its exit. *)
+      otherwise it peeks at whichever of its lead and what follows is narrower. *)
   Context (rer: RegExpRecord) {DJ: Disjoint rer} (branches: bool).
 
   Definition union_descr (d1 d2: option char_descr) : option char_descr :=
@@ -347,16 +347,32 @@ Section NFA.
     | _ => None
     end.
 
+  (* the descriptors that match almost every character, [.] and complements,
+     and those with [CdEmpty], which [end_descr] ends with *)
+  Fixpoint wide (cd: char_descr) : bool :=
+    match cd with
+    | CdAll | CdDot | CdInv _ | CdNonDigits | CdNonWhitespace | CdNonWordChar | CdNonUnicodeProp _ => true
+    | CdEmpty => true (* Don't add guards just before a `$`. *)
+    | CdUnion a b => wide a || wide b
+    | _ => false
+    end.
+
   (* what follows a loop succeeds only where the next character, if any, is in
      [fl]: a loop peeks at its body's lead when it is disjoint from [fl], saving
-     a thread, and otherwise only when it is a character, or else at [fl] when
-     it is a character, to keep the exit; a disjunction forks like a greedy loop
-     whose exit is its second alternative *)
+     a thread, and otherwise guards the narrower of its lead and [fl], the lead
+     on a tie: a character, then a descriptor that is not [wide]; a class
+     rarely rejects a character, and a [wide] descriptor is not worth a test,
+     nor sound to guard an exit with when it holds the end of the input; a
+     disjunction forks like a greedy loop whose exit is its second alternative *)
   Definition loop_peek (r1: regex) (fl: option char_descr) : Peek.peek :=
-    let guard l := match l, fl with
-                   | Some (CdSingle c), _ => Peek.GuardFirst (CdSingle c)
-                   | _, Some (CdSingle c) => Peek.GuardSecond (CdSingle c)
-                   | _, _ => Peek.Unguarded
+    let narrow d := match d with Some cd => if wide cd then None else Some cd | None => None end in
+    let guard l := let n1 := narrow l in let n2 := narrow fl in
+                   match l, fl, n1, n2 with
+                   | Some (CdSingle c), _, _, _ => Peek.GuardFirst (CdSingle c)
+                   | _, Some (CdSingle c), _, _ => Peek.GuardSecond (CdSingle c)
+                   | _, _, Some cd1, _ => Peek.GuardFirst cd1
+                   | _, _, _, Some cd2 => Peek.GuardSecond cd2
+                   | _, _, _, None => Peek.Unguarded
                    end in
     if branches then
       let l := lead_descr r1 in

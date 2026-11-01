@@ -358,19 +358,23 @@ Proof.
   apply Utils.List.inb_spec, (in_map (Character.canonicalize rer)), Utils.List.inb_spec in IN. now rewrite IN in READ.
 Qed.
 
-Lemma end_descr_not_single: forall c, end_descr rer <> CdSingle c.
+Lemma end_descr_wide: wide (end_descr rer) = true.
 Proof.
-  unfold end_descr. destruct RegExpRecord.multiline; [|discriminate].
-  destruct Character.line_terminators; discriminate.
+  unfold end_descr. destruct RegExpRecord.multiline; auto.
+  generalize Character.line_terminators as l. induction l; simpl; auto.
 Qed.
 
+Lemma wide_union: forall inp a b, next_str inp <> [] \/ wide (CdUnion a b) = false ->
+  (next_str inp <> [] \/ wide a = false) /\ (next_str inp <> [] \/ wide b = false).
+Proof. cbn. intros inp a b [N|N]; [|apply Bool.orb_false_iff in N]; tauto. Qed.
+
 (* a thread at [pc] dies where the next character, if any, is not in [cd],
-   and also at the end of the input when [cd] is a character *)
+   and also at the end of the input when [cd] is not [wide] *)
 Lemma leads_dead:
   forall code pc cd inp
     (LEADS: leads code pc cd)
     (READ: check_read rer cd inp forward = CannotRead)
-    (NOTEND: next_str inp <> [] \/ exists c, cd = CdSingle c)
+    (NOTEND: next_str inp <> [] \/ wide cd = false)
     acts b t gm
     (REP: actions_rep acts code pc)
     (TREE: bool_tree rer acts inp b t),
@@ -379,11 +383,11 @@ Proof.
   intros until 1.
   induction LEADS as [pc cd GET|pc l cd GET _ IH|pc g cd GET _ IH|pc g cd GET _ IH|pc l cd GET _ IH|pc i l1 l2 cd1 cd2 GET NEXT L1 IH1 L2 IH2
     |pc i l1 l2 cd1 cd2 GET NEXT BEGIN L1 IH1 L2 IH2|pc GET];
-    [| | | | |intros READ [NOTEND|[? ?]]; [revert READ NOTEND|discriminate];
+    [| | | | |intros READ NOTEND; apply wide_union in NOTEND as [N1 N2]; revert READ N1 N2;
       destruct i; destruct NEXT as [NEXT|NEXT]; inversion NEXT; subst
-    |intros READ [NOTEND|[? ?]]; [revert READ NOTEND|discriminate];
+    |intros READ NOTEND; apply wide_union in NOTEND as [N1 N2]; revert READ N1 N2;
       destruct i; destruct NEXT as [NEXT|NEXT]; inversion NEXT; subst
-    |intros READ [NOTEND|[? E]]; [revert READ NOTEND|exfalso; eapply end_descr_not_single; eauto]];
+    |intros READ [NOTEND|E]; [revert READ NOTEND|rewrite end_descr_wide in E; discriminate]];
     intros; pose proof TREE as TREE0; revert gm REP TREE0; induction TREE; intros; inversion REP; subst;
     (* past a jump *)
     try solve [eapply IH; [exact READ|exact NOTEND|replace l with pcstart by congruence; eassumption|exact TREE0]];
@@ -404,13 +408,13 @@ Proof.
   all: try solve [apply nfa_rep_begin in NFA1; subst; congruence].
   all: try solve [apply nfa_rep_begin in NFA2; [subst; exfalso; eauto using actions_rep_not_begin|congruence]].
   all: try (apply check_read_union in READ as [R1 R2]; destruct greedy; simpl;
-    erewrite (IH1 R1 (or_introl NOTEND) _ _ titer), (IH2 R2 (or_introl NOTEND) _ _ tskip); eauto using jump_bc).
+    erewrite (IH1 R1 N1 _ _ titer), (IH2 R2 N2 _ _ tskip); eauto using jump_bc).
   all: try (lazymatch goal with |- actions_rep _ _ _ => destruct plus as [[]|] end; try discriminate; apply cons_bc with (pcmid := end1); [constructor; auto|];
     eapply cons_bc; [eapply acheck_bc; eauto|]; eapply cons_bc; [constructor; econstructor; eauto|auto]).
   all: try (apply check_read_union in READ as [R1 R2]; match goal with
     T1: bool_tree _ ?a1 _ _ ?t1, T2: bool_tree _ ?a2 _ _ ?t2 |- seqop (tree_res ?t1 _ _ _) (tree_res ?t2 _ _ _) = _ =>
-      first [solve [erewrite (IH1 R1 (or_introl NOTEND) a1 _ t1), (IH2 R2 (or_introl NOTEND) a2 _ t2); eauto using cons_bc, areg_bc, jump_bc]
-        | solve [erewrite (IH1 R1 (or_introl NOTEND) a2 _ t2), (IH2 R2 (or_introl NOTEND) a1 _ t1); eauto using cons_bc, areg_bc, jump_bc]] end).
+      first [solve [erewrite (IH1 R1 N1 a1 _ t1), (IH2 R2 N2 a2 _ t2); eauto using cons_bc, areg_bc, jump_bc]
+        | solve [erewrite (IH1 R1 N1 a2 _ t2), (IH2 R2 N2 a1 _ t1); eauto using cons_bc, areg_bc, jump_bc]] end).
   (* passing [$] *)
   all: try (replace a with EndInput in * by congruence; rewrite end_descr_dead in ANCHOR; auto; discriminate).
   (* reading [cd] *)
@@ -454,12 +458,12 @@ Lemma loop_peek_sound:
     (BODY: forall cd, lead_descr r1 = Some cd -> check_read rer cd inp forward = CannotRead ->
        tree_res tbody gm inp forward = None)
     (EXIT: forall cd, fl = Some cd -> check_read rer cd inp forward = CannotRead ->
-       next_str inp <> [] \/ (exists c, cd = CdSingle c) -> tree_res texit gm inp forward = None),
+       next_str inp <> [] \/ wide cd = false -> tree_res texit gm inp forward = None),
     peek_dead (loop_peek rer branches r1 fl) tbody texit gm inp.
 Proof.
   intros. unfold loop_peek. destruct branches; [cbv beta zeta|exact I].
   destruct (lead_descr r1) as [cd1|], fl as [cd2|]; try destruct (disjoint rer cd1 cd2) eqn:D;
-    try destruct cd1; try destruct cd2; simpl; try split; intros; eauto using disjoint_read, can_read_next, or_introl, or_intror.
+    try destruct (wide cd1) eqn:?; try destruct (wide cd2) eqn:?; try destruct cd1; try destruct cd2; simpl; try split; intros; eauto using disjoint_read, can_read_next, or_introl, or_intror.
 Qed.
 
 Theorem generate_choice:
