@@ -280,6 +280,10 @@ Proof.
   - constructor. subst. simpl in IHTREE. apply IHTREE; eauto.
     { pike_subset. }
     inversion ENCODE; subst; constructor; constructor; auto.
+  - constructor; auto.
+    apply encode_next in ENCODE. apply IHTREE; auto.
+    { pike_subset. }
+    apply encode_next. apply encode_next. auto.
   - inversion ENCODE. subst. constructor; auto.
   - destruct (destruct_delta (NoI.N 1 + plus)%NoI) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]].
     (* Zero repetitions *)
@@ -336,6 +340,7 @@ Proof.
   induction ISTREE; try eapply IHISTREE; pike_subset.
   - eapply IHISTREE1. pike_subset.
   - eapply IHISTREE2. pike_subset.
+  - eapply IHISTREE. pike_subset.
   - destruct plus; inversion H3. destruct greedy; pike_subset.
     + eapply IHISTREE1. pike_subset.
     + eapply IHISTREE1. pike_subset.
@@ -420,6 +425,21 @@ Qed.
     intros r inp t SUBSET. split.
     - apply bool_to_istree_regex; auto.
     - apply boolean_correct; auto.
+  Qed.
+
+  (* inserting r{0,0} does not change the tree *)
+  Lemma bool_tree_insert_zero greedy r:
+    forall l inp b t,
+      bool_tree l inp b t ->
+      forall acts cont,
+        l = acts ++ cont ->
+        bool_tree (acts ++ Areg (Quantified greedy 0 (NoI.N 0) r) :: cont) inp b t.
+  Proof.
+    intros l inp b t H. induction H; intros acts0 cont0 EQ.
+    all: destruct acts0 as [|act0 acts0]; simpl in EQ.
+    all: try solve [subst; simpl; apply tree_quant_done; econstructor; eauto].
+    all: inversion EQ; subst; simpl; econstructor; eauto.
+    all: repeat rewrite app_comm_cons; auto.
   Qed.
 
 End BooleanSemantics.

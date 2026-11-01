@@ -121,6 +121,13 @@ Section CodeWF.
       subst. rewrite END in GET. inversion GET. subst.
       simpl in IN. destruct IN as [IN|IN]; inversion IN; lia.
     - apply nfa_rep_incr in REP as INC.
+      assert (pc = start \/ pc >= S start) as [RES|H] by lia.
+      (* Reset *)
+      { subst. rewrite RESET in GET. inversion GET. subst.
+        simpl in IN. destruct IN as [IN|IN]; inversion IN; lia. }
+      (* in r1 *)
+      apply IHREP in IN; auto.
+    - apply nfa_rep_incr in REP as INC.
       assert (pc = start \/ pc >= S start) as [ST|H] by lia.
       (* open *)
       { subst. rewrite OPEN in GET. inversion GET. subst.
@@ -253,6 +260,7 @@ Section CodeSize.
     | Quantified g 0 (NoI.N 0) r1 => 0
     | Quantified g 0 (NoI.N 1) r1 => 4 + compsize r1
     | Quantified g 0 (NoI.Inf) r1 => 4 + compsize r1
+    | Quantified g 1 (NoI.N 0) r1 => 1 + compsize r1
     | Group _ r1 => 2 + compsize r1
     | Anchor _ => 1
     | _ => 0
@@ -278,7 +286,15 @@ Section CodeSize.
       erewrite <- IHr1; eauto. 2: pike_subset.
       erewrite <- IHr2; eauto. 2: pike_subset.
       inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-    - destruct min; destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst; try solve[pike_subset].
+    - destruct min as [|[|min]].
+      2: { (* r{1} *)
+           destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst;
+             try solve[pike_subset]; try solve[inversion SUBSET; subst; lia].
+           destruct (compile r (S start)) eqn:C1.
+           erewrite <- IHr; eauto. 2: pike_subset.
+           inversion COMP. subst. simpl. lia. }
+      2: { inversion SUBSET. }
+      destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst; try solve[pike_subset].
       + inversion COMP. auto.
       + destruct (compile r (S (S (S start)))) eqn:C1.
         erewrite <- IHr; eauto. 2: pike_subset.
@@ -307,7 +323,8 @@ Section CodeSize.
       S (compsize r) <= 4 * (regex_size r).
   Proof.
     intros r. induction r; simpl; try lia.
-    - destruct min; simpl; [|lia].
+    - destruct min as [|[|min]]; simpl; try lia.
+      2: { destruct delta as [[|]|]; simpl; lia. }
       destruct delta; simpl; [|lia].
       destruct n; simpl; [lia|].
       destruct n; simpl; lia.
