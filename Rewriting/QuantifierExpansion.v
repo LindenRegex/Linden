@@ -189,5 +189,12 @@ Section QuantifierExpansion.
     - apply regex_equiv_ctx_samedir with (ctx := CGroup id CHole); auto.
   Qed.
 
+  Lemma expand_lazy_prefix_equiv r:
+    lazy_prefix r ≅[rer][forward] lazy_prefix (expand_quant r).
+  Proof.
+    unfold lazy_prefix.
+    apply regex_equiv_ctx_samedir with (ctx := CSequenceL dot_star CHole); auto.
+    apply expand_quant_equiv.
+  Qed.
 
 End QuantifierExpansion.
