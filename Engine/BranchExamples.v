@@ -123,11 +123,18 @@ Example ranges_follow_branch_compile:
     Branch (CdRange ($ "a") ($ "c")) 2 6.
 Proof. vm_compute. reflexivity. Qed.
 
-(* only a leading character is worth peeking at on every iteration: an
-   overlapping range peeks at what follows to keep its exit instead *)
-Example overlapping_range_guards_exit:
-  hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star branch_ac) branch_b)) =
-    GuardSecond (CdSingle ($ "b")) 2 6.
+(* an overlapping range guards the narrower of itself and what follows, itself
+   on a tie: [a-c]*b, [a-c]*[b-d] *)
+Definition branch_bd : regex := Regex.Character (CdRange ($ "b") ($ "d")).
+
+Example overlapping_range_guards:
+  map (fun r => hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star branch_ac) r))) [branch_b; branch_bd] =
+    [GuardSecond (CdSingle ($ "b")) 2 6; GuardFirst (CdRange ($ "a") ($ "c")) 2 6].
+Proof. vm_compute. reflexivity. Qed.
+
+Example overlapping_range_guards_first_runs:
+  map (branch_run (Sequence (greedy_star (Group 1 branch_ac)) branch_bd)) [[$ "a"; $ "b"; $ "b"]; [$ "b"]; [$ "c"; $ "a"]; []] =
+  map (reference_run (Sequence (greedy_star (Group 1 branch_ac)) branch_bd)) [[$ "a"; $ "b"; $ "b"]; [$ "b"]; [$ "c"; $ "a"]; []].
 Proof. vm_compute. reflexivity. Qed.
 
 Example range_follow_branch_runs:
@@ -173,7 +180,7 @@ Definition multiline_run (branches: bool) (r: regex) (s: list Character.type) :=
 Example multiline_end_follow_compile:
   let rer := RegExpRecord.make false true false tt 0 in
   map (fun r => hd KillThread (NFA.compilation rer true (branch_end r))) [branch_a; Regex.Character CdWhitespace] =
-    [Branch (CdSingle ($ "a")) 2 6; Fork 1 5].
+    [Branch (CdSingle ($ "a")) 2 6; GuardFirst CdWhitespace 2 6].
 Proof. vm_compute. reflexivity. Qed.
 
 Example multiline_end_follow_runs:
@@ -189,9 +196,9 @@ Example keyword_guard_first_compile:
   hd KillThread (NFA.compilation branch_flags true branch_keywords) = GuardFirst (CdSingle ($ "a")) 2 7.
 Proof. vm_compute. reflexivity. Qed.
 
-Example overlapping_range_alternative_forks:
+Example overlapping_range_alternative_guards_first:
   hd KillThread (NFA.compilation branch_flags true (Disjunction branch_ac (Regex.Character (CdRange ($ "b") ($ "d"))))) =
-    Fork 1 3.
+    GuardFirst (CdRange ($ "a") ($ "c")) 2 4.
 Proof. vm_compute. reflexivity. Qed.
 
 Example keyword_guard_first_runs:
@@ -257,15 +264,15 @@ Example class_follow_branches:
      Sequence (greedy_star branch_d) (Regex.Character CdNonDigits); Sequence (greedy_star branch_ac) branch_s;
      Sequence (greedy_star (Regex.Character (CdInv (CdRange ($ "a") ($ "c"))))) branch_ac; Sequence (greedy_star branch_w) branch_d] =
     [Branch CdDigits 2 6; Branch CdWhitespace 2 6; Branch CdDigits 2 6; Branch (CdRange ($ "a") ($ "c")) 2 6;
-     Branch (CdInv (CdRange ($ "a") ($ "c"))) 2 6; Fork 1 5].
+     Branch (CdInv (CdRange ($ "a") ($ "c"))) 2 6; GuardFirst CdWordChar 2 6].
 Proof. vm_compute. reflexivity. Qed.
 
-(* under ignoreCase, the default check gives up on classes *)
-Example case_folded_class_follow_forks:
+(* under ignoreCase, the default check gives up on classes, which only guard *)
+Example case_folded_class_follow_guards:
   let rer := RegExpRecord.make true false false tt 0 in
   map (fun r => hd KillThread (NFA.compilation rer true r))
     [Sequence (greedy_star branch_w) branch_s; Sequence (greedy_star branch_d) (Regex.Character (CdSingle ($ "a")))] =
-    [Fork 1 5; GuardSecond (CdSingle ($ "a")) 2 6].
+    [GuardFirst CdWordChar 2 6; GuardSecond (CdSingle ($ "a")) 2 6].
 Proof. vm_compute. reflexivity. Qed.
 
 Example class_follow_branch_runs:
@@ -293,12 +300,27 @@ Example second_alternative_guard_compile:
     [GuardSecond (CdSingle ($ "c")) 2 4; Data (CdSingle ($ "c"))].
 Proof. vm_compute. reflexivity. Qed.
 
-(* a class that follows does not guard *)
-Example class_follow_forks:
-  hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star branch_dot) branch_ac)) = Fork 1 5.
+Definition exit_guard_inputs := [[$ "a"; $ "c"; $ "c"]; [$ "c"]; [$ "a"]; []; [$ "c"; $ "a"; $ "c"; $ "b"]].
+
+(* a class that follows a wide lead guards the exit, unless it may be the end
+   of the input: .*[a-c], .*(?:c|$) *)
+Example class_follow_guards_exit:
+  map (fun r => hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star branch_dot) r)))
+    [branch_ac; Disjunction branch_c (Anchor EndInput)] = [GuardSecond (CdRange ($ "a") ($ "c")) 2 6; Fork 1 5].
 Proof. vm_compute. reflexivity. Qed.
 
-Definition exit_guard_inputs := [[$ "a"; $ "c"; $ "c"]; [$ "c"]; [$ "a"]; []; [$ "c"; $ "a"; $ "c"; $ "b"]].
+Example class_follow_guards_exit_runs:
+  map (branch_run (Sequence (greedy_star (Group 1 branch_dot)) (Group 2 branch_ac))) exit_guard_inputs =
+  map (reference_run (Sequence (greedy_star (Group 1 branch_dot)) (Group 2 branch_ac))) exit_guard_inputs.
+Proof. vm_compute. reflexivity. Qed.
+
+(* a lead with a complement anywhere in it is wide, and forks before what is
+   wide too: \S*[^a], (?:a|[^a])*[^a] *)
+Example wide_lead_forks:
+  map (fun r => hd KillThread (NFA.compilation branch_flags true (Sequence (greedy_star r) branch_not_a)))
+    [Regex.Character CdNonWhitespace; Disjunction branch_a branch_not_a] = [Fork 1 5; Fork 1 9].
+Proof. vm_compute. reflexivity. Qed.
+
 
 Example exit_guard_runs:
   map (branch_run (Sequence (greedy_star (Group 1 branch_dot)) (Group 2 branch_c))) exit_guard_inputs =
