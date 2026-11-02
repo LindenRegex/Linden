@@ -13,7 +13,7 @@ Section Utilities.
     (* autounfold with tree_equiv; destruct dir; tree_equiv_inv. *)
     (*tree_equiv_rw; destruct dir; compute_tr_simpl.*)
     unfold tree_equiv. intros [].
-    - unfold tree_equiv_dir. split. 1: simpl; apply app_assoc.
+    - unfold tree_equiv_dir. split. 1: simpl; rewrite app_assoc; reflexivity.
       intros i gm tr1 tr2 TREE1 TREE2. inversion TREE1; subst. inversion TREE2; subst. simpl in *.
       clear TREE1 TREE2.
       inversion CONT0; subst. simpl in CONT1.
@@ -22,7 +22,7 @@ Section Utilities.
       apply app_eq_left with (acts := [Areg r0]).
       unfold actions_equiv_dir. intros inp gm t1 t2 TREE1 TREE2.
       inversion TREE1; subst. simpl in CONT. replace t2 with t1 by (eapply is_tree_determ; eauto). reflexivity.
-    - unfold tree_equiv_dir. split. 1: simpl; apply app_assoc.
+    - unfold tree_equiv_dir. split. 1: simpl; rewrite app_assoc; reflexivity.
       intros i gm tr1 tr2 TREE1 TREE2. inversion TREE1; subst. inversion TREE2; subst. simpl in *.
       clear TREE1 TREE2.
       inversion CONT; subst. simpl in CONT1.
@@ -51,21 +51,22 @@ Section Utilities.
     rewrite <- app_assoc in IHis_tree; eauto with is_tree.
   Qed.
 
-  Lemma is_tree_skip_zero_r a i gm dir tr r b:
+
+  Lemma is_tree_skip_quant_zero_r a i gm dir tr greedy r:
     is_tree rer a i gm dir tr ->
-    is_tree rer (a ++ [Areg (Quantified b 0 (NoI.N 0) r)]) i gm dir tr.
+    is_tree rer (a ++ [Areg (Quantified greedy 0 (NoI.N 0) r)]) i gm dir tr.
   Proof.
     induction 1; subst; simpl; eauto with is_tree.
-    - rewrite <- app_assoc in IHis_tree; eauto with is_tree.
+    rewrite <- app_assoc in IHis_tree; eauto with is_tree.
   Qed.
-
 
   Lemma seq_equiv_dir: forall x x' y y' dir, x ≅[rer][dir] x' -> y ≅[rer][dir] y' -> Sequence x y ≅[rer][dir] Sequence x' y'.
   Proof.
     intros x x' y y' [] EQUIV_x EQUIV_y.
     - destruct EQUIV_x as [DEF_GROUPS_x EQUIV_x]. destruct EQUIV_y as [DEF_GROUPS_y EQUIV_y].
-      split. 1: { simpl. rewrite <- DEF_GROUPS_x, DEF_GROUPS_y. reflexivity. }
-           intros i gm tr1 tr2 TREE1 TREE2.
+
+      split. 1: { simpl. apply groups_equiv_app; auto. }
+      intros i gm tr1 tr2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst. simpl in *. clear TREE1 TREE2.
       revert i gm tr1 tr2 CONT CONT0.
       change (actions_equiv_dir rer forward [Areg x; Areg y] [Areg x'; Areg y']).
@@ -73,8 +74,8 @@ Section Utilities.
       change (actions_equiv_dir rer forward [Areg y] [Areg y']) in EQUIV_y.
       apply app_eq_both with (a1 := [Areg x]) (a2 := [Areg x']) (b1 := [Areg y]) (b2 := [Areg y']) (dir := forward); auto.
     - destruct EQUIV_x as [DEF_GROUPS_x EQUIV_x]. destruct EQUIV_y as [DEF_GROUPS_y EQUIV_y].
-      split. 1: { simpl. rewrite <- DEF_GROUPS_x, DEF_GROUPS_y. reflexivity. }
-           intros i gm tr1 tr2 TREE1 TREE2.
+      split. 1: { simpl. apply groups_equiv_app; auto. }
+      intros i gm tr1 tr2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst. simpl in *. clear TREE1 TREE2.
       revert i gm tr1 tr2 CONT CONT0.
       change (actions_equiv_dir rer backward [Areg y; Areg x] [Areg y'; Areg x']).
@@ -118,14 +119,40 @@ Section Examples.
     reflexivity.
   Qed.
 
+  (* above, we need no groups, because epsilon doesn't define any.
+     still, if a 0 quantifier is used in sequence with a regex that
+     defines the same group, we can remove the 0 quantifier (without
+     first rewriting to epsilon) *)
+  Lemma quantified_zero_seq_left r s greedy:
+    incl (def_groups r) (def_groups s) ->
+    Sequence (Quantified greedy 0 (NoI.N 0) r) s ≅[rer] s.
+  Proof.
+    intros INCL dir. split.
+    1: { simpl. split; [apply incl_app; [auto | apply incl_refl] | apply incl_appr, incl_refl]. }
+    destruct dir; tree_equiv_simpl; tree_inv TREE1; [tree_inv TREE2 | ..].
+    all: try apply (is_tree_skip_quant_zero_r rer [Areg s]); eauto using compute_tr_is_tree.
+    all: reflexivity.
+  Qed.
+
+  Lemma quantified_zero_seq_right r s greedy:
+    incl (def_groups r) (def_groups s) ->
+    Sequence s (Quantified greedy 0 (NoI.N 0) r) ≅[rer] s.
+  Proof.
+    intros INCL dir. split.
+    1: { simpl. split; [apply incl_app; [apply incl_refl | auto] | apply incl_appl, incl_refl]. }
+    destruct dir; tree_equiv_simpl; tree_inv TREE1; [tree_inv TREE2 | ..].
+    all: try apply (is_tree_skip_quant_zero_r rer [Areg s]); eauto using compute_tr_is_tree.
+    all: reflexivity.
+  Qed.
+
   Lemma quantified_S_equiv_forward n:
     forall delta r greedy,
-      def_groups r = [] ->
       (Quantified greedy (S n) delta r)
         ≅[rer][forward] (Sequence (Quantified greedy 1 (NoI.N 0) r) (Quantified greedy n delta r)).
   Proof.
-    split. 1: { simpl. rewrite H. reflexivity. }
-         intros i gm tr1 tr2 TREE1 TREE2.
+    intros. split. 1: { simpl. solve_groups_equiv. }
+    intros i gm tr1 tr2 TREE1 TREE2.
+
     inversion TREE1; subst. inversion TREE2; subst. simpl in CONT. inversion CONT; subst.
     clear TREE1 TREE2 CONT.
     unfold tree_equiv_tr_dir. simpl.
@@ -142,12 +169,11 @@ Section Examples.
 
   Lemma quantified_S_equiv_backward n:
     forall delta r greedy,
-      def_groups r = [] ->
       (Quantified greedy (S n) delta r)
         ≅[rer][backward] (Sequence (Quantified greedy n delta r) (Quantified greedy 1 (NoI.N 0) r)).
   Proof.
-    split. 1: { simpl. rewrite H. reflexivity. }
-         intros i gm tr1 tr2 TREE1 TREE2.
+    intros. split. 1: { simpl. solve_groups_equiv. }
+    intros i gm tr1 tr2 TREE1 TREE2.
     inversion TREE1; subst. inversion TREE2; subst. simpl in CONT. inversion CONT; subst.
     clear TREE1 TREE2 CONT.
     unfold tree_equiv_tr_dir. simpl.
@@ -168,7 +194,7 @@ Section Examples.
     forall greedy, Quantified greedy 1 (NoI.N 0) r ≅[rer] r.
   Proof.
     tree_equiv_inv; try rewrite H; simpl; eauto.
-    2: { apply (is_tree_skip_zero_r rer [Areg r]). eauto. }
+    2: { apply (is_tree_skip_quant_zero_r rer [Areg r]). eauto. }
     apply leaves_equiv_refl.
   Qed.
   
@@ -176,7 +202,8 @@ Section Examples.
 
   Lemma disj_equiv_dir: forall x x' y y' dir, x ≅[rer][dir] x' -> y ≅[rer][dir] y' -> Disjunction x y ≅[rer][dir] Disjunction x' y'.
   Proof.
-    intros x x' y y' dir [GRPX EQSX] [GRPY EQSY]; split; simpl; try rewrite GRPX; try rewrite GRPY; try reflexivity.
+    intros x x' y y' dir [GRPX EQSX] [GRPY EQSY]; split; simpl.
+    apply groups_equiv_app; auto.
     intros i gm t1 t2 TREE1 TREE2.
     inversion TREE1; inversion TREE2; subst. clear TREE1 TREE2. simpl.
     unfold tree_equiv_tr_dir. simpl. apply leaves_equiv_app.
@@ -187,11 +214,10 @@ Section Examples.
 
 
   Lemma disj_elim_copy: forall r1 r2 dir,
-      def_groups r1 = [] ->
       Disjunction (Disjunction r1 r2) r1 ≅[rer][dir] Disjunction r1 r2.
   Proof.
     intros r1 r2 dir.
-    split. simpl. rewrite H; simpl. rewrite app_nil_r. reflexivity.
+    split. simpl. solve_groups_equiv.
     intros i g t1 t2 T1 T2. inversion T1; inversion T2; inversion ISTREE1; subst.
     clear ISTREE1 T1 T2.
     unfold tree_equiv_tr_dir; simpl.

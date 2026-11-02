@@ -16,29 +16,19 @@ Section RegexpTree.
 |*)
 
   Section BoundedRepetitions.
-    Lemma bounded_util_fwd m n delta r:
-      def_groups r = [] -> (* r{m}r{n,n+k} ≅[forward] r{m+n,m+n+k}, generalized from regexp_tree *)
+    Lemma bounded_util_fwd m n delta r: (* r{m}r{n,n+k} ≅[forward] r{m+n,m+n+k}, generalized from regexp_tree *)
       (Sequence (Quantified true m 0 r) (Quantified true n delta r))
         ≅[rer][forward] Quantified true (m + n) delta r.
     Proof.
-      induction m as [ | m' IHm ]; simpl; intros.
-      - etransitivity.
-        apply seq_equiv.
-        apply quantified_zero_equiv.
-        auto.
-        reflexivity.
-        etransitivity.
-        apply sequence_epsilon_left_equiv.
-        reflexivity.
+      induction m as [ | m' IHm ]; simpl.
+      - apply quantified_zero_seq_left. apply incl_refl.
       - etransitivity.
         { apply seq_equiv_dir.
           apply quantified_S_equiv_forward.
-          auto.
           reflexivity. }
         etransitivity; cycle 1.
         { symmetry.
-          eapply quantified_S_equiv_forward.
-          auto. }
+          eapply quantified_S_equiv_forward. }
         etransitivity.
         { symmetry.
           eapply sequence_assoc_equiv. }
@@ -47,29 +37,19 @@ Section RegexpTree.
         auto.
     Qed.
 
-    Lemma bounded_util_bwd m n delta r:
-      def_groups r = [] -> (* r{n,n+k}r{m} ≅[backward] r{m+n,m+n+k}, generalized from regexp_tree *)
+    Lemma bounded_util_bwd m n delta r: (* r{n,n+k}r{m} ≅[backward] r{m+n,m+n+k}, generalized from regexp_tree *)
       (Sequence (Quantified true n delta r) (Quantified true m 0 r))
         ≅[rer][backward] Quantified true (m + n) delta r.
     Proof.
-      induction m as [ | m' IHm ]; simpl; intros.
-      - etransitivity.
-        apply seq_equiv_dir.
-        reflexivity.
-        apply quantified_zero_equiv.
-        auto.
-        etransitivity.
-        apply sequence_epsilon_right_equiv.
-        reflexivity.
+      induction m as [ | m' IHm ]; simpl.
+      - apply quantified_zero_seq_right. apply incl_refl.
       - etransitivity.
         { apply seq_equiv_dir.
           reflexivity.
-          apply quantified_S_equiv_backward.
-          auto. }
+          apply quantified_S_equiv_backward. }
         etransitivity; cycle 1.
         { symmetry.
-          eapply quantified_S_equiv_backward.
-          auto. }
+          eapply quantified_S_equiv_backward. }
         etransitivity.
         { eapply sequence_assoc_equiv. }
         eapply seq_equiv_dir.
@@ -78,79 +58,64 @@ Section RegexpTree.
     Qed.
 
     Lemma bounded_bounded_equiv_true m n r: (* r{m}r{n} ≅ r{m+n} *)
-      def_groups r = [] ->
       (Sequence (Quantified true m 0 r) (Quantified true n 0 r))
         ≅[rer] Quantified true (m + n) 0 r.
     Proof.
-      intros H [].
-      - apply bounded_util_fwd. auto.
-      - rewrite PeanoNat.Nat.add_comm. apply bounded_util_bwd. auto.
+      intros [].
+      - apply bounded_util_fwd.
+      - rewrite PeanoNat.Nat.add_comm. apply bounded_util_bwd.
     Qed.
 
     Corollary bounded_bounded_equiv p m n r: (* r{m}r{n} ≅ r{m+n} *)
-      def_groups r = [] ->
       (Sequence (Quantified p m 0 r) (Quantified p n 0 r))
         ≅[rer] Quantified p (m + n) 0 r.
     Proof.
       pose proof bounded_bounded_equiv_true m n r. destruct p; intros; auto.
       etransitivity. 2: apply forced_equiv.
-      etransitivity; auto.
+      etransitivity; eauto.
       apply seq_equiv; symmetry; apply forced_equiv.
     Qed.
 
     Lemma bounded_atmost_equiv_true m n r: (* r{m}r{0,n} ≅[forward] r{m,m+n} *)
-      def_groups r = [] ->
       (Sequence (Quantified true m 0 r) (Quantified true 0 n r))
         ≅[rer][forward] Quantified true m n r.
-    Proof. intro NO_GROUPS. rewrite bounded_util_fwd, PeanoNat.Nat.add_0_r. 1: reflexivity. auto. Qed.
+    Proof. rewrite bounded_util_fwd, PeanoNat.Nat.add_0_r. reflexivity. Qed.
 
     Corollary bounded_atmost_equiv p m n r: (* r{m}r{0,n} ≅[forward] r{m,m+n} *)
-      def_groups r = [] ->
       (Sequence (Quantified p m 0 r) (Quantified true 0 n r))
         ≅[rer][forward] Quantified true m n r.
     Proof.
-      pose proof bounded_atmost_equiv_true m n r. destruct p; intros; auto.
-      etransitivity; auto.
+      pose proof bounded_atmost_equiv_true m n r. destruct p; auto.
+      etransitivity; eauto.
       apply seq_equiv. symmetry. apply forced_equiv. reflexivity.
     Qed.
 
     Lemma atmost_bounded_equiv_true m n r: (* r{0,n}r{m} ≅[backward] r{m,m+n} *)
-      def_groups r = [] ->
       (Sequence (Quantified true 0 n r) (Quantified true m 0 r))
         ≅[rer][backward] Quantified true m n r.
-    Proof. intro NO_GROUPS. rewrite bounded_util_bwd, PeanoNat.Nat.add_0_r. 1: reflexivity. auto. Qed.
+    Proof. rewrite bounded_util_bwd, PeanoNat.Nat.add_0_r. reflexivity. Qed.
 
     Corollary atmost_bounded_equiv p m n r: (* r{0,n}r{m} ≅[backward] r{m,m+n} *)
-      def_groups r = [] ->
       (Sequence (Quantified true 0 n r) (Quantified p m 0 r))
         ≅[rer][backward] Quantified true m n r.
     Proof.
-      pose proof atmost_bounded_equiv_true m n r. destruct p; intros; auto.
-      etransitivity; auto. apply seq_equiv. reflexivity. symmetry. apply forced_equiv.
+      pose proof atmost_bounded_equiv_true m n r. destruct p; auto.
+      etransitivity; eauto. apply seq_equiv. reflexivity. symmetry. apply forced_equiv.
     Qed.
 
     Lemma bounded_atmost_lazy_equiv_true m n r: (* r{m}r{0,n}? ≅[forward] r{m,m+n}? *)
-      def_groups r = [] ->
       (Sequence (Quantified true m 0 r) (Quantified false 0 n r))
         ≅[rer][forward] Quantified false m n r.
     Proof.
-      intro NO_GROUPS.
       induction m as [|m IHm]; simpl.
-      - etransitivity.
-        apply seq_equiv_dir.
-        apply quantified_zero_equiv.
-        auto.
-        reflexivity.
-        apply sequence_epsilon_left_equiv.
+      - apply quantified_zero_seq_left. apply incl_refl.
       - etransitivity.
         { apply seq_equiv_dir.
           apply quantified_S_equiv_forward.
-          auto.
           reflexivity. }
         etransitivity; cycle 1.
         { symmetry.
-          eapply quantified_S_equiv_forward.
-          auto. }
+          eapply quantified_S_equiv_forward. }
         etransitivity.
         { symmetry.
           eapply sequence_assoc_equiv. }
@@ -160,36 +125,26 @@ Section RegexpTree.
     Qed.
 
     Corollary bounded_atmost_lazy_equiv p m n r: (* r{m}r{0,n}? ≅[forward] r{m,m+n}? *)
-      def_groups r = [] ->
       (Sequence (Quantified p m 0 r) (Quantified false 0 n r))
         ≅[rer][forward] Quantified false m n r.
     Proof.
-      pose proof bounded_atmost_lazy_equiv_true m n r. destruct p; intros; auto.
-      etransitivity; auto. apply seq_equiv. symmetry. apply forced_equiv. reflexivity.
+      pose proof bounded_atmost_lazy_equiv_true m n r. destruct p; auto.
+      etransitivity; eauto. apply seq_equiv. symmetry. apply forced_equiv. reflexivity.
     Qed.
 
     Lemma atmost_bounded_lazy_equiv_true m n r: (* r{0,n}?r{m} ≅[backward] r{m,m+n}? *)
-      def_groups r = [] ->
       (Sequence (Quantified false 0 n r) (Quantified true m 0 r))
         ≅[rer][backward] Quantified false m n r.
     Proof.
-      intro NO_GROUPS.
       induction m as [|m IHm]; simpl.
-      - etransitivity.
-        apply seq_equiv_dir.
-        reflexivity.
-        apply quantified_zero_equiv.
-        auto.
-        apply sequence_epsilon_right_equiv.
+      - apply quantified_zero_seq_right. apply incl_refl.
       - etransitivity.
         { apply seq_equiv_dir.
           reflexivity.
-          apply quantified_S_equiv_backward.
-          auto. }
+          apply quantified_S_equiv_backward. }
         etransitivity; cycle 1.
         { symmetry.
-          eapply quantified_S_equiv_backward.
-          auto. }
+          eapply quantified_S_equiv_backward. }
         etransitivity.
         { eapply sequence_assoc_equiv. }
         eapply seq_equiv_dir.
@@ -198,41 +153,38 @@ Section RegexpTree.
     Qed.
 
     Corollary atmost_bounded_lazy_equiv p m n r: (* r{0,n}?r{m} ≅[backward] r{m,m+n}? *)
-      def_groups r = [] ->
       (Sequence (Quantified false 0 n r) (Quantified p m 0 r))
         ≅[rer][backward] Quantified false m n r.
     Proof.
-      pose proof atmost_bounded_lazy_equiv_true m n r. destruct p; intros; auto.
-      etransitivity; auto. apply seq_equiv. reflexivity. symmetry. apply forced_equiv.
+      pose proof atmost_bounded_lazy_equiv_true m n r. destruct p; auto.
+      etransitivity; eauto. apply seq_equiv. reflexivity. symmetry. apply forced_equiv.
     Qed.
 
     Lemma bounded_atmost_forward:
       forall r n m g,
-        def_groups r = [] ->
         (Sequence (Quantified g m 0 r) (Quantified g 0 n r))
           ≅[rer][forward] Quantified g m n r.
     Proof.
-      intros r n m g DEF. destruct g.
-      - apply bounded_atmost_equiv. auto.
+      intros r n m g. destruct g.
+      - apply bounded_atmost_equiv.
       - etransitivity.
         { eapply seq_equiv. 2: reflexivity.
           rewrite <- forced_equiv. reflexivity. }
-        apply bounded_atmost_lazy_equiv. auto.
+        apply bounded_atmost_lazy_equiv.
     Qed.
 
 
     Lemma atmost_bounded_backward:
       forall r n m g,
-        def_groups r = [] ->
         (Sequence (Quantified g 0 n r) (Quantified g m 0 r))
           ≅[rer][backward] Quantified g m n r.
     Proof.
-      intros r n m g DEF. destruct g.
-      - apply atmost_bounded_equiv. auto.
+      intros r n m g. destruct g.
+      - apply atmost_bounded_equiv.
       - etransitivity.
         { eapply seq_equiv. reflexivity.
           rewrite <- forced_equiv. reflexivity. }
-        apply atmost_bounded_lazy_equiv. auto.
+        apply atmost_bounded_lazy_equiv.
     Qed.
 
 
@@ -552,12 +504,11 @@ Section RegexpTree.
 
 
     Lemma atmost_atmost_equiv (m n: non_neg_integer_or_inf) r: (* r{0,m}r{0,n} ≅ r{0,m+n} *)
-      def_groups r = [] ->
       (Sequence (Quantified true 0 m r) (Quantified true 0 n r))
         ≅[rer] Quantified true 0 (m + n)%NoI r.
     Proof.
-      intros NO_GROUPS dir. split. 1: { simpl. rewrite NO_GROUPS. reflexivity. }
-                                 intros i gm tr1 tr2 TREE1. inversion TREE1; subst. clear TREE1. rewrite app_nil_r in CONT.
+      intros dir. split. 1: { simpl. solve_groups_equiv. }
+      intros i gm tr1 tr2 TREE1. inversion TREE1; subst. clear TREE1. rewrite app_nil_r in CONT.
       destruct m as [m|]; destruct n as [n|]; destruct dir;
         simpl in CONT; revert i gm tr1 tr2 CONT; simpl.
 
@@ -586,15 +537,14 @@ Section RegexpTree.
        r{n1}?r{n2,m2}? -> r{n1+n2,n1+m2}? *)
     Theorem merge_forced_forward:
       forall r n1 g1 n2 m2 g2,
-        def_groups r = [] ->
         (Sequence (Quantified g1 n1 0 r) (Quantified g2 n2 m2 r))
           ≅[rer][forward] Quantified g2 (n1+n2) m2 r.
     Proof.
-      intros r n1 g1 n2 m2 g2 DEF.
+      intros r n1 g1 n2 m2 g2.
       (* break down r{n2,n2+m2} into r{n2}r{0,m2} *)
       eapply tree_equiv_dir_transitive.
       { apply seq_equiv_dir. reflexivity.
-        rewrite <- bounded_atmost_forward; auto. reflexivity. }
+        rewrite <- bounded_atmost_forward. reflexivity. }
       (* sequence associativity *)
       eapply tree_equiv_dir_transitive.
       { apply seq_assoc. }
@@ -605,36 +555,35 @@ Section RegexpTree.
       (* merge the forced iterations r{n1}r{n2} *)
       eapply tree_equiv_dir_transitive.
       { eapply seq_equiv_dir. 2: reflexivity.
-        apply bounded_bounded_equiv. auto. }
+        apply bounded_bounded_equiv. }
       (* set the greediness of r{n1+n2} to g2 *)
       eapply tree_equiv_dir_transitive.
       { eapply seq_equiv_dir. 2: reflexivity.
         symmetry. apply forced_equiv_true with (g:=g2). }
       (* merge the forced iterations r{n1+n2} back with the free iterations r{0,m2} *)
-      apply bounded_atmost_forward. auto.
+      apply bounded_atmost_forward.
     Qed.
 
     (* r{n1,m1}r{0,m2} -> r{n1,m1+m2} *)
     Theorem merge_greedy_forward:
       forall r n1 m1 m2,
-        def_groups r = [] ->
         (Sequence (Quantified true n1 m1 r) (Quantified true 0 m2 r))
           ≅[rer][forward] Quantified true n1 (m1 + m2)%NoI r.
     Proof.
-      intros r n1 m1 m2 DEF.
+      intros r n1 m1 m2.
       (* break down r{n1,n1+m1} into r{n1}r{0,m1} *)
       eapply tree_equiv_dir_transitive.
       { apply seq_equiv_dir. 2: reflexivity.
-        rewrite <- bounded_atmost_forward; auto. reflexivity. }
+        rewrite <- bounded_atmost_forward. reflexivity. }
       (* sequence associativity *)
       eapply tree_equiv_dir_transitive.
       { symmetry. apply seq_assoc. }
       (* merge the free iterations r{0,m1}r{0,m2} *)
       eapply tree_equiv_dir_transitive.
       { eapply seq_equiv_dir. reflexivity.
-        apply atmost_atmost_equiv. auto. }
+        apply atmost_atmost_equiv. }
       (* merge the forced iterations r{n1} back with the free iterations r{0,m1+m2} *)
-      apply bounded_atmost_forward. auto.
+      apply bounded_atmost_forward.
     Qed.
 
     (* r{n1,m1}r{n2} -> r{n1+n2,m1+n2}
@@ -643,15 +592,14 @@ Section RegexpTree.
        r{n1,m1}?r{n2}? -> r{n1+n2,m1+n2}? *)
     Theorem merge_forced_backward:
       forall r n1 m1 g1 n2 g2,
-        def_groups r = [] ->
         (Sequence (Quantified g1 n1 m1 r) (Quantified g2 n2 0 r))
           ≅[rer][backward] Quantified g1 (n1+n2) m1 r.
     Proof.
-      intros r n1 m1 g1 n2 g2 DEF.
+      intros r n1 m1 g1 n2 g2.
       (* break down r{n1,n1+m1} into r{0,m1}r{n1} *)
       eapply tree_equiv_dir_transitive.
       { apply seq_equiv_dir. 2: reflexivity.
-        rewrite <- atmost_bounded_backward; auto. reflexivity. }
+        rewrite <- atmost_bounded_backward. reflexivity. }
       (* sequence associativity *)
       eapply tree_equiv_dir_transitive.
       { symmetry. apply seq_assoc. }
@@ -662,36 +610,35 @@ Section RegexpTree.
       (* merge the forced iterations r{n1}r{n2} *)
       eapply tree_equiv_dir_transitive.
       { eapply seq_equiv_dir. reflexivity.
-        apply bounded_bounded_equiv. auto. }
+        apply bounded_bounded_equiv. }
       (* set the greediness of r{n1+n2} to g1 *)
       eapply tree_equiv_dir_transitive.
       { eapply seq_equiv_dir. reflexivity.
         symmetry. apply forced_equiv_true with (g:=g1). }
       (* merge the forced iterations r{n1+n2} back with the free iterations r{0,m2} *)
-      apply atmost_bounded_backward. auto.
+      apply atmost_bounded_backward.
     Qed.
 
     (* r{0,m1}r{n2,m2} -> r{n2,m1+m2} *)
     Theorem merge_greedy_backward:
       forall r m1 n2 m2,
-        def_groups r = [] ->
         (Sequence (Quantified true 0 m1 r) (Quantified true n2 m2 r))
           ≅[rer][backward] Quantified true n2 (m1 + m2)%NoI r.
     Proof.
-      intros r m1 n2 m2 DEF.
+      intros r m1 n2 m2.
       (* break down r{n2,n2+m2} into r{n2}r{0,m2} *)
       eapply tree_equiv_dir_transitive.
       { apply seq_equiv_dir. reflexivity.
-        rewrite <- atmost_bounded_backward; auto. reflexivity. }
+        rewrite <- atmost_bounded_backward. reflexivity. }
       (* sequence associativity *)
       eapply tree_equiv_dir_transitive.
       { apply seq_assoc. }
       (* merge the free iterations r{0,m1}r{0,m2} *)
       eapply tree_equiv_dir_transitive.
       { eapply seq_equiv_dir. 2: reflexivity.
-        apply atmost_atmost_equiv. auto. }
+        apply atmost_atmost_equiv. }
       (* merge the forced iterations r{n2} back with the free iterations r{0,m1+m2} *)
-      apply atmost_bounded_backward. auto.
+      apply atmost_bounded_backward.
     Qed.
 
     (** * Proving open  greedy on both sides **)
@@ -804,7 +751,6 @@ Section RegexpTree.
     
     Lemma quant_seg_incl (n: nat):
       forall r inp gm g d1 d2 dir tm  tn ,
-        def_groups r = [] ->
         is_tree rer ([Areg (Quantified true 0 +∞ r);Areg (Quantified g 0 d1 r)]) inp gm dir tm ->
         is_tree rer  ([Areg (Quantified false 0 d2 r)]) inp gm dir tn ->
         incl (tree_leaves tn gm inp dir) (tree_leaves tm gm inp dir).
@@ -813,14 +759,13 @@ Section RegexpTree.
       assert (Hlength_le: remaining_length inp dir <= l) by lia. clear Heql. generalize dependent inp. revert tm tn d1 d2 gm.
       induction l; intros.
       - specialize (is_tree_productivity rer [Areg (Quantified g 0 d1 r)] inp gm dir) as [t5 T5].
-        eapply quantifier_null_length_skip with (acts := [Areg (Quantified g 0 d1 r)])in H0; eauto; eauto.
-        eapply quantifier_null_length in T5, H1; auto. rewrite H0, T5, H1. intros x xIn; assumption.
-      - inversion H1.
+        eapply quantifier_null_length_skip with (acts := [Areg (Quantified g 0 d1 r)])in H; eauto; eauto.
+        eapply quantifier_null_length in T5, H0; auto. rewrite H, T5, H0. intros x xIn; assumption.
+      - inversion H0.
         + inversion SKIP. subst. simpl. eapply atmost_leaves_incl_self_double; eauto.
         + subst. simpl. intros x xIn. apply in_app_or in xIn as [cx | cy]. revert x cx.
           inversion SKIP; subst. simpl. eapply atmost_leaves_incl_self_double; eauto.
-          inversion H0; subst. simpl. eapply in_or_app. left.
-          rewrite H in *. simpl in *.
+          inversion H; subst. simpl. eapply in_or_app. left.
           eapply quantifier_inf_step_advances_incl with
             (acts1 := [Areg (Quantified false 0 plus r)])
             (acts2 := [Areg (Quantified true 0 plus0 r); Areg (Quantified g 0 d1 r)]); eauto.
@@ -834,10 +779,9 @@ Section RegexpTree.
     
     Lemma atmost_atmost_equiv_actions_trueinf_false (n: non_neg_integer_or_inf) r:
       forall dir ,
-        def_groups r = [] ->
         actions_equiv_dir rer dir [Areg (Quantified true 0 +∞ r); Areg (Quantified false 0 n r)] [Areg (Quantified true 0 +∞ r)].
     Proof.
-      intros dir  GROUPEMPT i.
+      intros dir i.
       unfold tree_equiv_tr_dir.
       remember (remaining_length i dir) as l.
       assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql. generalize dependent i.
@@ -860,7 +804,6 @@ Section RegexpTree.
           inversion SKIP1; inversion SKIP0; reflexivity.
           destruct plus, plus0; try discriminate.
           clear SKIP1 ISTREE0 T2 T1 H9 H1 SKIP0 IHl.
-          rewrite GROUPEMPT in *. simpl in *.
           specialize (is_tree_productivity rer [Areg (Quantified false 0 plus1 r)] i gm dir) as [t4 T4].
           specialize (is_tree_productivity rer [Areg (Quantified true 0 +∞ r);
                                                 Areg
@@ -878,10 +821,9 @@ Section RegexpTree.
     
     Lemma atmost_atmost_equiv_actions_false_trueinf (n: non_neg_integer_or_inf) r:
       forall dir ,
-        def_groups r = [] ->
         actions_equiv_dir rer dir [Areg (Quantified false 0 n r); Areg (Quantified true 0 +∞ r)] [Areg (Quantified true 0 +∞ r)].
     Proof.
-      intros dir GROUPEMPT i.
+      intros dir i.
       unfold tree_equiv_tr_dir.
       remember (remaining_length i dir) as l. 
       assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql. generalize dependent i. revert n.
@@ -899,7 +841,6 @@ Section RegexpTree.
         eapply leaves_equiv_app. eapply is_tree_determ  with (t1 := titer1) in ISTREE0; eauto.
         subst. reflexivity.
         inversion SKIP0; inversion SKIP1; subst. reflexivity.
-        rewrite GROUPEMPT in *. simpl in *.
         eapply quantifier_inf_step_advances with (acts2 := [Areg (Quantified true 0 plus0 r)]) (acts1 := [Areg (Quantified false 0 plus r); Areg (Quantified true 0 +∞ r)]); eauto.
         destruct plus0. discriminate.
         intros. eapply IHl; eauto. lia.
@@ -908,17 +849,16 @@ Section RegexpTree.
 
     Lemma quantified_open_greedy_left:
     forall r delta1 g,
-      def_groups r = [] -> 
       (Sequence (Quantified g 0 delta1 r) (Quantified true 0 +∞ r))
         ≅[rer] (Quantified true 0 +∞ r).
   Proof.
-    intros r delta1 g GROUPEMPT.
+    intros r delta1 g.
     destruct g.
     - (** True case (already proven) **)
       etransitivity. eapply atmost_atmost_equiv; eauto.
       destruct delta1; reflexivity.
     - (** False case (list analysis) **)
-      split. simpl. rewrite GROUPEMPT. reflexivity.
+      split. simpl.  solve_groups_equiv.
       intros i g t1 t2 T1 T2. destruct dir.
       + inversion T1; subst; clear T1.
         simpl in CONT. eapply atmost_atmost_equiv_actions_false_trueinf; eauto.
@@ -928,17 +868,16 @@ Section RegexpTree.
   
   Lemma quantified_open_greedy_right:
     forall r delta1 g,
-      def_groups r = [] -> 
       (Sequence (Quantified true 0 +∞ r) (Quantified g 0 delta1 r))
         ≅[rer] (Quantified true 0 +∞ r).
   Proof.
-    intros r delta1 g GROUPEMPT.
+    intros r delta1 g.
     destruct g.
     - (** True case (already proven) **)
       etransitivity. eapply atmost_atmost_equiv; eauto.
       destruct delta1; reflexivity.
     - (** False case (list analysis) **)
-      split. simpl. rewrite GROUPEMPT. reflexivity.
+      split. simpl. solve_groups_equiv.
       intros i g t1 t2 T1 T2. destruct dir.
       + inversion T1; subst; clear T1.
         simpl in CONT. eapply atmost_atmost_equiv_actions_trueinf_false; eauto.
@@ -948,12 +887,11 @@ Section RegexpTree.
 
   Lemma quantified_open_inf_switch_tree:
     forall r i g t1 t2 dir,
-      def_groups r = [] ->
     is_tree rer [Areg (Quantified true 0 +∞ r); Areg r] i g dir t1 ->
       is_tree rer [Areg r; Areg (Quantified true 0 +∞ r)] i g dir t2 ->
       tree_equiv_tr_dir i g dir t1 t2.
     Proof.
-      intros r i g t1 t2 dir GROUPEMPT T1 T2.
+      intros r i g t1 t2 dir T1 T2.
       remember (remaining_length i dir) as l.
       assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql.
       generalize dependent i.
@@ -964,12 +902,9 @@ Section RegexpTree.
         unfold tree_equiv_tr_dir. rewrite T1. symmetry; auto.
       - apply GroupId.le_lteq in Hlength_le as [p1 | p2]. eapply IHl; eauto. lia.
         unfold tree_equiv_tr_dir. inversion T1; subst. clear T1. simpl.
-        rewrite GROUPEMPT in *; simpl in *.
         rewrite app_cons in T2, ISTREE1. eapply leaves_concat with (act1 := [Areg r])in T2, ISTREE1; eauto.
         remember (tree_leaves tskip g i dir) as l1. induction l1.
-        + inversion T2; inversion ISTREE1. reflexivity.
-        + inversion T2; inversion HEAD; subst. rewrite app_cons.
-          Admitted.
+    Admitted.
           
             
         
@@ -981,11 +916,10 @@ Section RegexpTree.
 
   Lemma quantified_open_inf_switch:
     forall r dir,
-      def_groups r = [] ->
     (Sequence (Quantified true 0 +∞ r) r)
       ≅[rer][dir] Sequence r (Quantified true 0 +∞ r).
     Proof.
-      intros r dir GROUPEMPT.
+      intros r dir.
       split. simpl. reflexivity.
       intros i g t1 t2 T1 T2.
       destruct dir.
