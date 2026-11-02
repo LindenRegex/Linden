@@ -244,81 +244,34 @@ Section CodeSize.
   (* Note that this "size of the regex" counts counted quantifier as being unfolded, so it might not be linear in the size of the textual representation of the regex *)
 
   (* the exact size of the bytecode *)
-  Fixpoint compsize (r:regex) : nat :=
-    match r with
-    | Epsilon => 0
-    | Regex.Character _ => 1
-    | Disjunction r1 r2 => 2 + compsize r1 + compsize r2
-    | Sequence r1 r2 => compsize r1 + compsize r2
-    | Quantified g 0 (NoI.N 0) r1 => 0
-    | Quantified g 0 (NoI.N 1) r1 => 4 + compsize r1
-    | Quantified g 0 (NoI.Inf) r1 => 4 + compsize r1
-    | Group _ r1 => 2 + compsize r1
-    | Anchor _ => 1
-    | _ => 0
-    end.
-
-  Definition codesize (r:regex) := S (compsize r).
-
-  Lemma compile_size:
-    forall r start endl code,
-      pike_regex r ->
-      compile r start = (code, endl) ->
-      length (code) = compsize r.
-  Proof.
-    intros r start endl code SUBSET COMP.
-    generalize dependent start. generalize dependent endl. generalize dependent code.
-    induction r; simpl; intros;
-      try solve [inversion COMP; subst; auto]; try solve[pike_subset].
-    - destruct (compile r1 (S start)) eqn:C1. destruct (compile r2 (S l)) eqn:C2.
-      erewrite <- IHr1; eauto. 2: pike_subset.
-      erewrite <- IHr2; eauto. 2: pike_subset.
-      inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-    - destruct (compile r1 start) eqn:C1. destruct (compile r2 l) eqn:C2.
-      erewrite <- IHr1; eauto. 2: pike_subset.
-      erewrite <- IHr2; eauto. 2: pike_subset.
-      inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-    - destruct min; destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst; try solve[pike_subset].
-      + inversion COMP. auto.
-      + destruct (compile r (S (S (S start)))) eqn:C1.
-        erewrite <- IHr; eauto. 2: pike_subset.
-        inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-      + destruct (compile r (S (S (S start)))) eqn:C1.
-        erewrite <- IHr; eauto. 2: pike_subset.
-        inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-      + inversion SUBSET; subst; lia.
-    - destruct (compile r (S start)) eqn:C1.
-      erewrite <- IHr; eauto. 2: pike_subset.
-      inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-  Qed.
+  Definition codesize (r:regex) := size (compilation r).
 
   Theorem compilation_size:
     forall r,
       pike_regex r ->
       size (compilation r) = codesize r.
-  Proof.
-    unfold codesize, size, compilation. intros r H. destruct (compile r 0) eqn:COMP.
-    apply compile_size in COMP; auto. rewrite <- COMP. rewrite length_app. simpl. lia.
-  Qed.
+  Proof. reflexivity. Qed.
 
   (* relating this compilation size to the size of the regex *)
-  Theorem compsize_regex_size:
-    forall (r:regex),
-      S (compsize r) <= 4 * (regex_size r).
+  Theorem compile_regex_size:
+    forall r start c endl,
+      compile r start = (c, endl) -> S (length c) <= 4 * (regex_size r).
   Proof.
-    intros r. induction r; simpl; try lia.
-    - destruct min; simpl; [|lia].
-      destruct delta; simpl; [|lia].
-      destruct n; simpl; [lia|].
-      destruct n; simpl; lia.
+    induction r; intros start c endl COMP; cbn [compile] in COMP;
+      repeat match type of COMP with
+      | context [match ?x with _ => _ end] => lazymatch x with compile _ _ => fail | _ => destruct x end
+      | context [compile ?r' ?f] => let C := fresh "C" in
+          destruct (compile r' f) eqn:C; first [apply IHr1 in C | apply IHr2 in C | apply IHr in C]
+      end;
+      injection COMP as <- <-; simpl; repeat (rewrite length_app; simpl); lia.
   Qed.
 
   Corollary comp_size_regex_size:
     forall r, pike_regex r ->
          size (compilation r) <= 4 * (regex_size r).
   Proof.
-    intros r SUBSET. rewrite compilation_size; auto.
-    unfold codesize. apply compsize_regex_size.
+    intros r SUBSET. unfold size, compilation. destruct (compile r 0) eqn:COMP.
+    apply compile_regex_size in COMP. rewrite length_app. simpl. lia.
   Qed.
 
 End CodeSize.
@@ -1194,7 +1147,6 @@ Section MemoBTComplexity.
         unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
         simpl. lia.
       + intros pc gm b inp0 H. inversion H; inversion H0. subst. left.
-      + rewrite compilation_size; auto.
   Qed.
 
   (** * Bounding the number of MemoBT steps  *)
