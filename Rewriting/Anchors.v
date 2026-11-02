@@ -22,9 +22,6 @@ Section Anchors.
         In c Character.line_terminators <->
           In (Character.canonicalize rer c) Character.line_terminators).
 
-  Definition CdList (cs: list Parameters.Character) :=
-    List.fold_right (fun c cd => CdUnion (CdSingle c) cd) CdEmpty cs.
-
   Definition desugar_anchor (a: anchor) :=
     match a with
     | BeginInput =>
@@ -60,13 +57,6 @@ Section Anchors.
     (* LATER: we should be able to desugar buffer boundaries too *)
     | BeginBuffer | EndBuffer | TerminatedBuffer => Anchor a
     end.
-
-  Lemma char_match_cdlist c cs:
-    char_match rer c (CdList cs) = inb_canonicalized rer c cs.
-  Proof.
-    unfold CdList, char_match, inb_canonicalized; induction cs; simpl.
-    all: try rewrite Utils.List.inb_cons, IHcs; reflexivity.
-  Qed.
 
   Lemma char_match_line_terminators c (Hlc: line_terminators_canon):
     char_match rer c (CdList Character.line_terminators) =

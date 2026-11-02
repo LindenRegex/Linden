@@ -188,6 +188,16 @@ Section Chars.
     - apply EqDec.reflb.
   Qed.
 
+  Definition CdList (cs: list Character) :=
+    List.fold_right (fun c cd => CdUnion (CdSingle c) cd) CdEmpty cs.
+
+  Lemma char_match_cdlist c cs:
+    char_match c (CdList cs) = inb_canonicalized c cs.
+  Proof.
+    unfold CdList, char_match, inb_canonicalized; induction cs; simpl.
+    all: try rewrite Utils.List.inb_cons, IHcs; reflexivity.
+  Qed.
+
   Definition char_descr_eq_dec : forall (cd1 cd2: char_descr), { cd1 = cd2 } + { cd1 <> cd2 }.
   Proof. decide equality; try apply Character.eq_dec; try apply Property.unicode_property_eqdec. Defined.
 
