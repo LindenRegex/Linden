@@ -644,16 +644,8 @@ Qed.
 
 
 (* A representation cannot start with Reset or BeginLoop *)
-Inductive start_rep: bytecode -> Prop :=
-| start_accept: start_rep Accept
-| start_cons: forall cd, start_rep (Consume cd)
-| start_chkanch: forall a, start_rep (CheckAnchor a)
-| start_jmp: forall lbl, start_rep (Jmp lbl)
-| start_fork: forall l1 l2, start_rep (Fork l1 l2)
-| start_open: forall gid, start_rep (SetRegOpen gid)
-| start_close: forall gid, start_rep (SetRegClose gid)
-| start_end: forall lbl, start_rep (EndLoop lbl)
-| start_kill: start_rep KillThread.
+Definition start_rep (i: bytecode) : Prop :=
+  match i with BeginLoop | ResetRegs _ => False | _ => True end.
 
 Lemma nfa_rep_start:
   forall r code pc pcend,
@@ -661,16 +653,8 @@ Lemma nfa_rep_start:
     pc = pcend \/
       (exists i, get_pc code pc = Some i /\ start_rep i).
 Proof.
-  intros r code pc pcend H. induction H;
-    try solve[left; simpl; auto];
-    try solve[right; eexists; split; eauto; constructor].
-  - destruct IHnfa_rep1 as [SAME1 | [i [START1 REP1]]]; subst.
-    2: { right. eexists. split; eauto. }
-    destruct IHnfa_rep2 as [SAME2 | [i [START2 REP2]]]; subst.
-    + left. auto.
-    + right. eexists. split; eauto.
-  - right. destruct greedy; inversion FORK; eexists; split; eauto; constructor.
-  - right. destruct greedy; inversion FORK; eexists; split; eauto; constructor.
+  induction 1; try solve [left; auto | right; eexists; split; [eauto|]; try destruct greedy; exact I].
+  destruct IHnfa_rep1 as [<-|]; auto.
 Qed.
 
 Lemma action_rep_start:
