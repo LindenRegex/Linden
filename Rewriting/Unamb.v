@@ -363,7 +363,6 @@ Section UnAmbiguity.
   
   Theorem unamb_list_nat_eqs:
     forall r i g dir t1 t2 (delta1: nat) delta2,
-      def_groups r = [] ->
       unamb [Areg r] ->
       is_tree rer
         [Areg (Quantified false 0 delta1 r); Areg (Quantified false 0 delta2 r)]
@@ -373,55 +372,53 @@ Section UnAmbiguity.
         (tree_leaves t2 g i dir).
   Proof.
     intros r i g d t1 t2 delta1 . revert i g t1 t2. 
-    induction delta1; intros i g t1 t2 delta2 GROUPEMPT UNAMBR T1 T2.
-    + inversion T1; subst. 2: destruct plus; discriminate. destruct delta2; simpl in T1, T2.
+    induction delta1; intros i g t1 t2 delta2 UNAMBR T1 T2.
+    - inversion T1; subst. 2: destruct plus; discriminate. destruct delta2; simpl in T1, T2.
       all: specialize (is_tree_determ _ _ _ _ _ _ _ T2 SKIP) as cd; rewrite cd; reflexivity.
-    + inversion T1; inversion T2; subst. destruct delta2; discriminate.
-      rewrite app_cons in ISTREE1, ISTREE0. rewrite GROUPEMPT in *.
-      specialize (is_tree_productivity rer [Areg r] i g d) as [t3 T3].
+    - inversion T1; inversion T2; subst. destruct delta2; discriminate.
+      rewrite app_cons in ISTREE1, ISTREE0. 
+      specialize (is_tree_productivity rer [Areg r] i (GroupMap.reset (def_groups r) g) d) as [t3 T3].
       eapply leaves_concat with (act1 := [Areg r]) in ISTREE1, ISTREE0; eauto. simpl.
       specialize (unamb_list _ _ _ _ _ UNAMBR T3) as [e1 | [el e2]].
       simpl in *. rewrite e1 in ISTREE0, ISTREE1. inversion ISTREE0; inversion ISTREE1; subst.
       inversion SKIP0; inversion SKIP; subst. inversion SKIP1; reflexivity.
-      rewrite GROUPEMPT. inversion SKIP1; subst. simpl.
-      rewrite app_cons in ISTREE2. rewrite GROUPEMPT in *.
+      inversion SKIP1; subst. simpl.
+      rewrite app_cons in ISTREE2. 
       eapply leaves_concat with (act1 := [Areg r]) in ISTREE2; eauto. simpl in ISTREE2.
       rewrite e1 in ISTREE2. inversion ISTREE2; subst. reflexivity.
       simpl in *. rewrite e2 in ISTREE0, ISTREE1. apply FlatMap_one_leaf in ISTREE0, ISTREE1.
       inversion ISTREE1; inversion ISTREE0; try discriminate; subst. destruct el; simpl in *.
-      (* case 1*)
       inversion SKIP; inversion SKIP1; inversion SKIP0; subst. simpl.
-      etransitivity. 1, 2: rewrite app_cons. reflexivity.
-      apply leaves_equiv_app. reflexivity. inversion H1; inversion H0; subst.
-      inversion TREE0; inversion TREE; try contradiction; subst. simpl.
-      destruct plus, plus0; try discriminate. inversion H0; inversion H9. subst.
-      eapply IHdelta1; eauto. simpl. reflexivity.
-      (* case 2*)
-      rewrite GROUPEMPT in *. simpl in *.
-      rewrite app_cons in ISTREE2. 
-      eapply leaves_concat with (act1 := [Areg r]) in ISTREE2; eauto. simpl in ISTREE2.
-      rewrite e2 in ISTREE2. apply FlatMap_one_leaf in ISTREE2.
-      inversion ISTREE2; subst. inversion TREE0; inversion TREE1; inversion TREE; try contradiction; subst.
-      2: simpl; reflexivity.
-      simpl. etransitivity. 1, 2: rewrite app_cons. reflexivity.
-      apply leaves_equiv_app. reflexivity.
-      destruct plus0, plus1; try discriminate.
-      inversion H9; destruct plus. 2: discriminate. inversion H1; subst.
-      pose proof (atmost_level_prefix _  (S delta1) _ _ _ _ _ treecont TREECONT0).
-      simpl in H. assert (n0 + S delta1 = delta1 + S n0) by lia. rewrite H0 in H.
-      specialize (H TREECONT UNAMBR) as [acts eq]. 
-      symmetry. eapply leaves_equiv_pref; unfold prefix; eauto. symmetry.
-      eapply IHdelta1; eauto.
-      inversion H9; destruct plus. 2: discriminate. inversion H1; subst.
-      symmetry. eapply leaves_equiv_pref; unfold prefix; eauto.
-      symmetry. eapply IHdelta1; eauto.
-      pose proof (is_tree_determ _ _ _ _ _ _ _ TREECONT0 TREECONT); subst.
-      exists []; auto. rewrite app_nil_r; reflexivity.
+      + etransitivity. 1, 2: rewrite app_cons. reflexivity.
+        apply leaves_equiv_app. reflexivity. inversion H1; inversion H0; subst.
+        inversion TREE0; inversion TREE; try contradiction; subst. simpl.
+        destruct plus, plus0; try discriminate. inversion H0; inversion H9. subst.
+        eapply IHdelta1; eauto. simpl. reflexivity.
+      + rewrite app_cons in ISTREE2. 
+        eapply leaves_concat with (act1 := [Areg r]) in ISTREE2; eauto. simpl in ISTREE2.
+        rewrite e2 in ISTREE2. apply FlatMap_one_leaf in ISTREE2.
+        inversion ISTREE2; subst.
+        inversion TREE0; inversion TREE1; inversion TREE; try contradiction; subst.
+        2: simpl;  rewrite <- H5; reflexivity.
+        simpl. etransitivity. 1, 2: rewrite app_cons. reflexivity.
+        apply leaves_equiv_app. reflexivity.
+        destruct plus0, plus1; try discriminate.
+        inversion H9; destruct plus. 2: discriminate. inversion H1; subst.
+        pose proof (atmost_level_prefix _  (S delta1) _ _ _ _ _ treecont TREECONT0).
+        simpl in H. assert (n0 + S delta1 = delta1 + S n0) by lia. rewrite H0 in H.
+        specialize (H TREECONT UNAMBR) as [acts eq]. 
+        symmetry. eapply leaves_equiv_pref; unfold prefix; eauto. symmetry.
+        eapply IHdelta1; eauto. rewrite <- H5. simpl. exists acts. auto.
+        symmetry. eapply leaves_equiv_pref; eauto. destruct plus. 2: discriminate.
+        inversion H1; subst.
+        symmetry. eapply IHdelta1; eauto.
+        exists []. rewrite <- H5. simpl. simpl in TREECONT0.
+        eapply is_tree_determ in TREECONT; eauto. subst. rewrite app_nil_r.
+        reflexivity.
   Qed.
 
   Theorem unamb_list_inf_eqs:
     forall r i g dir t1 t2 delta1,
-      def_groups r = [] ->
       unamb [Areg r] ->
       is_tree rer [Areg (Quantified false 0 +∞ r)] i g dir t1 ->
       is_tree rer
@@ -430,60 +427,40 @@ Section UnAmbiguity.
       leaves_equiv [] (tree_leaves t1 g i dir)
         (tree_leaves t2 g i dir).
   Proof.
-    intros r i g dir t1 t2 delta2 UNDEFGROUPS UNAMBR T1 T2.
+    intros r i g dir t1 t2 delta2 UNAMBR T1 T2.
     remember (remaining_length i dir) as l.
     assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql.
     revert i g t1 t2 T1 T2 Hlength_le.
     induction l; intros i g t1 t2 T1 T2 Hlength_le; simpl.
-    - inversion T1; inversion T2; subst. destruct plus, plus0; try discriminate. clear T1 T2.
-      inversion SKIP; subst.
-      inversion SKIP0; inversion SKIP1; subst.
-      simpl. etransitivity. 1,2: rewrite app_cons. reflexivity.
-      apply leaves_equiv_app. 1:reflexivity. simpl.
-      assert (tree_leaves titer (GroupMap.reset (def_groups r) g) i dir = []).
-      eapply null_length_fails; eauto. exact ISTREE1. 
-      assert (tree_leaves titer0 (GroupMap.reset (def_groups r) g) i dir = []).
-      eapply null_length_fails; eauto. exact ISTREE0.
-      rewrite H0. rewrite H. reflexivity.
-      simpl. etransitivity. 1,2: rewrite app_cons. reflexivity.
-      apply leaves_equiv_app. 1:reflexivity. simpl.
-      assert (tree_leaves titer (GroupMap.reset (def_groups r) g) i dir = []).
-      eapply null_length_fails; eauto. exact ISTREE1. 
-      assert (tree_leaves titer0 (GroupMap.reset (def_groups r) g) i dir = []).
-      eapply null_length_fails; eauto. exact ISTREE0.
-      assert (tree_leaves titer1 (GroupMap.reset (def_groups r) g) i dir = []).
-      eapply null_length_fails; eauto. exact ISTREE2.
-      rewrite H0. rewrite H.  rewrite H2. reflexivity.
+    - specialize (is_tree_productivity rer [Areg (Quantified false 0 delta2 r)] i g dir) as [t3 T3].
+      eapply quantifier_null_length_skip with (t2 := t3) in T2; eauto.
+      eapply quantifier_null_length in T3, T1; eauto. rewrite T1, T2, T3. reflexivity.
     - apply GroupId.le_lteq in Hlength_le as [p1 | p2].
       rewrite  Nat.lt_succ_r in p1.  eapply IHl; eauto.
       inversion T1; inversion T2; subst. simpl. destruct plus, plus0; try discriminate.
-      simpl in *. specialize (is_tree_productivity rer [Areg r] i g dir ) as [t3 T3].
+      simpl in *. specialize (is_tree_productivity rer [Areg r] i (GroupMap.reset (def_groups r) g) dir ) as [t3 T3].
       inversion SKIP0; subst.
-      + rewrite UNDEFGROUPS in ISTREE0, ISTREE1. simpl in ISTREE0, ISTREE1.
-        eapply leaves_concat with (act1 := [Areg r]) in ISTREE0, ISTREE1; eauto. inversion SKIP1; inversion SKIP; subst. simpl.
+      + eapply leaves_concat with (act1 := [Areg r]) in ISTREE0, ISTREE1; eauto. inversion SKIP1; inversion SKIP; subst. simpl.
         specialize (unamb_list _ _ _ _ _ UNAMBR T3) as [lEmpt | [el ld]].
         rewrite lEmpt in ISTREE1, ISTREE0. inversion ISTREE1; inversion ISTREE0.
-        rewrite UNDEFGROUPS; simpl. rewrite <- H. rewrite <- H2.
         reflexivity.
         rewrite ld in ISTREE1, ISTREE0. apply FlatMap_one_leaf in ISTREE1, ISTREE0.
         inversion ISTREE1; inversion ISTREE0; subst.
-        rewrite UNDEFGROUPS; simpl. destruct el; simpl in *.
-        rewrite <- H8. rewrite <- H4. inversion TREE0; inversion TREE; try contradiction; subst.
+        destruct el; simpl in *.
+        inversion TREE0; inversion TREE; try contradiction; subst.
         simpl. etransitivity. 1, 2: rewrite app_cons. reflexivity.
         apply leaves_equiv_app. reflexivity.
         eapply IHl; eauto. 
         pose proof (strict_suffix_remaining_length _ _ _ PROGRESS). lia.
         reflexivity.
-      + rewrite UNDEFGROUPS in ISTREE0, ISTREE1, ISTREE2. simpl in ISTREE0, ISTREE1, ISTREE2.
-        eapply leaves_concat with (act1 := [Areg r]) in ISTREE0, ISTREE1, ISTREE2; eauto. inversion SKIP1; inversion SKIP; subst. simpl.
+      + eapply leaves_concat with (act1 := [Areg r]) in ISTREE0, ISTREE1, ISTREE2; eauto. inversion SKIP1; inversion SKIP; subst. simpl.
         specialize (unamb_list _ _ _ _ _ UNAMBR T3) as [lEmpt | [el ld]].
         rewrite lEmpt in ISTREE1, ISTREE0, ISTREE2. inversion ISTREE1; inversion ISTREE0; inversion ISTREE2.
-        rewrite UNDEFGROUPS; simpl. rewrite <- H. rewrite <- H2. rewrite <- H4.
+        
         reflexivity.
         rewrite ld in ISTREE1, ISTREE0, ISTREE2. apply FlatMap_one_leaf in ISTREE1, ISTREE0, ISTREE2.
         inversion ISTREE1; inversion ISTREE0; inversion ISTREE2; subst.
-        rewrite UNDEFGROUPS; simpl. destruct el; simpl in *.
-        rewrite <- H8. rewrite <- H4. rewrite <- H13.
+        destruct el; simpl in *.
         inversion TREE0; inversion TREE; inversion TREE1; try contradiction; subst.
         2: simpl; reflexivity.
         simpl. etransitivity. 1, 2: rewrite app_cons. reflexivity.
@@ -507,11 +484,10 @@ Section UnAmbiguity.
   (* you can distribute an unambiguous regex on the left *)
   Theorem unamb_distribute_left:
     forall r1 r2 r3,
-      def_groups r1 = [] ->
       unamb [Areg r1] ->
       (Sequence r1 (Disjunction r2 r3)) ≅[rer] (Disjunction (Sequence r1 r2) (Sequence r1 r3)).
   Proof.
-    unfold unamb. intros r1 r2 r3 NOGROUP UA.
+    unfold unamb. intros r1 r2 r3  UA.
     split. simpl. solve_groups_equiv.
     destruct dir.
     (* the backward case is true even without unambiguity *)
@@ -547,12 +523,11 @@ Section UnAmbiguity.
   (* you can distribute an unambiguous regex on the right *)
   Theorem unamb_distribute_right:
     forall r1 r2 r3,
-      def_groups r3 = [] ->
       unamb [Areg r3] ->
       (Sequence (Disjunction r1 r2) r3) ≅[rer] (Disjunction (Sequence r1 r3) (Sequence r2 r3)).
   Proof. 
-    intros r1 r2 r3 GRPEMPTY UNAMBR3.
-    split. simpl. rewrite GRPEMPTY. repeat rewrite app_nil_r. reflexivity.
+    intros r1 r2 r3 UNAMBR3.
+    split. simpl. solve_groups_equiv.
     destruct dir.
     apply Distributivity.Right.factored_expanded_right_equiv. 
     intros inp gm t1 t2 TREE1 TREE2.
@@ -667,7 +642,7 @@ Section UnAmbiguity.
       (* Greedy case *)
       + etransitivity. { eapply seq_equiv. apply greedy_quantifier_steps_opt. 3: apply quantified_one_equiv. all: auto. }
         (* (r{1, delta1} | ) r *)
-        rewrite (unamb_distribute_right _ _ _ GROUPEMPT UNAMBR backward).
+        rewrite (unamb_distribute_right _ _ _ UNAMBR backward).
         (* (r{1, delta1} r | r *)
         etransitivity. {
           apply disj_equiv_dir. apply seq_equiv_dir. apply IHn. 
@@ -681,7 +656,7 @@ Section UnAmbiguity.
           reflexivity. rewrite <- (sequence_epsilon_right_equiv _ _ backward). reflexivity.
         }
         (* (r r{1, delta1}) | r *)
-        rewrite <- (unamb_distribute_left _ _ _ GROUPEMPT UNAMBR backward).
+        rewrite <- (unamb_distribute_left _ _ _  UNAMBR backward).
         (* r (r{1, delta1} | )  *)
         etransitivity. { eapply seq_equiv. rewrite <- quantified_one_equiv. 3: rewrite <- greedy_quantifier_steps_opt. all: auto. all: reflexivity. }
         (* r{1, 0} r{0, delta1 + 1}  *)
@@ -689,7 +664,7 @@ Section UnAmbiguity.
       + (* Nongreedy case *)
         etransitivity. { eapply seq_equiv. rewrite <- Nat.add_1_r.  apply non_greedy_quantifier_steps_opt. 3: apply quantified_one_equiv. all: auto. }
         (* (| r{1, delta1}) r *)
-        rewrite (unamb_distribute_right _ _ _ GROUPEMPT UNAMBR backward).
+        rewrite (unamb_distribute_right _ _ _  UNAMBR backward).
         (* r | r{1, delta1} r *)
         etransitivity. {
           apply disj_equiv_dir. apply sequence_epsilon_left_equiv.
@@ -704,7 +679,7 @@ Section UnAmbiguity.
           reflexivity. 
         }
         (* r | r r{1, delta1} *)
-        rewrite <- (unamb_distribute_left _ _ _ GROUPEMPT UNAMBR backward).
+        rewrite <- (unamb_distribute_left _ _ _  UNAMBR backward).
         (* r (r{1, delta1} | )  *)
         etransitivity. { eapply seq_equiv. rewrite <- quantified_one_equiv. 3: rewrite <- non_greedy_quantifier_steps_opt. all: auto. all: reflexivity. }
         rewrite Nat.add_1_r.
@@ -727,8 +702,7 @@ Section UnAmbiguity.
         inversion T4; subst. rewrite GROUPEMPT in *; simpl in *.
         eapply quantifier_null_length_head in ISTREE1; eauto.
         symmetry. rewrite TREE2. auto.
-      + inversion TREE2; subst. rewrite GROUPEMPT in *; simpl in *.
-        destruct g; simpl. Search actions_equiv_dir. Admitted.
+      + Admitted.
   
   
   Theorem unamb_quantifier_pops_right:
@@ -773,7 +747,7 @@ Section UnAmbiguity.
 
       etransitivity. { eapply seq_equiv. apply quantified_one_equiv. 2: apply greedy_quantifier_steps_opt. all: auto. }
       (* r (r{1, delta1} | )  *)
-      rewrite (unamb_distribute_left _ _ _ GROUPEMPT UNAMBR forward).
+      rewrite (unamb_distribute_left _ _ _  UNAMBR forward).
       (* (r{1, delta1} r | r *)
       etransitivity. {
         apply disj_equiv_dir. apply seq_equiv_dir.
@@ -788,7 +762,7 @@ Section UnAmbiguity.
         rewrite <- (sequence_epsilon_left_equiv _ _ forward). reflexivity.
       }
       (* ( r{1, delta1}) r | r *)
-      rewrite <- (unamb_distribute_right _ _ _ GROUPEMPT UNAMBR forward).
+      rewrite <- (unamb_distribute_right _ _ _  UNAMBR forward).
       (* (r{1, delta1} | ) r *)
       etransitivity. { eapply seq_equiv. 2: rewrite <- quantified_one_equiv. rewrite <- greedy_quantifier_steps_opt. all: auto. all: reflexivity. }
       (* r{0, delta1 + 1} r{1, 0} *)
@@ -796,7 +770,7 @@ Section UnAmbiguity.
     -  (* Nongreedy case *)
       etransitivity. { eapply seq_equiv. 2:rewrite <- Nat.add_1_r; apply non_greedy_quantifier_steps_opt. apply quantified_one_equiv. all: auto. }
       (* r (| r{1, delta1}) *)
-      rewrite (unamb_distribute_left _ _ _ GROUPEMPT UNAMBR forward).
+      rewrite (unamb_distribute_left _ _ _  UNAMBR forward).
       (* r | r r{1, delta1} *)
       etransitivity. {
         apply disj_equiv_dir. apply sequence_epsilon_right_equiv.
@@ -812,7 +786,7 @@ Section UnAmbiguity.
         apply quantified_one_equiv; auto. 
       }
       (* r | r{1, delta1} r *)
-      rewrite <- (unamb_distribute_right _ _ _ GROUPEMPT UNAMBR forward).
+      rewrite <- (unamb_distribute_right _ _ _  UNAMBR forward).
       (* ( | r{1, delta1}) r  *)
       etransitivity. {
         eapply seq_equiv. rewrite <- non_greedy_quantifier_steps_opt. rewrite  Nat.add_1_r.
@@ -830,179 +804,8 @@ Section UnAmbiguity.
         }
         split. simpl; rewrite GROUPEMPT. reflexivity.
         destruct g.
-    - intros i g t1 t2 TREE1 TREE2.
-      remember (remaining_length i forward) as l.
-      assert (Hlength_le: remaining_length i forward <= l) by lia. clear Heql.
-      generalize dependent i. revert g t1 t2.
-      induction l; intros g t1 t2 i TREE1 TREE2 Hlength_le. 
-      inversion TREE2; inversion CONT. subst. simpl in *.
-      unfold tree_equiv_tr_dir.
-      assert (NL2: actions_no_leaves rer [Areg r; Acheck i; Areg (Quantified true 0 plus r); Areg r] forward). {
-        apply actions_no_leaves_add_left with (a:= [Areg r]).
-        apply actions_no_leaves_add_right with (a := [Acheck i]) (b := [Areg (Quantified true 0 plus r); Areg r]).
-        apply check_end_no_leaves. auto. lia.
-      } 
-      unfold actions_no_leaves in NL2. simpl.
-      rewrite (NL2 _ _ titer); eauto. simpl.
-      clear NL2 H8 ISTREE1 CONT. specialize (unamb_list) as dd.
-      (* T1 *)
-      inversion TREE1; subst.
-      rewrite GROUPEMPT in *; simpl in *.
-      rewrite app_cons in CONT.
-      eapply leaves_concat with (act1 := [Areg r]) in CONT; eauto.
-      specialize (unamb_list _ _ _ _ _ UNAMBR SKIP) as [nil | [el elList]].
-      rewrite nil in *. inversion CONT. reflexivity.
-      rewrite elList in *. apply FlatMap_one_leaf in CONT.
-      inversion CONT; subst.
-      assert (remaining_length (fst el) forward <= 0).
-      assert (el = (fst el, snd el) \/ False). left. destruct el. reflexivity.
-      specialize  (input_only_forward _ _ _ _ g (snd el) _ (fst el)   _ SKIP) as iforward. rewrite elList in iforward. simpl in iforward.
-      specialize (iforward H) as [c1 | c2].
-      subst. assumption.
-      specialize (strict_suffix_remaining_length _ _ _ c2) as p. lia.
-      inversion TREE; subst.
-      assert (NL2: actions_no_leaves rer [Areg r; Acheck (fst el); Areg (Quantified true 0 plus0 r)] forward). {
-        apply actions_no_leaves_add_left with (a:= [Areg r]).
-        apply actions_no_leaves_add_right with (a := [Acheck (fst el)]) (b := [Areg (Quantified true 0 plus0 r)]).
-        apply check_end_no_leaves. auto. lia.
-      }
-      simpl. unfold actions_no_leaves in NL2.
-      rewrite (NL2 _ _ titer0); eauto. simpl.
-      inversion SKIP0; subst. simpl. destruct el. reflexivity.
-      (* Inductive case *)
-      unfold tree_equiv_tr_dir.
-      inversion TREE1; inversion TREE2; subst. clear TREE1 TREE2.
-      simpl in CONT, CONT0. inversion CONT0; subst. destruct plus. discriminate.
-      rewrite GROUPEMPT in CONT0, ISTREE1. simpl in CONT0, ISTREE1.
-      clear H1 CONT0. rewrite app_cons in CONT, ISTREE1.
-      eapply leaves_concat with (act1 := [Areg r]) in CONT, ISTREE1; eauto.
-      specialize (unamb_list _ _ _ _ _ UNAMBR SKIP) as [nil | [el elList]].
-      rewrite nil in CONT, ISTREE1. inversion ISTREE1; inversion CONT; subst.
-      rewrite GROUPEMPT; simpl. rewrite <- H; rewrite nil. reflexivity.
-      rewrite elList in ISTREE1, CONT. apply FlatMap_one_leaf in ISTREE1, CONT.
-      inversion ISTREE1; inversion CONT; subst. clear CONT ISTREE1. destruct el; rewrite GROUPEMPT; simpl in *.
-      inversion TREE0; inversion SKIP0; subst. destruct plus. discriminate. clear TREE0 SKIP0 H1.
-      simpl. rewrite elList. rewrite GROUPEMPT. simpl.
-      inversion TREE; subst.
-      apply strict_suffix_remaining_length in PROGRESS.
-      assert (remaining_length i0 forward <= l) by lia.
-      unfold tree_equiv_tr_dir in IHl. simpl in H3; rewrite <- H3.
-      rewrite GROUPEMPT in ISTREE1; simpl in ISTREE1.
-      specialize (is_tree_productivity rer [Areg r; Areg (Quantified true 0  +∞ r)] i0 g0 forward) as [t5 T5].
-      specialize (check_not_stops_quantifier_tail _ _ _ _ _ _ _ _ GROUPEMPT UNAMBR ISTREE1 T5) as tEq2.
-      eapply leaves_equiv_trans. apply tEq2. 
-      apply leaves_equiv_app. eapply IHl; eauto; constructor; assumption.
-      reflexivity.
-      rewrite <- H3. simpl.
-      assert (i = i0). {
-        assert (In (i0, g0) (tree_leaves tskip g i forward)) as inSKIP.
-        rewrite elList. constructor. reflexivity.
-        specialize (input_only_forward _ _ _ _ g g0 _ i0 _ SKIP inSKIP ) as [c1 | c2].
-        assumption. contradiction.
-      }
-      assert (g = g0). {
-        assert (In (i0, g0) (tree_leaves tskip g i forward)) as inSKIP.
-        rewrite elList. constructor. reflexivity.
-        exact (emptygroups_const_groups _ _ _ _ _ _ _ GROUPEMPT SKIP inSKIP).
-      }
-      rewrite <- H in ISTREE1; rewrite <- H0 in ISTREE1. 
-      rewrite app_cons in ISTREE1. rewrite GROUPEMPT in ISTREE1. simpl in ISTREE1.
-      eapply leaves_concat with (act1 := [Areg r]) in  ISTREE1; eauto.
-      specialize (unamb_list _ _ _ _ _ UNAMBR SKIP) as [nil | [l2 l2List]].
-      rewrite nil in  ISTREE1. inversion ISTREE1; subst. rewrite <- H1. reflexivity.
-      rewrite l2List in ISTREE1. apply FlatMap_one_leaf in ISTREE1.
-      inversion ISTREE1; inversion TREE0. destruct l2; simpl in *.
-      rewrite elList in l2List. inversion l2List; subst.
-      contradiction.
-      subst. rewrite <- H6. leaves_equiv_t.
-    - intros i g t1 t2 TREE1 TREE2.
-      remember (remaining_length i forward) as l.
-      assert (Hlength_le: remaining_length i forward <= l) by lia. clear Heql.
-      generalize dependent i. revert g t1 t2.
-      induction l; intros g t1 t2 i TREE1 TREE2 Hlength_le.
-      
-      inversion TREE2; inversion CONT. subst. simpl in *.
-      unfold tree_equiv_tr_dir.
-      assert (NL2: actions_no_leaves rer [Areg r; Acheck i; Areg (Quantified false 0 plus r); Areg r] forward). {
-        apply actions_no_leaves_add_left with (a:= [Areg r]).
-        apply actions_no_leaves_add_right with (a := [Acheck i]) (b := [Areg (Quantified false 0 plus r); Areg r]).
-        apply check_end_no_leaves. auto. lia.
-      } 
-      unfold actions_no_leaves in NL2. simpl.
-      rewrite (NL2 _ _ titer); eauto. simpl.
-      clear NL2 H8 ISTREE1 CONT. 
-      (* T1 *)
-      inversion TREE1; subst.
-      rewrite GROUPEMPT in *; simpl in *.
-      rewrite app_cons in CONT.
-      eapply leaves_concat with (act1 := [Areg r]) in CONT; eauto.
-      specialize (unamb_list _ _ _ _ _ UNAMBR SKIP) as [nil | [el elList]].
-      rewrite nil in *. inversion CONT. reflexivity.
-      rewrite elList in *. apply FlatMap_one_leaf in CONT.
-      inversion CONT; subst.
-      assert (remaining_length (fst el) forward <= 0).
-      assert (el = (fst el, snd el) \/ False). left. destruct el. reflexivity.
-      specialize  (input_only_forward _ _ _ _ g  (snd el) _  (fst el)  _ SKIP) as iforward. rewrite elList in iforward. simpl in iforward.
-      specialize (iforward H) as [c1 | c2].
-      subst. assumption.
-      specialize (strict_suffix_remaining_length _ _ _ c2) as p. lia.
-      inversion TREE; subst.
-      assert (NL2: actions_no_leaves rer [Areg r; Acheck (fst el); Areg (Quantified false 0 plus0 r)] forward). {
-        apply actions_no_leaves_add_left with (a:= [Areg r]).
-        apply actions_no_leaves_add_right with (a := [Acheck (fst el)]) (b := [Areg (Quantified false 0 plus0 r)]).
-        apply check_end_no_leaves. auto. lia.
-      }
-      simpl. unfold actions_no_leaves in NL2.
-      rewrite (NL2 _ _ titer0); eauto. simpl.
-      inversion SKIP0; subst. simpl. destruct el. reflexivity.
-      (* Inductive case *)
-      unfold tree_equiv_tr_dir.
-      inversion TREE1; inversion TREE2; subst. clear TREE1 TREE2.
-      simpl in CONT, CONT0. inversion CONT0; subst. destruct plus. discriminate.
-      rewrite GROUPEMPT in CONT0, ISTREE1. simpl in CONT0, ISTREE1.
-      clear H1 CONT0. rewrite app_cons in CONT, ISTREE1.
-      eapply leaves_concat with (act1 := [Areg r]) in CONT, ISTREE1; eauto.
-      specialize (unamb_list _ _ _ _ _ UNAMBR SKIP) as [nil | [el elList]].
-      rewrite nil in CONT, ISTREE1. inversion ISTREE1; inversion CONT; subst.
-      rewrite GROUPEMPT; simpl. rewrite <- H; rewrite nil. reflexivity.
-      rewrite elList in ISTREE1, CONT. apply FlatMap_one_leaf in ISTREE1, CONT.
-      inversion ISTREE1; inversion CONT; subst. clear CONT ISTREE1. destruct el; rewrite GROUPEMPT; simpl in *.
-      inversion TREE0; inversion SKIP0; subst. destruct plus. discriminate. clear TREE0 SKIP0 H1.
-      simpl. rewrite elList. rewrite GROUPEMPT. simpl.
-      inversion TREE; subst.
-      apply strict_suffix_remaining_length in PROGRESS.
-      assert (remaining_length i0 forward <= l) by lia.
-      unfold tree_equiv_tr_dir in IHl. simpl in H3; rewrite <- H3.
-      rewrite GROUPEMPT in ISTREE1; simpl in ISTREE1.
-      specialize (is_tree_productivity rer [Areg r; Areg (Quantified false 0  +∞ r)] i0 g0 forward) as [t5 T5].
-      specialize (check_not_stops_quantifier _ _ _ _ _ _ _ _ GROUPEMPT UNAMBR ISTREE1 T5) as tEq2.
-      eapply leaves_equiv_trans. apply tEq2. rewrite app_cons.
-      etransitivity. 2: rewrite app_cons; reflexivity.
-      apply leaves_equiv_app. reflexivity.
-      eapply IHl; eauto; constructor; assumption.
-      rewrite <- H3. simpl.
-      assert (i = i0). {
-        assert (In (i0, g0) (tree_leaves tskip g i forward)) as inSKIP.
-        rewrite elList. constructor. reflexivity.
-        specialize (input_only_forward _ _ _ _ g g0 _ i0 _ SKIP inSKIP ) as [c1 | c2].
-        assumption. contradiction.
-      }
-      assert (g = g0). {
-        assert (In (i0, g0) (tree_leaves tskip g i forward)) as inSKIP.
-        rewrite elList. constructor. reflexivity.
-        exact (emptygroups_const_groups _ _ _ _ _ _ _ GROUPEMPT SKIP inSKIP).
-      }
-      rewrite <- H in ISTREE1; rewrite <- H0 in ISTREE1. 
-      rewrite app_cons in ISTREE1. rewrite GROUPEMPT in ISTREE1. simpl in ISTREE1.
-      eapply leaves_concat with (act1 := [Areg r]) in  ISTREE1; eauto.
-      specialize (unamb_list _ _ _ _ _ UNAMBR SKIP) as [nil | [l2 l2List]].
-      rewrite nil in  ISTREE1. inversion ISTREE1; subst. rewrite <- H1. reflexivity.
-      rewrite l2List in ISTREE1. apply FlatMap_one_leaf in ISTREE1.
-      inversion ISTREE1; inversion TREE0. destruct l2; simpl in *.
-      rewrite elList in l2List. inversion l2List; subst.
-      contradiction.
-      subst. rewrite <- H6. leaves_equiv_t.
-  Qed.
+    - Admitted.
+  
 
 
   Lemma unamb_quantifier_invertible:
