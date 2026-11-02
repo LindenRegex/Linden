@@ -512,10 +512,10 @@ Section UnAmbiguity.
       (Sequence r1 (Disjunction r2 r3)) ≅[rer] (Disjunction (Sequence r1 r2) (Sequence r1 r3)).
   Proof.
     unfold unamb. intros r1 r2 r3 NOGROUP UA.
-    split. { simpl. rewrite NOGROUP. auto. }
+    split. simpl. solve_groups_equiv.
     destruct dir.
     (* the backward case is true even without unambiguity *)
-    2: { apply Distributivity.LeftBackward.factored_expanded_left_equiv. auto. }
+    2: { apply Distributivity.LeftBackward.factored_expanded_left_equiv. }
     (* forward case *)
     unfold actions_equiv_dir. intros inp gm t1 t2 TREE1 TREE2.
     inversion TREE2; inversion TREE1; inversion ISTREE1; inversion ISTREE2; subst.
@@ -554,7 +554,7 @@ Section UnAmbiguity.
     intros r1 r2 r3 GRPEMPTY UNAMBR3.
     split. simpl. rewrite GRPEMPTY. repeat rewrite app_nil_r. reflexivity.
     destruct dir.
-    apply Distributivity.Right.factored_expanded_right_equiv. assumption.
+    apply Distributivity.Right.factored_expanded_right_equiv. 
     intros inp gm t1 t2 TREE1 TREE2.
     inversion TREE1; inversion TREE2; inversion ISTREE1;inversion ISTREE2; subst.
     clear TREE1 TREE2 ISTREE1 ISTREE2. simpl in *.
@@ -586,7 +586,7 @@ Section UnAmbiguity.
       (Quantified false 0 (n + 1) r) ≅[rer] (Disjunction Epsilon (Quantified false 1 n r)).
   Proof.
     intros r n GROUPEMPT UNAMBR.
-    split. simpl. rewrite GROUPEMPT. auto.
+    split. simpl. solve_groups_equiv.
     intros inp gm t1 t2 TREE1 TREE2.
     inversion TREE1. inversion TREE2. lia.
     inversion TREE2.  subst. simpl.
@@ -609,7 +609,7 @@ Section UnAmbiguity.
       (Quantified true 0 (S n)%NoI r) ≅[rer] (Disjunction (Quantified true 1 n r) Epsilon).
   Proof.
     intros r n GROUPEMPT UNAMBR.
-    split. simpl. rewrite GROUPEMPT. auto.
+    split. simpl. solve_groups_equiv.
     intros inp gm t1 t2 TREE1 TREE2.
     inversion TREE1; inversion TREE2; inversion ISTREE0; inversion ISTREE2; subst.
     clear TREE1 TREE2 ISTREE0 ISTREE2. 
@@ -632,7 +632,7 @@ Section UnAmbiguity.
         ≅[rer] Sequence (Quantified g 1 (NoI.N 0) r) (Quantified g m n r).
   Proof.
     intros r m n g GROUPEMPT UNAMBR dir.
-    destruct dir. {apply quantified_S_equiv_forward. assumption. }
+    destruct dir. {apply quantified_S_equiv_forward. }
     (* Forward case has already been proven*)
     induction m as [| i IH].
     (* Starting with the induction of the min case*)
@@ -644,8 +644,10 @@ Section UnAmbiguity.
       (* (r{1, 0} r{min, delta}) r{1, 0}*)
       rewrite <- sequence_assoc_equiv_dir.
       (* r{1, 0} (r{min, delta} r{1, 0})*)
-      etransitivity. {apply seq_equiv_dir. reflexivity. rewrite <- quantified_S_equiv_backward. reflexivity. assumption. }
-      reflexivity. assumption.
+      etransitivity. {
+        apply seq_equiv_dir. reflexivity.
+        rewrite <- quantified_S_equiv_backward. reflexivity. }
+      reflexivity. 
     }
     (*Three cases: 0, (S n) and infinity*)
     destruct n. induction n.
@@ -738,7 +740,7 @@ Section UnAmbiguity.
   Proof.
     intros r m n g GROUPEMPT UNAMBR
       dir.
-    destruct dir. 2: {apply quantified_S_equiv_backward. assumption. } (* Backward case has already been proven*)
+    destruct dir. 2: {apply quantified_S_equiv_backward. } (* Backward case has already been proven*)
                 induction m as [| i IH].
     (* Starting with the induction of the min case*)
     2:{
@@ -750,7 +752,7 @@ Section UnAmbiguity.
       rewrite  sequence_assoc_equiv_dir.
       (* (r{1, 0} r{min, delta}) r{1, 0}*)
       etransitivity. {apply seq_equiv_dir. rewrite <- quantified_S_equiv_forward. 2: auto. all: reflexivity. }
-      reflexivity. assumption.
+      reflexivity. 
     }
     (*Three cases: 0, (S n) and infinity*)
     destruct n. induction n.
@@ -1114,7 +1116,7 @@ Section UnAmbiguity.
         ≅[rer] (Quantified g 0 (delta1 + delta2)%NoI r).
   Proof.
     intros reg delta1 delta2 g UNDEFGROUPS UNAMBR.
-    destruct g. {apply atmost_atmost_equiv. assumption. } (* The greedy case has already been proven*)
+    destruct g. {apply atmost_atmost_equiv. } (* The greedy case has already been proven*)
     split. simpl. rewrite UNDEFGROUPS. reflexivity.
     intros i g t1 t2 T1 T2. inversion T1; subst.
     destruct dir, delta1, delta2; simpl in *.

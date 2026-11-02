@@ -27,10 +27,10 @@ Section ScottOwens.
   
   Lemma fails_fail_left:
     forall r dir,
-      def_groups r = [] ->
+      def_groups r = [] -> 
       Sequence fail_regex r ≅[rer][dir] fail_regex.
   Proof.
-    intros r dir. split. assumption.
+    intros r dir. split. simpl. rewrite H. reflexivity.
     intros i g  t1 t2 T1 T2.
     unfold tree_equiv_tr_dir.
     pose proof  (fail_regex_fail _ _ _ _ _ T2) as FRF.
@@ -46,7 +46,7 @@ Section ScottOwens.
       def_groups r = [] ->
       Sequence r fail_regex ≅[rer][dir] fail_regex.
   Proof.
-    intros r dir. split. simpl. rewrite app_nil_r. assumption.
+    intros r dir. split. simpl. rewrite H. reflexivity.
     intros i g  t1 t2 T1 T2.
     unfold tree_equiv_tr_dir.
     pose proof  (fail_regex_fail _ _ _ _ _ T2) as FRF.
@@ -59,17 +59,15 @@ Section ScottOwens.
 
   Lemma disj_shrinks_dir:
     forall r dir,
-      def_groups r = [] ->
       Disjunction r r ≅[rer][dir] r.
   Proof.
-    intros r dir UNDEFGROUPS.
-    split. simpl. rewrite UNDEFGROUPS. reflexivity.
+    intros r dir.
+    split. simpl. solve_groups_equiv.
     intros i g t1 t2 T1 T2. inversion T1; subst.
     unfold tree_equiv_tr_dir. simpl.
     specialize (is_tree_determ _ _ _ _ _ _ _ T2 ISTREE1) as p1.
     specialize (is_tree_determ _ _ _ _ _ _ _ T2 ISTREE2) as p2. subst.
     symmetry. eapply leaves_equiv_repet.
-    Search leaves_equiv.
   Qed.
 
 
@@ -79,7 +77,7 @@ Section ScottOwens.
       Disjunction r0 (Disjunction r1 r2) ≅[rer][dir] Disjunction (Disjunction r0 r1) r2.
   Proof.
     intros r0 r1 r2 dir.
-    split. simpl.  rewrite app_assoc. auto.
+    split. simpl. solve_groups_equiv.
     intros i g t1 t2 T1 T2.
     inversion T1; inversion T2; inversion ISTREE2; inversion ISTREE0; subst.
     unfold tree_equiv_tr_dir. simpl.
@@ -242,7 +240,7 @@ Section ScottOwens.
       destruct le; simpl in *. eapply IHl; eauto. lia.
       apply Forall_forall. intros x inX. destruct x.
       eapply input_only_forward in T5; eauto. destruct T5. 
-      subst. lia. Search StrictSuffix.strict_suffix. apply strict_suffix_remaining_length in H3. lia.
+      subst. lia. apply strict_suffix_remaining_length in H3. lia.
   Qed.
       
 End ScottOwens.
