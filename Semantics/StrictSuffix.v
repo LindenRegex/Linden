@@ -265,6 +265,72 @@ Section StrictSuffix.
     intros inp dir nextinp H. constructor. auto.
   Qed.
 
+  Lemma input_rewind_suffix:
+    forall inp dir inp',
+      input_rewind inp dir = inp' ->
+      inp' = inp \/ strict_suffix inp' inp dir.
+  Proof.
+    unfold input_rewind, input_str.
+    intros [next pref] [|] inp' <-.
+    - destruct next as [|c next].
+      + left. now rewrite app_nil_r, rev_involutive.
+      + right. rewrite ss_fwd_diff.
+        exists (c::next).
+        repeat split.
+        * easy.
+        * now rewrite app_nil_r.
+        * now rewrite rev_app_distr, rev_involutive.
+    - destruct pref as [|c pref].
+      + now left.
+      + right. rewrite ss_bwd_diff.
+        exists (rev pref ++ [c]).
+        repeat split.
+        * now intros []%app_eq_nil.
+        * now rewrite app_nil_r, rev_app_distr, rev_involutive.
+  Qed.
+
+  Lemma input_rewind_suffix_eq:
+    forall inp inp' dir dir',
+      strict_suffix inp' inp dir ->
+      input_rewind inp dir' = input_rewind inp' dir'.
+  Proof.
+    unfold input_rewind, input_str.
+    intros [next pref] [next' pref'] [|] dir' Hss.
+    - rewrite ss_fwd_diff in Hss.
+      destruct Hss as [diff [Hdiffcons [-> ->]]].
+      now rewrite !rev_app_distr, !rev_involutive, !app_assoc.
+    - rewrite ss_bwd_diff in Hss.
+      destruct Hss as [diff [Hdiffcons [-> ->]]].
+      now rewrite !rev_app_distr, !rev_involutive, !app_assoc.
+  Qed.
+
+  Lemma input_reverse_suffix:
+    forall inp1 inp2 dir,
+      strict_suffix inp1 inp2 dir <-> strict_suffix (input_reverse inp2) (input_reverse inp1) dir.
+  Proof.
+    intros [next1 pref1] [next2 pref2] [|]; simpl.
+    - rewrite !ss_fwd_diff.
+      split; intros [diff [Hdiffcons [-> ->]]].
+      + exists (rev diff). repeat split.
+        * destruct diff; simpl; try easy.
+          now intros []%app_eq_nil.
+        * now rewrite rev_involutive.
+      + exists (rev diff). repeat split.
+        * destruct diff; simpl; try easy.
+          now intros []%app_eq_nil.
+        * now rewrite rev_involutive.
+    - rewrite !ss_bwd_diff.
+      split; intros [diff [Hdiffcons [-> ->]]].
+      + exists (rev diff). repeat split.
+        * destruct diff; simpl; try easy.
+          now intros []%app_eq_nil.
+        * now rewrite rev_involutive.
+      + exists (rev diff). repeat split.
+        * destruct diff; simpl; try easy.
+          now intros []%app_eq_nil.
+        * now rewrite rev_involutive.
+  Qed.
+
   Lemma advance_current_plus_one:
     forall inp1 inp2 dir,
       advance_input inp2 dir = Some inp1 ->
@@ -380,6 +446,30 @@ Section StrictSuffix.
         * now destruct diff''.
         * rewrite <- app_assoc in Hnext_sufnext. auto.
         * reflexivity.
+  Qed.
+
+  Lemma advance_suffix2:
+    forall inp inppref inpsuf dir,
+      strict_suffix inpsuf inppref dir ->
+      advance_input inp dir = Some inpsuf ->
+      inp = inppref \/ strict_suffix inp inppref dir.
+  Proof.
+    intros * Hss Hadv.
+    destruct dir.
+    - destruct inp as [[|c next] pref]; only 1: discriminate.
+      injection Hadv as <-.
+      inversion Hss; subst; [left|right].
+      + destruct inppref as [[|c' next'] pref']; only 1: discriminate.
+        now injection H as <- <- <-.
+      + destruct inp2 as [[|c' next'] pref']; only 1: discriminate.
+        now injection H as <- <- <-.
+    - destruct inp as [next [|c pref]]; only 1: discriminate.
+      injection Hadv as <-.
+      inversion Hss; subst; [left|right].
+      + destruct inppref as [next' [|c' pref']]; only 1: discriminate.
+        now injection H as <- <- <-.
+      + destruct inp2 as [next' [|c' pref']]; only 1: discriminate.
+        now injection H as <- <- <-.
   Qed.
 
   Lemma ss_neq:
@@ -544,6 +634,8 @@ Ltac ss_canon :=
     rewrite input_prefix_strict_suffix
   | [H: input_prefix _ _ _ |- _] =>
     rewrite input_prefix_strict_suffix in H
+  | [H: input_rewind _ _ = _ |- _] =>
+    eapply input_rewind_suffix in H; eauto
   (* simplify advance_input *)
   | [H: advance_input ?inp1 forward = Some _ |- _] =>
     eapply read_suffix in H; eauto
