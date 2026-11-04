@@ -6,6 +6,7 @@
 
 (using rocq 0.11)
 (using menhir 3.0)
+(using melange 0.1)
 
 (homepage "https://github.com/epfl-systemf/Linden")
 (authors "Aurèle Barrière" "Victor Deng" "Clément Pit-Claudel")
@@ -21,4 +22,5 @@
   (rocq-stdlib (>= 9.0.0))
   (warblre (= 0.1.0))
   (strict-order-solver (>= 1.0.0))
-  (menhir :build)))
+  (menhir :build)
+  melange))
