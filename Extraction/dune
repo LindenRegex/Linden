@@ -2,10 +2,10 @@
 
 (rocq.extraction
  (prelude Extract)
- (extracted_modules Base BooleanSemantics Chars Coercions Complexity Datatypes Errors FunctionalPikeVM Groups ListDef List LWParameters Nat NFA Numeric OrderedType Orders OrdersTac Parameters0 Parameters PeanoNat PikeSubset PikeVM Prefix Regex RegExpRecord Result SeenSets Semantics0 Semantics Specif Tree Typeclasses Utils)
+ (extracted_modules Base BinNums BinPos BooleanSemantics Characters Chars Coercions Complexity Datatypes Errors FunctionalPikeVM Groups ListDef List LWParameters Nat NFA Numeric OrderedType Orders OrdersTac Parameters0 Parameters Patterns PeanoNat PikeSubset PikeVM Prefix Regex RegexpTranslation RegExpRecord Result SeenSets Semantics0 Semantics SetoidList Specif StaticSemantics Tree Typeclasses Utils)
  (theories Stdlib Linden Warblre Ltac2 StrictOrderSolver))
 
 (library
  (name extracted)
- (modules Base BooleanSemantics Chars Coercions Complexity Datatypes Errors FunctionalPikeVM Groups ListDef List LWParameters Nat NFA Numeric OrderedType Orders OrdersTac Parameters0 Parameters PeanoNat PikeSubset PikeVM Prefix Regex RegExpRecord Result SeenSets Semantics0 Semantics Specif Tree Typeclasses Utils)
+ (modules Base BinNums BinPos BooleanSemantics Characters Chars Coercions Complexity Datatypes Errors FunctionalPikeVM Groups ListDef List LWParameters Nat NFA Numeric OrderedType Orders OrdersTac Parameters0 Parameters Patterns PeanoNat PikeSubset PikeVM Prefix Regex RegexpTranslation RegExpRecord Result SeenSets Semantics0 Semantics SetoidList Specif StaticSemantics Tree Typeclasses Utils)
  (flags (:standard -w -a)))
