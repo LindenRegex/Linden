@@ -816,7 +816,9 @@ Section MemoEquiv.
     assert (mbs2 = MBT (expconfig++stk) (memoize memoset pc b inp)); subst.
     { eapply memobt_deterministic; eauto. constructor; auto. }
     exists (MTree (l++treestk) (add_seentrees treeseen t)).
-    split; constructor; auto.
+    split.
+    { econstructor; eauto. apply trim_refl. }
+    constructor; auto.
     { apply ltc_app; auto. }
     eapply add_inclusion; eauto.
 Qed.
