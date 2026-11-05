@@ -344,8 +344,12 @@ Section NFA.
       + rewrite get_first. simpl. auto.
     - inversion H. destruct (compile r (S start)) as [bc1 end1] eqn:COMP1. inversion H2. subst.
       constructor.
+      + inversion 1.
       + rewrite get_first. simpl. auto.
-      +  apply IHr with (prev:=prev ++ [SetRegOpen id]) in COMP1.
+    - inversion H. destruct (compile r (S start)) as [bc1 end1] eqn:COMP1. inversion H2. subst.
+      constructor.
+      + eauto using get_first.
+      + apply IHr with (prev:=prev ++ [SetRegOpen id]) in COMP1.
         2: { rewrite length_app. simpl. lia. }
         replace (prev ++ SetRegOpen id :: bc1 ++ [SetRegClose id]) with ((prev ++ SetRegOpen id :: bc1) ++ [SetRegClose id]).
         2:{ rewrite <- app_assoc. auto. }

@@ -682,6 +682,7 @@ Proof.
   intros a code pc pcend H. destruct a.
   - inversion H. subst. apply nfa_rep_start in NFA. auto.
   - inversion H. subst. right. exists (EndLoop pcend). split; auto. constructor.
+  - inversion H.
   - inversion H. subst. right. exists (SetRegClose g). split; auto. constructor.
 Qed.
 

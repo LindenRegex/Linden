@@ -374,7 +374,6 @@ Proof.
 Qed.
 
 Section Literal.
-  Context (rer: RegExpRecord).
 
 (** * Literals *)
 
@@ -558,32 +557,35 @@ Fixpoint extract_literal_char (cd: char_descr) : literal :=
   - Support anchors by detecting impossible matches, e.g., /\b\B/ => Impossible.
   - Support backreferences by mapping group ids to literals, e.g., /(abc)\1/ => 'abcabc' (exact).
 *)
-Fixpoint extract_literal (r: regex) : literal :=
+Fixpoint extract_literal (rer: RegExpRecord) (r: regex) : literal :=
   if RegExpRecord.ignoreCase rer then Unknown else
   match r with
   | Epsilon => Nothing
   | Regex.Character cd => extract_literal_char cd
-  | Disjunction r1 r2 => merge_literals (extract_literal r1) (extract_literal r2)
-  | Sequence r1 r2 => chain_literals (extract_literal r1) (extract_literal r2)
-  | Quantified _ min (NoI.N 0) r1 => repeat_literal (extract_literal r1) Nothing min
-  | Quantified _ min _ r1 => repeat_literal (extract_literal r1) Unknown min
+  | Disjunction r1 r2 => merge_literals (extract_literal rer r1) (extract_literal rer r2)
+  | Sequence r1 r2 => chain_literals (extract_literal rer r1) (extract_literal rer r2)
+  | Quantified _ min (NoI.N 0) r1 => repeat_literal (extract_literal rer r1) Nothing min
+  | Quantified _ min _ r1 => repeat_literal (extract_literal rer r1) Unknown min
   | Lookaround _ r1 => Nothing
-  | Group _ r1 => extract_literal r1
+  | Modifiers md r1 => extract_literal (apply_mod rer md) r1
+  | Group _ r1 => extract_literal rer r1
   | Anchor _ => Nothing
   | Backreference _ => Unknown
   end.
 
-Definition extract_action_literal (a : action) : literal :=
+Definition extract_action_literal (rer: RegExpRecord) (a : action) : literal :=
   match a with
-  | Areg r => extract_literal r
+  | Areg r => extract_literal rer r
+  | Aunmod _ => Nothing
   | Acheck _ => Nothing
   | Aclose _ => Nothing
   end.
 
-Fixpoint extract_actions_literal (acts : list action) : literal :=
+Fixpoint extract_actions_literal (rer: RegExpRecord) (acts : list action) : literal :=
   match acts with
   | [] => Nothing
-  | a :: rest => chain_literals (extract_action_literal a) (extract_actions_literal rest)
+  | (Aunmod rer') :: rest => chain_literals Nothing (extract_actions_literal rer' rest)
+  | a :: rest => chain_literals (extract_action_literal rer a) (extract_actions_literal rer rest)
   end.
 
 (* Create Rewrite HintDb prefix. *) (* LATER 9.2 *)
@@ -603,11 +605,11 @@ Hint Rewrite
 
 Ltac destruct_i := destruct RegExpRecord.ignoreCase eqn:no_i_flag.
 
-Lemma char_match_range_same: forall c l,
+Lemma char_match_range_same: forall rer c l,
   RegExpRecord.ignoreCase rer = false ->
   char_match rer c (CdRange l l) = true -> c = l.
 Proof.
-  unfold char_match, char_match'. intros ? ? no_i_flag H.
+  unfold char_match, char_match'. intros ? ? ? no_i_flag H.
   rewrite
     Character.numeric_pseudo_bij,
     CharSet.exist_canonicalized_equiv,
@@ -626,7 +628,7 @@ Proof.
 Qed.
 
 Lemma extract_actions_literal_regex:
-  forall r, extract_actions_literal [Areg r] = extract_literal r.
+  forall rer r, extract_actions_literal rer [Areg r] = extract_literal rer r.
 Proof.
   intros.
   unfold extract_actions_literal. simpl. destruct extract_literal.
@@ -638,11 +640,11 @@ Qed.
 
 (* if the extracted literal from a character descriptor is Impossible, there can be no match *)
 Lemma extract_literal_char_impossible_no_match:
-  forall cd c,
+  forall rer cd c,
     extract_literal_char cd = Impossible ->
     ~(char_match' rer c cd = true).
 Proof.
-  intros cd c Hextract Hmatch.
+  intros rer cd c Hextract Hmatch.
   induction cd;
     (* the cd does not produce Impossible *)
     try solve[discriminate].
@@ -656,17 +658,17 @@ Proof.
 Qed.
 
 Lemma extract_literal_impossible_general:
-  forall acts tree inp gm gm',
+  forall rer acts tree inp gm gm',
     is_tree rer acts inp gm' forward tree ->
-    extract_actions_literal acts = Impossible ->
+    extract_actions_literal rer acts = Impossible ->
     tree_res tree gm inp forward = None.
 Proof.
-  intros acts tree inp gm gm' Htree Hextract.
+  intros rer acts tree inp gm gm' Htree Hextract.
   remember (forward) as dir.
   generalize dependent gm.
   induction Htree; intros; subst;
     (* the result is that of the rest of the actions *)
-    try solve[simpl in *; destruct RegExpRecord.ignoreCase, (extract_actions_literal cont); eauto; easy].
+    try solve[simpl in *; destruct RegExpRecord.ignoreCase, (extract_actions_literal rer cont); eauto; easy].
   (* tree_done *)
   - discriminate.
   (* tree_char *)
@@ -676,7 +678,8 @@ Proof.
     destruct char_match eqn:Hmatch; [|discriminate]. injection READ as <-. subst.
     apply chain_literals_impossible in Hextract as [Hcd | Hcont].
     + exfalso. simpl in Hcd.
-      destruct_i; [discriminate|]. apply (extract_literal_char_impossible_no_match _ _ Hcd Hmatch).
+      destruct_i; [discriminate|].
+      apply (extract_literal_char_impossible_no_match _ _ _ Hcd Hmatch).
     + simpl. unfold advance_input'. eauto.
   (* tree_disj *)
   - simpl in Hextract. simpl. unfold seqop.
@@ -709,25 +712,34 @@ Proof.
       * eapply IHHtree; auto.
         simpl; do 2 rewrite chain_literals_impossible; auto.
   (* tree_quant_free *)
-  - assert (Hex: extract_actions_literal cont = Impossible). {
+  - assert (Hex: extract_actions_literal rer cont = Impossible). {
       simpl in Hextract. destruct RegExpRecord.ignoreCase, plus; now destruct extract_actions_literal.
     }
     unfold greedy_choice.
     destruct greedy.
     + simpl. unfold seqop.
       rewrite IHHtree1, IHHtree2; auto.
-      simpl. rewrite Hex. destruct plus; [destruct n|]; destruct (extract_literal r1); destruct_i; reflexivity.
+      simpl. rewrite Hex. destruct plus; [destruct n|]; destruct (extract_literal rer r1); destruct_i; reflexivity.
     + simpl. unfold seqop.
       rewrite IHHtree1, IHHtree2; auto.
-      simpl. rewrite Hex. destruct plus; [destruct n|]; destruct (extract_literal r1); destruct_i; reflexivity.
+      simpl. rewrite Hex. destruct plus; [destruct n|]; destruct (extract_literal rer r1); destruct_i; reflexivity.
+  (* tree_mod *)
+  - simpl in *.
+    assert (forall c, chain_literals c Impossible = Impossible). {
+      destruct c; eauto.
+    }
+    destruct RegExpRecord.ignoreCase, (extract_actions_literal rer cont); eauto; try easy.
+  (* tree_unmod *)
+  - simpl in *.
+    destruct RegExpRecord.ignoreCase, (extract_actions_literal rer' cont); eauto; try easy.
   (* tree_group *)
   - simpl in *.
-    destruct RegExpRecord.ignoreCase, (extract_actions_literal cont); eauto; try easy.
+    destruct RegExpRecord.ignoreCase, (extract_actions_literal rer cont); eauto; try easy.
     rewrite chain_literals_impossible in IHHtree.
     eapply IHHtree; eauto.
   (* tree_lk *)
   - simpl in Hextract |- *.
-    replace (extract_actions_literal cont) with Impossible in * by (destruct_i; now destruct extract_actions_literal).
+    replace (extract_actions_literal rer cont) with Impossible in * by (destruct_i; now destruct extract_actions_literal).
     rewrite IHHtree2 by auto.
     destruct positivity.
     + destruct tree_res; eauto.
@@ -742,12 +754,12 @@ Qed.
 
 (* if there is some result, the extracted literal cannot be Impossible *)
 Lemma tree_res_cannot_be_impossible_literal:
-  forall r cont inp gm gm' tree res,
+  forall rer r cont inp gm gm' tree res,
     is_tree rer (Areg r :: cont) inp gm forward tree ->
     tree_res tree gm' inp forward = Some res ->
-    extract_literal r <> Impossible.
+    extract_literal rer r <> Impossible.
 Proof.
-  intros r cont inp gm gm' tree res Htree Hres Hext.
+  intros rer r cont inp gm gm' tree res Htree Hres Hext.
   eapply extract_literal_impossible_general with (gm:=gm') in Htree; simpl.
   - now rewrite Htree in Hres.
   - now rewrite Hext.
@@ -755,13 +767,13 @@ Qed.
 
 (* extracting Impossible means there can be no match *)
 Theorem extract_literal_impossible:
-  forall r tree inp,
+  forall rer r tree inp,
     is_tree rer [Areg r] inp Groups.GroupMap.empty forward tree ->
-    extract_literal r = Impossible ->
+    extract_literal rer r = Impossible ->
     first_leaf tree inp = None.
 Proof.
   intros.
-  rewrite <- (extract_actions_literal_regex r) in *.
+  rewrite <- (extract_actions_literal_regex rer r) in *.
   eapply extract_literal_impossible_general; eassumption.
 Qed.
 
@@ -769,13 +781,13 @@ Qed.
 (** * Prefix of literals matching *)
 
 Lemma chain_literals_extract_char:
-  forall rest s c cd,
+  forall rer rest s c cd,
     RegExpRecord.ignoreCase rer = false ->
     starts_with (prefix rest) s ->
     char_match rer c cd = true ->
     starts_with (prefix (chain_literals (extract_literal_char cd) rest)) (c :: s).
 Proof.
-  intros rest s c cd no_i_flag Hstart Hmatch.
+  intros rer rest s c cd no_i_flag Hstart Hmatch.
 
   Ltac unfold_match H no_i_flag :=
     unfold char_match in H; rewrite (Character.canonicalize_casesenst _ _ no_i_flag) in H.
@@ -812,23 +824,23 @@ Qed.
 
 (* generalization of extract_literal_prefix on the group map and the list of actions *)
 Lemma extract_literal_prefix_general:
-  forall acts tree inp gm,
+  forall rer acts tree inp gm,
     is_tree rer acts inp Groups.GroupMap.empty forward tree ->
     (exists result, tree_res tree gm inp forward = Some result) ->
-    starts_with (prefix (extract_actions_literal acts)) (next_str inp).
+    starts_with (prefix (extract_actions_literal rer acts)) (next_str inp).
 Proof.
-  intros acts tree inp gm Htree [result Hleaf].
+  intros rer acts tree inp gm Htree [result Hleaf].
   remember (forward) as dir.
   generalize dependent result.
   generalize dependent gm.
   induction Htree; intros; subst;
     (* eliminated cases when ignoreCase flag is true *)
-    try (simpl; destruct_i; [destruct extract_actions_literal|]);
+    try (simpl; destruct_i; [destruct (extract_actions_literal rer)|]);
     (* the prefix is empty *)
-    try solve[(constructor || simpl; destruct (extract_actions_literal cont); constructor)];
+    try solve[(constructor || simpl; destruct (extract_actions_literal rer cont); constructor)];
     (* the literal is that of the rest of the actions *)
     try solve[simpl in *;
-      destruct (extract_actions_literal cont); eapply IHHtree; eauto with prefix];
+      destruct (extract_actions_literal rer cont); eapply IHHtree; eauto with prefix];
     (* mismatch violating tree_res result *)
     try discriminate Hleaf.
   (* tree_char *)
@@ -836,14 +848,14 @@ Proof.
     unfold read_char in READ; destruct inp; destruct next; try discriminate READ; subst.
     (* the character matches *)
     destruct char_match eqn:Heqmatch; try discriminate READ; injection READ; intros; subst.
-    apply chain_literals_extract_char; eauto.
+    eapply chain_literals_extract_char; eauto.
   (* tree_disj *)
   - simpl in Hleaf. unfold seqop in Hleaf.
     destruct (tree_res t1) eqn:Heqres; simpl in *.
-    + pose proof (tree_res_cannot_be_impossible_literal _ _ _ _ _ _ _ Htree1 Heqres).
+    + pose proof (tree_res_cannot_be_impossible_literal _ _ _ _ _ _ _ _ Htree1 Heqres).
       etransitivity; eauto using starts_with_chain_merge_literals.
     + simpl. rewrite merge_literals_comm.
-      pose proof (tree_res_cannot_be_impossible_literal _ _ _ _ _ _ _ Htree2 Hleaf).
+      pose proof (tree_res_cannot_be_impossible_literal _ _ _ _ _ _ _ _ Htree2 Hleaf).
       etransitivity; eauto using starts_with_chain_merge_literals.
   (* tree_sequence *)
   - rewrite <-chain_literals_assoc.
@@ -865,22 +877,25 @@ Proof.
       all: rewrite <- chain_literals_assoc; eapply IHHtree; eauto.
   (* tree_quant_free *)
   - destruct plus; destruct extract_actions_literal; constructor.
+  (* tree_unmod *)
+  - simpl in Hleaf |- *.
+    destruct (extract_actions_literal rer' cont); eauto.
   (* tree_lk *)
   - simpl in Hleaf |- *.
     destruct positivity, (tree_res treelk); try easy.
-    + destruct l, (extract_actions_literal cont); eauto.
-    + destruct (extract_actions_literal cont); eauto.
+    + destruct l, (extract_actions_literal rer cont); eauto.
+    + destruct (extract_actions_literal rer cont); eauto.
 Qed.
 
 (* main theorem: every match starts with the extracted literal *)
 Theorem extract_literal_prefix:
-  forall r tree inp,
+  forall rer r tree inp,
     is_tree rer [Areg r] inp Groups.GroupMap.empty forward tree ->
     (exists result, first_leaf tree inp = Some result) ->
-    starts_with (prefix (extract_literal r)) (next_str inp).
+    starts_with (prefix (extract_literal rer r)) (next_str inp).
 Proof.
   intros.
-  rewrite <- (extract_actions_literal_regex r).
+  rewrite <- (extract_actions_literal_regex rer r).
   eapply extract_literal_prefix_general; eassumption.
 Qed.
 
@@ -895,9 +910,9 @@ Qed.
 
 (* the contrapositive of extract_literal_prefix *)
 Corollary extract_literal_prefix_general_contra:
-  forall acts tree inp,
+  forall rer acts tree inp,
     is_tree rer acts inp Groups.GroupMap.empty forward tree ->
-    ~(starts_with (prefix (extract_actions_literal acts)) (next_str inp)) ->
+    ~(starts_with (prefix (extract_actions_literal rer acts)) (next_str inp)) ->
     first_leaf tree inp = None.
 Proof.
   intros.
@@ -906,12 +921,12 @@ Proof.
 Qed.
 
 Corollary extract_literal_prefix_contra:
-  forall r tree inp,
+  forall rer r tree inp,
     is_tree rer [Areg r] inp Groups.GroupMap.empty forward tree ->
-    ~(starts_with (prefix (extract_literal r)) (next_str inp)) ->
+    ~(starts_with (prefix (extract_literal rer r)) (next_str inp)) ->
     first_leaf tree inp = None.
 Proof.
-  intro r; rewrite <- (extract_actions_literal_regex r).
+  intros rer r; rewrite <- (extract_actions_literal_regex rer r).
   intros.
   eauto using extract_literal_prefix_general_contra.
 Qed.
@@ -919,12 +934,12 @@ Qed.
 (* if str_search finds nothing for the literal of r, *)
 (* then the tree over that r has no results *)
 Lemma str_search_none_nores {strs:StrSearch}:
-  forall r inp tree,
+  forall rer r inp tree,
     is_tree rer [Areg r] inp Groups.GroupMap.empty forward tree ->
-    str_search (prefix (extract_literal r)) (next_str inp) = None ->
+    str_search (prefix (extract_literal rer r)) (next_str inp) = None ->
     first_leaf tree inp = None.
 Proof.
-  intros r [next pref] tree Htree Hsearch.
+  intros rer r [next pref] tree Htree Hsearch.
   eapply extract_literal_prefix_contra with (tree:=tree) in Htree; eauto.
   replace (next_str _) with (skipn 0 next) by eauto using skipn_O.
   eapply not_found; eauto; lia.
@@ -932,12 +947,12 @@ Qed.
 
 (* one unfolded iteration of the lazy_prefix *)
 Lemma str_search_none_nores_unanchored_iter {strs:StrSearch}:
-  forall r inp tree,
+  forall rer r inp tree,
     is_tree rer [Areg (Regex.Character CdAll); Acheck inp; Areg dot_star; Areg r] inp Groups.GroupMap.empty forward tree ->
-    str_search (prefix (extract_literal r)) (next_str inp) = None ->
+    str_search (prefix (extract_literal rer r)) (next_str inp) = None ->
     first_leaf tree inp = None.
 Proof.
-  intros r [next pref].
+  intros rer r [next pref].
   generalize dependent pref.
   induction next; intros pref tree Htree Hsearch.
   - now inversion Htree.
@@ -953,12 +968,12 @@ Qed.
 (* if str_search finds nothing for the literal of r, *)
 (* then the tree over (lazy_prefix r) has no results *)
 Theorem str_search_none_nores_unanchored {strs:StrSearch}:
-  forall r inp tree,
+  forall rer r inp tree,
     is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
-    str_search (prefix (extract_literal r)) (next_str inp) = None ->
+    str_search (prefix (extract_literal rer r)) (next_str inp) = None ->
     first_leaf tree inp = None.
 Proof.
-  intros r [next pref] tree Htree Hsearch.
+  intros rer r [next pref] tree Htree Hsearch.
   inversion Htree. inversion CONT. destruct plus; [discriminate|]. subst.
   eapply str_search_none_nores with (tree:=tskip) in Hsearch as Hnotfound; eauto.
   eapply str_search_none_nores_unanchored_iter with (tree:=titer) in ISTREE1; eauto.
@@ -982,7 +997,7 @@ Fixpoint has_asserts (r:regex) : bool :=
   match r with
   | Lookaround _ _ | Anchor _ => true
   | Sequence r1 r2 | Disjunction r1 r2 => has_asserts r1 || has_asserts r2
-  | Group _ r' | Quantified _ _ _ r' => has_asserts r'
+  | Group _ r' | Modifiers _ r' | Quantified _ _ _ r' => has_asserts r'
   | Regex.Character _ | Epsilon | Backreference _ => false
   end.
 
@@ -992,7 +1007,7 @@ Fixpoint has_asserts_actions (acts: list action) : bool :=
   | [] => false
   | Areg r :: rest => has_asserts r || has_asserts_actions rest
   | Acheck _ :: rest => true
-  | Aclose _ :: rest => has_asserts_actions rest
+  | Aclose _ :: rest | Aunmod _ :: rest => has_asserts_actions rest
   end.
 
 (* if a literal of a character descriptor is exact, it is a singleton *)
@@ -1011,7 +1026,7 @@ Qed.
 
 (* if a character descriptor is exact, it matches the extracted character *)
 Lemma extract_literal_char_exact_char_match:
-  forall cd c,
+  forall rer cd c,
     extract_literal_char cd = Exact [c] ->
     char_match rer c cd = true.
 Proof.
@@ -1027,23 +1042,23 @@ Qed.
 (* if a list of actions has no assertions, the extracted literal is exact, and the input
   starts with that extracted literal, then the result of the tree is that literal *)
 Lemma exact_literal_result_general :
-  forall acts tree inp gm p,
+  forall rer acts tree inp gm p,
     is_tree rer acts inp gm forward tree ->
     has_asserts_actions acts = false ->
-    extract_actions_literal acts = Exact p ->
+    extract_actions_literal rer acts = Exact p ->
     starts_with p (next_str inp) ->
     (exists gm', tree_res tree gm inp forward = Some (advance_input_n inp (length p) forward, gm')).
 Proof.
-  intros acts tree inp gm p Htree.
+  intros rer acts tree inp gm p Htree.
   generalize dependent p.
   remember forward as dir.
   induction Htree; intros p Hnoassert Hlit Hsw; subst; simpl in *;
     (* constructs that do not return an Exact *)
     try discriminate;
     (* remove case where ignoreCase is true *)
-    try (destruct RegExpRecord.ignoreCase; [now destruct extract_actions_literal|]);
+    try (destruct RegExpRecord.ignoreCase; [now destruct (extract_actions_literal rer)|]);
     (* follows from IH *)
-    try solve[destruct extract_actions_literal; easy || eapply IHHtree; boolprop; eauto].
+    try solve[destruct (extract_actions_literal rer); easy || eapply IHHtree; boolprop; eauto].
   (* tree_match *)
   - injection Hlit as <-. rewrite advance_input_n_0. eauto.
   (* tree_char *)
@@ -1084,21 +1099,24 @@ Proof.
   - destruct plus as [[|n]|].
     + rewrite <-chain_literals_assoc in Hlit.
       eapply IHHtree; boolprop; eauto.
-    + destruct (extract_literal r1), extract_actions_literal, repeat_literal; try easy.
+    + destruct (extract_literal rer r1), extract_actions_literal, repeat_literal; try easy.
       simpl in Hlit. rewrite <-app_assoc in Hlit.
       eapply IHHtree; boolprop; eauto.
-    + destruct (extract_literal r1), extract_actions_literal, repeat_literal; try easy.
+    + destruct (extract_literal rer r1), extract_actions_literal, repeat_literal; try easy.
       simpl in Hlit. rewrite <-app_assoc in Hlit.
       eapply IHHtree; boolprop; eauto.
   (* tree_quant_free *)
   - destruct plus as [[|n]|]; now destruct extract_actions_literal.
+  (* tree_unmod *)
+  - eapply IHHtree; eauto.
+    destruct (extract_actions_literal rer' cont) eqn:Heq; eauto.
 Qed.
 
 Lemma exact_literal_result :
-  forall r tree inp gm p,
+  forall rer r tree inp gm p,
     is_tree rer [Areg r] inp gm forward tree ->
     has_asserts r = false ->
-    extract_literal r = Exact p ->
+    extract_literal rer r = Exact p ->
     starts_with p (next_str inp) ->
     (exists gm', tree_res tree gm inp forward = Some (advance_input_n inp (length p) forward, gm')).
 Proof.
@@ -1111,16 +1129,16 @@ Qed.
 (* exact_literal_result_unanchored with extra premises to guide the direction *)
 (* of the input we induct on *)
 Lemma exact_literal_result_unanchored' {strs:StrSearch}:
-  forall r i inp inp' p tree,
+  forall rer r i inp inp' p tree,
     input_prefix i inp forward ->
     input_prefix inp' i forward ->
     is_tree rer [Areg (lazy_prefix r)] i Groups.GroupMap.empty forward tree ->
     has_asserts r = false ->
-    extract_literal r = Exact p ->
+    extract_literal rer r = Exact p ->
     input_search p i = Some inp ->
     exists gm', first_leaf tree i = Some (advance_input_n inp (length p) forward, gm').
 Proof.
-  intros r i inp inp' p tree Hhigh.
+  intros rer r i inp inp' p tree Hhigh.
   remember forward as dir.
   generalize dependent tree.
   induction Hhigh; subst; intros tree Hlow Htree Hnoassert Hlit Hsearch.
@@ -1135,7 +1153,7 @@ Proof.
     inversion ISTREE1; [inversion READ; subst|discriminate].
     (* r has no results at inp1 *)
     eapply input_search_no_earlier with (i:=Input (c::next1) pref1) in Hsearch as Hres; try split; eauto.
-    replace p with (prefix (extract_literal r)) in Hres by now rewrite Hlit.
+    replace p with (prefix (extract_literal rer r)) in Hres by now rewrite Hlit.
     eapply extract_literal_prefix_contra in Hres; eauto.
     (* the rest of the result comes from IH *)
     pose proof (is_tree_productivity rer [Areg (lazy_prefix r)] (Input next1 (c :: pref1)) Groups.GroupMap.empty forward) as [t' Ht'].
@@ -1154,9 +1172,9 @@ Qed.
 (* the result of a match of a the lazy prefix of an exact regex with no assertions *)
 (* is the position returned from a substring search *)
 Lemma exact_literal_result_unanchored {strs:StrSearch} :
-  forall r inp p inp' tree,
+  forall rer r inp p inp' tree,
     has_asserts r = false ->
-    extract_literal r = Exact p ->
+    extract_literal rer r = Exact p ->
     is_tree rer [Areg (lazy_prefix r)] inp Groups.GroupMap.empty forward tree ->
     input_search p inp = Some inp' ->
     exists gm', first_leaf tree inp = Some (advance_input_n inp' (length p) forward, gm').
@@ -1210,23 +1228,30 @@ Qed.
 *)
 (* The size of extracted literals is bounded by the size of the regex *)
 Theorem extract_literal_size_bound:
-  forall r,
-    length (prefix (extract_literal r)) <= regex_size r.
+  forall r rer,
+    length (prefix (extract_literal rer r)) <= regex_size r.
 Proof.
-  induction r; simpl; destruct_i; simpl; try lia.
+  induction r; intros rer; simpl; destruct_i; simpl; try lia.
   (* Character *)
   - induction cd; simpl; try lia.
     + eqdec; simpl; lia.
     + pose proof (merge_literals_length (extract_literal_char cd1) (extract_literal_char cd2)); lia.
   (* Disjunction *)
-  - pose proof (merge_literals_length (extract_literal r1) (extract_literal r2)); lia.
+  - specialize (IHr1 rer); specialize (IHr2 rer).
+    pose proof (merge_literals_length (extract_literal rer r1) (extract_literal rer r2)); lia.
   (* Sequence *)
-  - pose proof (chain_literals_length (extract_literal r1) (extract_literal r2)); lia.
+  - specialize (IHr1 rer); specialize (IHr2 rer).
+    pose proof (chain_literals_length (extract_literal rer r1) (extract_literal rer r2)); lia.
   (* Quantified *)
-  - induction min; (destruct delta; [destruct n|]); simpl;
-      try pose proof (chain_literals_length (extract_literal r) (repeat_literal (extract_literal r) Nothing min));
-      try pose proof (chain_literals_length (extract_literal r) (repeat_literal (extract_literal r) Unknown min));
+  - specialize (IHr rer).
+    induction min; (destruct delta; [destruct n|]); simpl;
+      try pose proof (chain_literals_length (extract_literal rer r) (repeat_literal (extract_literal rer r) Nothing min));
+      try pose proof (chain_literals_length (extract_literal rer r) (repeat_literal (extract_literal rer r) Unknown min));
       lia.
+  (* Modifier *)
+  - specialize (IHr (apply_mod rer md)); lia.
+  (* Unmodifier *)
+  - specialize (IHr rer); lia.
 Qed.
 
 End Literal.
