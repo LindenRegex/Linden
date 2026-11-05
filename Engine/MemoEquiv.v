@@ -742,6 +742,7 @@ Section MemoEquiv.
       eapply (WF pc nextgm nextb nextpc nextgm nextb nextinp); eauto.
       unfold PikeVM.epsilon_step. rewrite GET.
       unfold PikeVM.upd_label. eauto.
+    - unfold stutters in STUTTERS. rewrite GET in STUTTERS. inversion STUTTERS.
     - destruct b; inversion EXEC; subst.
       eapply (WF pc nextgm CanExit nextpc nextgm CanExit nextinp); eauto.
       unfold PikeVM.epsilon_step. rewrite GET.

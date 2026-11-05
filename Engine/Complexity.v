@@ -183,6 +183,8 @@ Section CodeWF.
     - destruct (check_read rer c inp forward); inversion H1; subst.
       simpl; eexists; split; eauto; simpl; auto; lia.
     - destruct (anchor_satisfied rer a inp); inversion H1; subst.
+    - destruct p; inversion H.
+      destruct (check_read rer cd inp forward); inversion H1; subst.
     - destruct b; inversion H1.
   Qed.
 
@@ -205,7 +207,8 @@ Section CodeWF.
     - destruct (anchor_satisfied rer a inp); inversion H1; subst;
         inversion IN; subst; try solve [inversion H0];
         simpl; eexists; split; eauto; simpl; auto; lia.
-    - inversion IN; [|inversion H0]; subst; try solve [inversion H1];
+    - destruct p; [|destruct check_read]; inversion H; subst;
+        simpl in IN; intuition subst;
         simpl; eexists; split; eauto; simpl; auto.
     - destruct b; subst; inversion H1; subst;
         inversion IN; subst; try solve [inversion H0];
@@ -231,7 +234,8 @@ Section CodeWF.
     - destruct (anchor_satisfied rer a i); try destruct p; inversion H1; subst;
         inversion IN; subst; try solve [inversion H0];
         simpl; eexists; split; eauto; simpl; auto; lia.
-    - inversion IN; [|inversion H0]; subst; try solve [inversion H1];
+    - destruct p; [|destruct read_char]; inversion H; subst;
+        simpl in IN; intuition subst;
         simpl; eexists; split; eauto; simpl; auto.
     - destruct b; subst; inversion H1; subst;
         inversion IN; subst; try solve [inversion H0];
@@ -633,6 +637,7 @@ Section PikeVMComplexity.
     destruct b0; try solve [inversion H; simpl; lia].
     - destruct (check_read rer c inp forward); try solve [inversion H; simpl; lia].
     - destruct (anchor_satisfied rer a inp); try solve [inversion H; simpl; lia].
+    - destruct p; [|destruct check_read]; inversion H; simpl; lia.
     - destruct b; try solve [inversion H; simpl; lia].
   Qed.
 
@@ -1117,6 +1122,7 @@ Section MemoBTComplexity.
     destruct b0; try solve [inversion E; simpl; lia].
     - destruct (read_char rer c inp forward) as [[char i]|]; try solve [inversion E; simpl; lia].
     - destruct (anchor_satisfied rer a inp); try solve [inversion E; simpl; lia].
+    - destruct p; [|destruct read_char]; inversion E; simpl; lia.
     - destruct b; try solve [inversion E; simpl; lia].
   Qed.
 
@@ -1140,7 +1146,8 @@ Section MemoBTComplexity.
         ** eapply ss_next; eauto.
       * inversion E; subst. inversion IN.
     - destruct anchor_satisfied; inversion E; subst; inversion IN; subst; inversion H; subst; auto.
-    - inversion E; subst. inversion IN; subst; inversion H; subst; try inversion H0; subst; auto.
+    - destruct p; [|destruct read_char]; inversion E; subst;
+        simpl in IN; intuition congruence.
     - destruct gm1; inversion E; subst; inversion IN; subst; inversion H; subst; auto.
   Qed.
 

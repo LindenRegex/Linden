@@ -117,7 +117,11 @@ Definition epsilon_step (t:thread) (c:code) (i:input): epsilon_result :=
                             | true => EpsActive [advance_thread t]
                             end
           | Jmp next => EpsActive [upd_label t next]
-          | Fork _ l1 l2 => EpsActive [upd_label t l1; upd_label t l2]
+          | Fork NoPeek l1 l2 => EpsActive [upd_label t l1; upd_label t l2]
+          | Fork (Branch cd _) l1 l2 => match check_read rer cd i forward with
+                                     | CanRead => EpsActive [upd_label t l1]
+                                     | CannotRead => EpsActive [upd_label t l2]
+                                     end
           | SetRegOpen gid => EpsActive [open_thread t gid (idx i)]
           | SetRegClose gid => EpsActive [close_thread t gid (idx i)]
           | ResetRegs gidl => EpsActive [reset_thread t gidl]
