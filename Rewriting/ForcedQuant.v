@@ -15,14 +15,15 @@ Section ForcedQuant.
   Proof.
     intros r n dir.
     induction n.
-    - unfold actions_equiv_dir. intros inp gm t1 t2 TREE1 TREE2.
+    - unfold actions_equiv_dir. split; try reflexivity. intros inp gm t1 t2 TREE1 TREE2.
       inversion TREE1; subst; try solve[destruct plus; inversion H1].
       inversion TREE2; subst; try solve[destruct plus; inversion H1].
       eapply is_tree_determ in SKIP; eauto. subst. apply leaves_equiv_rel_Reflexive.
-    - unfold actions_equiv_dir. intros inp gm t1 t2 TREE1 TREE2.
+    - unfold actions_equiv_dir. split; try reflexivity. intros inp gm t1 t2 TREE1 TREE2.
       inversion TREE1; inversion TREE2; subst.
       apply app_eq_left with (acts:=[Areg r]) in IHn.
       unfold actions_equiv_dir in IHn. simpl in IHn.
+      destruct IHn as [Hrer IHn].
       specialize (IHn _ _ _ _ ISTREE1 ISTREE0). auto.
   Qed.
 

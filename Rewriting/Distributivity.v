@@ -20,7 +20,9 @@ Module Right.
     Theorem factored_expanded_right_equiv: (* Proof using inversion on the is_tree predicate *)
       factored ≅[rer][forward] expanded.
     Proof.
-      tree_equiv_inv; eauto using compute_tr_is_tree.
+      (* TODO look into this*)
+      tree_equiv_rw.
+      compute_tr_simpl.
       reflexivity.
     Qed.
 
@@ -50,6 +52,7 @@ Module LeftBackward.
     Theorem factored_expanded_left_equiv: (* Proof using inversion on the is_tree predicate *)
       factored ≅[rer][backward] expanded.
     Proof.
+      tree_equiv_prepare.
       tree_equiv_inv; eauto using compute_tr_is_tree.
       reflexivity.
     Qed.
