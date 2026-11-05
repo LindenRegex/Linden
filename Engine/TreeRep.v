@@ -34,7 +34,7 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
     tree_rep t code pc inp b
 | tr_choice:
   forall code pc pc1 pc2 inp b t1 t2
-    (FORK: get_pc code pc = Some (Fork pc1 pc2))
+    (FORK: get_pc code pc = Some (Fork NoPeek pc1 pc2))
     (TR1: tree_rep t1 code pc1 inp b)
     (TR2: tree_rep t2 code pc2 inp b),
     tree_rep (Choice t1 t2) code pc inp b

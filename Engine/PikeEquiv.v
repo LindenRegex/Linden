@@ -655,7 +655,7 @@ Inductive start_rep: bytecode -> Prop :=
 | start_cons: forall cd, start_rep (Consume cd)
 | start_chkanch: forall a, start_rep (CheckAnchor a)
 | start_jmp: forall lbl, start_rep (Jmp lbl)
-| start_fork: forall l1 l2, start_rep (Fork l1 l2)
+| start_fork: forall p l1 l2, start_rep (Fork p l1 l2)
 | start_open: forall gid, start_rep (SetRegOpen gid)
 | start_close: forall gid, start_rep (SetRegClose gid)
 | start_end: forall lbl, start_rep (EndLoop lbl)

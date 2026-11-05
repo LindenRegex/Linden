@@ -234,7 +234,7 @@ Section Example.
                   (Disjunction(a_char)(Epsilon))
                   (Disjunction(Epsilon)(b_char))).
 
-  Example nq_bytecode := [Fork 1 10; BeginLoop; ResetRegs []; Fork 4 6; Consume (CdSingle a); Jmp 6; Fork 7 8; Jmp 9; Consume (CdSingle b); EndLoop 0; Accept].
+  Example nq_bytecode := [Fork NoPeek 1 10; BeginLoop; ResetRegs []; Fork NoPeek 4 6; Consume (CdSingle a); Jmp 6; Fork NoPeek 7 8; Jmp 9; Consume (CdSingle b); EndLoop 0; Accept].
 
   Lemma compile_nq: compilation nq_regex = nq_bytecode.
   Proof. auto. Qed.
@@ -250,7 +250,7 @@ Section Example.
 
 Example paper_regex : regex := Sequence (Group 1 (Disjunction (greedy_star a_char) a_char)) b_char.
 
-Example paper_bytecode := [SetRegOpen 1; Fork 2 8; Fork 3 7; BeginLoop; ResetRegs []; Consume (CdSingle a);
+Example paper_bytecode := [SetRegOpen 1; Fork NoPeek 2 8; Fork NoPeek 3 7; BeginLoop; ResetRegs []; Consume (CdSingle a);
                            EndLoop 2; Jmp 9; Consume (CdSingle a); SetRegClose 1; Consume (CdSingle b); Accept].
 
 Lemma compile_paper: compilation paper_regex = paper_bytecode.
