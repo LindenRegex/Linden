@@ -30,16 +30,18 @@ Inductive tree_thread (code:code) (inp:input) : (tree * group_map) -> thread -> 
     (CONT: actions_rep actions code pc)
     (SUBSET: pike_actions actions),
     tree_thread code inp (tree, gm) (pc, gm, b)
-| tt_reset:
-  forall tree gm pc b gidl
-    (TT: tree_thread code inp (tree,GroupMap.reset gidl gm) (pc+1,GroupMap.reset gidl gm,b))
-    (RESET: get_pc code pc = Some (ResetRegs gidl)),
-    tree_thread code inp (GroupAction (Reset gidl) tree,gm) (pc,gm,b)
 | tt_begin:
   forall tree gm pc b
     (TT: tree_thread code inp (tree,gm) (pc+1,gm,CannotExit))
     (BEGIN: get_pc code pc = Some BeginLoop),
     tree_thread code inp (tree,gm) (pc,gm,b).
+
+(* Having a spcial case for begin but not reset could be surprising:
+   sometimes there are intermediate states at a Reset instruction in a quantifier,
+   and they do not correspond to the actions_rep of the original list of actions.
+   But at such Reset instructions, we express them with tt_eq, where the list of actions
+   contains r{1} at the head.
+ *)
 
 
 (* the initial active thread and the initial active tree are related with the invariant *)
@@ -187,22 +189,6 @@ Proof.
 Qed.
 
 
-Theorem no_tree_reset:
-  (* A tree corresponding to some actions cannot start with ResetGroups *)
-  forall gidl tree inp actions b,
-    pike_actions actions ->
-    bool_tree rer actions inp b (GroupAction (Reset gidl) tree) -> False.
-Proof.
-  intros gidl tree inp actions b PIKE H.
-  remember (GroupAction (Reset gidl) tree) as TRESET.
-  induction H; inversion HeqTRESET; subst; auto.
-  - pike_subset.
-  - apply IHbool_tree; auto. pike_subset.
-  - pike_subset.
-  - apply IHbool_tree; auto. pike_subset.
-  - destruct greedy; inversion CHOICE.
-Qed.
-
 Corollary generate_reset:
   forall gidl tree inp code pc b gm
     (TT: tree_thread code inp (GroupAction (Reset gidl) tree, gm) (pc,gm,b))
@@ -212,8 +198,18 @@ Corollary generate_reset:
 Proof.
   intros.
   inversion TT; subst.
-  - exfalso. eapply no_tree_reset; eauto.
-  - simpl. rewrite RESET. split; auto.
+  - remember (GroupAction (Reset gidl) tree) as TRESET.
+    induction TREE; intros; subst; try inversion HeqTRESET; subst.
+    + repeat invert_rep. eapply IHTREE; eauto. pike_subset.
+    + repeat invert_rep. eapply IHTREE; eauto. pike_subset.
+      repeat (econstructor; eauto). pike_subset.
+    + repeat invert_rep. simpl. rewrite RESET. split; auto.
+      eapply tt_eq; eauto. 2: pike_subset.
+      replace (pc+1) with (S pc) by lia.
+      eapply cons_bc; [econstructor; eauto|].
+      eapply cons_bc; [econstructor; apply nfa_rep_done|]. auto.
+    + repeat invert_rep. eapply IHTREE; eauto. pike_subset.
+    + destruct greedy; inversion CHOICE.
   - exfalso. eapply doesnt_stutter_begin; eauto.
 Qed.
 
@@ -326,22 +322,28 @@ Proof.
             apply tt_eq with (actions:=cont); auto. pike_subset.
           * apply tt_begin; auto.
             replace (S (S pc)) with (S pc +1) in RESET by lia.
-            apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 (NoI.N 0) r1)::cont); auto.
+            (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
+            apply tt_eq with (actions:=Areg (Quantified true 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified true 0 (NoI.N 0) r1)::cont).
+            { econstructor; [reflexivity|].
+              apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
             2: { pike_subset. }
             apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+            { constructor. apply nfa_rep_one; auto.
+              replace (S (S pc+1)) with (S (S (S pc))) by lia. auto. }
             repeat (econstructor; eauto).
         +                           (* lazy qmark *)
           simpl. rewrite FORK. exists [(S end1, gm, b); (S pc, gm, b)]. split; auto.
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
             replace (S (S pc)) with (S pc + 1) in RESET by lia.
-            apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 (NoI.N 0) r1)::cont); auto.
+            (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
+            apply tt_eq with (actions:=Areg (Quantified false 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified false 0 (NoI.N 0) r1)::cont).
+            { econstructor; [reflexivity|].
+              apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
             2: { pike_subset. }
             apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+            { constructor. apply nfa_rep_one; auto.
+              replace (S (S pc+1)) with (S (S (S pc))) by lia. auto. }
             repeat (econstructor; eauto).
           * apply tt_eq with (actions:=cont); auto. pike_subset.
       }
@@ -355,11 +357,14 @@ Proof.
             apply tt_eq with (actions:=cont); auto. pike_subset.
           * apply tt_begin; auto.
             replace (S (S pc)) with (S pc +1) in RESET by lia.
-            apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 +∞ r1)::cont); auto.
+            (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
+            apply tt_eq with (actions:=Areg (Quantified true 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified true 0 +∞ r1)::cont).
+            { econstructor; [reflexivity|].
+              apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
             2: { pike_subset. }
             apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+            { constructor. apply nfa_rep_one; auto.
+              replace (S (S pc+1)) with (S (S (S pc))) by lia. auto. }
             repeat (econstructor; eauto).
             replace (S (S pc)) with (S pc + 1) by lia. auto.
         +                           (* lazy star *)
@@ -367,17 +372,20 @@ Proof.
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
             replace (S (S pc)) with (S pc + 1) in RESET by lia.
-            apply tt_reset; auto.
-            apply tt_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 +∞ r1)::cont); auto.
+            (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
+            apply tt_eq with (actions:=Areg (Quantified false 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified false 0 +∞ r1)::cont).
+            { econstructor; [reflexivity|].
+              apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
             2: { pike_subset. }
             apply cons_bc with (pcmid:=end1).
-            { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+            { constructor. apply nfa_rep_one; auto.
+              replace (S (S pc+1)) with (S (S (S pc))) by lia. auto. }
             repeat (econstructor; eauto).
             replace (S (S pc)) with (S pc + 1) by lia. auto.
           * apply tt_eq with (actions:=cont); auto. pike_subset.
       }
     (* Unsupported *)
-        + rewrite DUN in SUBSET. inversion SUBSET; subst. inversion H1; subst. inversion H0; subst; lia.
+    + rewrite DUN in SUBSET. inversion SUBSET; subst. inversion H1; subst. inversion H0; subst; lia.
 Qed.
 
 
@@ -434,8 +442,6 @@ Theorem stutter_step:
 Proof.
   intros tree gm inp code pc b TT STUTTER.
   inversion TT; subst.
-  (* reset is not stuttering *)
-  2: { unfold stutters in STUTTER. rewrite RESET in STUTTER. inversion STUTTER. }
   (* at a beginloop instruction *)
   2: { exists (pc + 1). exists CannotExit. split; try split; auto.
        simpl. rewrite BEGIN. auto. }
@@ -643,7 +649,7 @@ Proof.
 Qed.
 
 
-(* A representation cannot start with Reset or BeginLoop *)
+(* A representation cannot start with BeginLoop *)
 Inductive start_rep: bytecode -> Prop :=
 | start_accept: start_rep Accept
 | start_cons: forall cd, start_rep (Consume cd)
@@ -653,7 +659,8 @@ Inductive start_rep: bytecode -> Prop :=
 | start_open: forall gid, start_rep (SetRegOpen gid)
 | start_close: forall gid, start_rep (SetRegClose gid)
 | start_end: forall lbl, start_rep (EndLoop lbl)
-| start_kill: start_rep KillThread.
+| start_kill: start_rep KillThread
+| start_reset: forall gidl, start_rep (ResetRegs gidl).
 
 Lemma nfa_rep_start:
   forall r code pc pcend,
@@ -720,14 +727,6 @@ Proof.
   - inversion TT2; subst;
       simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
       try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
-    2: { rewrite BEGIN in RESET. inversion RESET. }
-    rewrite RESET in RESET0. inversion RESET0. subst.
-    specialize (IHTT1 _ _ TT (eq_refl _) (eq_refl _) (eq_refl _) (eq_refl _)).
-    simpl in IHTT1. destruct IHTT1. subst. simpl. auto.
-  - inversion TT2; subst;
-      simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
-      try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
-    { rewrite BEGIN in RESET. inversion RESET. }
     specialize (IHTT1 _ _ TT (eq_refl _) (eq_refl _) (eq_refl _) (eq_refl _)).
     simpl in IHTT1. destruct IHTT1. subst. simpl. auto.
 Qed.
@@ -1000,6 +999,12 @@ Proof.
     { apply IHREP; auto. }
     (* endloop *)
     subst. rewrite END in GET. inversion GET.
+  - apply nfa_rep_incr in REP as INC.
+    assert (pc = start \/ pc >= S start) as [RES|H] by lia.
+    (* Reset *)
+    { subst. rewrite RESET in GET. inversion GET. }
+    (* in r1 *)
+    apply IHREP; auto.
   - apply nfa_rep_incr in REP as INC.
     assert (pc = start \/ pc >= S start) as [ST|H] by lia.
     (* open *)

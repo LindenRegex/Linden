@@ -223,7 +223,18 @@ Proof.
     eapply IHTREE; eauto. pike_subset.
     repeat (econstructor; eauto).
   (* quantified, forced *)
-  - pike_subset.
+  - remember (Areg (Quantified greedy (S min) plus r1) :: cont) as onecont.
+    induction ACT; inversion Heqonecont; subst;
+      try solve[econstructor; eauto]; clear IHACT.
+    invert_rep. inversion NFA; subst.
+    2: { in_subset. }
+    eapply tr_reset; eauto.
+    eapply IHTREE; eauto. pike_subset.
+    eapply cons_bc with (pcmid:=pcmid).
+    { constructor. eauto. }
+    eapply cons_bc with (pcmid:=pcmid).
+    { constructor. apply nfa_rep_done. }
+    auto.
   (* quantified, done *)
   - remember (Areg (Quantified greedy 0 (NoI.N 0) r1) :: cont) as zerocont.
     induction ACT; inversion Heqzerocont; subst;

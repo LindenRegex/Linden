@@ -31,11 +31,6 @@ Section MemoEquiv.
       (CONT: actions_rep actions code pc)
       (SUBSET: pike_actions actions),
       tree_config code (tree, gm, inp) (pc, gm, b, inp)
-  | tc_reset:
-    forall inp tree gm pc b gidl
-      (TC: tree_config code (tree,GroupMap.reset gidl gm,inp) (pc+1,GroupMap.reset gidl gm,b,inp))
-      (RESET: get_pc code pc = Some (ResetRegs gidl)),
-      tree_config code (GroupAction (Reset gidl) tree, gm, inp) (pc,gm,b,inp)
   | tc_begin:
     forall inp tree gm pc b
       (TC: tree_config code (tree,gm,inp) (pc+1,gm,CannotExit,inp))
@@ -65,14 +60,6 @@ Section MemoEquiv.
     - inversion TC2; subst;
         simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
         try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
-      2: { rewrite BEGIN in RESET. inversion RESET. }
-      rewrite RESET in RESET0. inversion RESET0. subst.
-      specialize (IHTC1 _ _ TC (eq_refl _) (eq_refl _) (eq_refl _) (eq_refl _)).
-      simpl in IHTC1. destruct IHTC1; subst; simpl; auto.
-    - inversion TC2; subst;
-        simpl in SAMEB; simpl in SAMEPC; simpl in SAMEGM1; simpl in SAMEGM2; subst;
-        try solve[eapply actions_rep_start in CONT; eauto; inversion CONT].
-      { rewrite BEGIN in RESET. inversion RESET. }
       specialize (IHTC1 _ _ TC (eq_refl _) (eq_refl _) (eq_refl _) (eq_refl _)).
       simpl in IHTC1. destruct IHTC1; subst; simpl; auto.
   Qed.
@@ -318,7 +305,6 @@ Section MemoEquiv.
   Proof.
     intros t pc gm b inp code TREESTEP TC NOSTUTTER.
     inversion TC; subst; try no_stutter.
-    2: { simpl in TREESTEP. inversion TREESTEP. }
     remember Mismatch as TMIS.
     induction TREE; intros; subst; try inversion HeqMIS; subst;
       simpl in TREESTEP; try solve[inversion TREESTEP].
@@ -412,8 +398,18 @@ Section MemoEquiv.
   Proof.
     intros gidl tree inp code pc b gm TC NOSTUTTER.
     inversion TC; subst.
-    - exfalso. eapply no_tree_reset; eauto.
-    - simpl. rewrite RESET. split; auto.
+    - remember (GroupAction (Reset gidl) tree) as TRESET.
+      induction TREE; intros; subst; try inversion HeqTRESET; subst.
+      + repeat invert_rep. eapply IHTREE; eauto. pike_subset.
+      + repeat invert_rep. eapply IHTREE; eauto. pike_subset.
+        repeat (econstructor; eauto). pike_subset.
+      + repeat invert_rep. simpl. rewrite RESET. split; auto.
+        eapply tc_eq; eauto. 2: pike_subset.
+        replace (pc+1) with (S pc) by lia.
+        eapply cons_bc; [econstructor; eauto|].
+        eapply cons_bc; [econstructor; apply nfa_rep_done|]. auto.
+      + repeat invert_rep. eapply IHTREE; eauto. pike_subset.
+      + destruct greedy; inversion CHOICE.
     - exfalso. eapply doesnt_stutter_begin; eauto.
   Qed.
 
@@ -504,22 +500,28 @@ Section MemoEquiv.
               apply tc_eq with (actions:=cont); auto. pike_subset.
             * apply tc_begin; auto.
               replace (S (S pc)) with (S pc +1) in RESET by lia.
-              apply tc_reset; auto.
-              apply tc_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 (NoI.N 0) r1)::cont); auto.
+              (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
+              apply tc_eq with (actions:=Areg (Quantified true 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified true 0 (NoI.N 0) r1)::cont).
+              { econstructor; [reflexivity|].
+                apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
               2: { pike_subset. }
               apply cons_bc with (pcmid:=end1).
-              { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+              { constructor. apply nfa_rep_one; auto.
+                replace (S (S pc+1)) with (S (S (S pc))) by lia. auto. }
               repeat (econstructor; eauto).
           +                           (* lazy qmark *)
             simpl. rewrite FORK. exists [(S end1, gm, b, inp); (S pc, gm, b, inp)]. split; auto.
             econstructor.
             * constructor. constructor. apply tc_begin; auto.
               replace (S (S pc)) with (S pc + 1) in RESET by lia.
-              apply tc_reset; auto.
-              apply tc_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 (NoI.N 0) r1)::cont); auto.
+              (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
+              apply tc_eq with (actions:=Areg (Quantified false 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified false 0 (NoI.N 0) r1)::cont).
+              { econstructor; [reflexivity|].
+                apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
               2: { pike_subset. }
               apply cons_bc with (pcmid:=end1).
-              { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+              { constructor. apply nfa_rep_one; auto.
+                replace (S (S pc+1)) with (S (S (S pc))) by lia. auto. }
               repeat (econstructor; eauto).
             * apply tc_eq with (actions:=cont); auto. pike_subset.
         }
@@ -533,11 +535,14 @@ Section MemoEquiv.
               apply tc_eq with (actions:=cont); auto. pike_subset.
             * apply tc_begin; auto.
               replace (S (S pc)) with (S pc +1) in RESET by lia.
-              apply tc_reset; auto.
-              apply tc_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified true 0 +∞ r1)::cont); auto.
+              (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
+              apply tc_eq with (actions:=Areg (Quantified true 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified true 0 +∞ r1)::cont).
+              { econstructor; [reflexivity|].
+                apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
               2: { pike_subset. }
               apply cons_bc with (pcmid:=end1).
-              { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+              { constructor. apply nfa_rep_one; auto.
+                replace (S (S pc+1)) with (S (S (S pc))) by lia. auto. }
               repeat (econstructor; eauto).
               replace (S (S pc)) with (S pc + 1) by lia. auto.
           +                           (* lazy star *)
@@ -545,11 +550,14 @@ Section MemoEquiv.
             econstructor.
             * constructor. constructor. apply tc_begin; auto.
               replace (S (S pc)) with (S pc + 1) in RESET by lia.
-              apply tc_reset; auto.
-              apply tc_eq with (actions:=Areg r1 :: Acheck(inp)::Areg(Quantified false 0 +∞ r1)::cont); auto.
+              (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
+              apply tc_eq with (actions:=Areg (Quantified false 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified false 0 +∞ r1)::cont).
+              { econstructor; [reflexivity|].
+                apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
               2: { pike_subset. }
               apply cons_bc with (pcmid:=end1).
-              { constructor. replace (S pc+1+1) with (S (S (S pc))) by lia. auto. }
+              { constructor. apply nfa_rep_one; auto.
+                replace (S (S pc+1)) with (S (S (S pc))) by lia. auto. }
               repeat (econstructor; eauto).
               replace (S (S pc)) with (S pc + 1) by lia. auto.
             * apply tc_eq with (actions:=cont); auto. pike_subset.
@@ -614,8 +622,6 @@ Section MemoEquiv.
   Proof.
     intros tree gm inp code pc b TC STUTTER.
     inversion TC; subst.
-    (* reset is not stuttering *)
-    2: { unfold stutters in STUTTER. rewrite RESET in STUTTER. inversion STUTTER. }
     (* at a beginloop instruction *)
     2: { exists (pc + 1). exists CannotExit. split; try split; auto.
          simpl. rewrite BEGIN. auto. }

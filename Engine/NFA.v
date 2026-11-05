@@ -132,6 +132,9 @@ Section NFA.
     | Quantified greedy 0 (NoI.Inf) r1 =>
         let (bc1, f1) := compile r1 (S (S (S fresh))) in
         ([greedy_fork greedy (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1)
+    | Quantified greedy 1 (NoI.N 0) r1 =>
+        let (bc1, f1) := compile r1 (S fresh) in
+        ([ResetRegs (def_groups r1)] ++ bc1, f1)
     | Group gid r1 =>
         let (bc1, f1) := compile r1 (S fresh) in
         ([SetRegOpen gid] ++ bc1 ++ [SetRegClose gid], S f1)
@@ -189,6 +192,11 @@ Section NFA.
       (NFA1: nfa_rep r1 c (S (S (S start))) end1)
       (END: get_pc c end1 = Some (EndLoop start)),
       nfa_rep (Quantified greedy 0 (NoI.Inf) r1) c start (S end1)
+  | nfa_rep_one:
+    forall c r1 greedy start end1
+      (RESET: get_pc c start = Some (ResetRegs (def_groups r1)))
+      (NFA1: nfa_rep r1 c (S start) end1),
+      nfa_rep (Quantified greedy 1 (NoI.N 0) r1) c start end1
   | nfa_rep_group:
     forall c r1 gid start end1
       (OPEN: get_pc c start = Some (SetRegOpen gid))
@@ -242,7 +250,9 @@ Section NFA.
       inversion H0. subst f2. apply IHr1 in COMP1. apply IHr2 in COMP2.
       rewrite <- COMP1 in COMP2. rewrite length_app. lia.
     - inversion COMPILE. destruct min.
-      2: { inversion H0. simpl. lia. }
+      2: { destruct min; [destruct delta as [[|]|]|]; try solve[inversion H0; simpl; lia].
+           destruct (compile r (S fresh)) as [bc1 f1] eqn:COMP1.
+           inversion H0. apply IHr in COMP1. subst. simpl. lia. }
       destruct delta.
       + destruct n; try destruct n; try solve[inversion H0; simpl; lia].
         destruct (compile r (S (S (S fresh)))) as [bc1 f1] eqn:COMP1.
@@ -293,9 +303,17 @@ Section NFA.
         * rewrite app_assoc. auto.
         * apply fresh_correct in COMP1. rewrite length_app. lia.
     - inversion H. destruct min.
-      2: { inversion H2. subst. apply nfa_unsupported.
-          - unfold not. intros. inversion H0.
-          - rewrite get_first. simpl. auto. }
+      2: { destruct min; [destruct delta as [[|]|]|].
+           (* unique iteration {1} *)
+           1: { destruct (compile r (S start)) as [bc1 end1] eqn:COMP1. inversion H2. subst.
+                apply nfa_rep_one.
+                - rewrite get_first. auto.
+                - apply IHr with (prev:=prev ++ [ResetRegs (def_groups r)]) in COMP1.
+                  + rewrite <- app_assoc in COMP1. auto.
+                  + rewrite length_app. simpl. lia. }
+           (* other quantifiers unsupported *)
+           all: inversion H2; subst; apply nfa_unsupported;
+             [ unfold not; intros; inversion H0 | rewrite get_first; auto ]. }
       destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst delta.
       (* Zero repetitions *)
       + inversion H2. subst. constructor.
