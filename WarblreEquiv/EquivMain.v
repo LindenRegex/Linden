@@ -74,10 +74,10 @@ Section EquivMain.
       forall str0,
         (* then plugging the identity MatcherContinuation into the Matcher m yields a
            MatcherContinuation that is equivalent to matching the Linden regex, under any input string. *)
-        equiv_cont rer (fun ms => m ms id_mcont) nil (forbidden_groups lroot) [Areg lroot] forward str0.
+        equiv_cont (fun ms => m ms id_mcont) nil (forbidden_groups lroot) [Areg lroot] rer forward str0.
   Proof.
     intros wroot lroot rer m Hequiv Hcapcount Hcompsucc str0.
-    pose proof equiv rer lroot wroot as Hequivm.
+    pose proof equiv lroot wroot as Hequivm.
     unfold equiv_matcher in Hequivm.
     replace (forbidden_groups lroot) with (forbidden_groups lroot ++ []) by apply app_nil_r.
     eapply Hequivm; eauto.
@@ -273,7 +273,7 @@ Section EquivMain.
     intros wroot rer m str0 i res CAPTURES EE COMP_SUCC EXEC_SUCC.
     pose proof EarlyErrors.earlyErrors wroot EE as EE_ind.
     symmetry in CAPTURES.
-    pose proof MatcherInvariant.compileSubPattern wroot rer CAPTURES EE_ind wroot [] eq_refl forward as MI.
+    pose proof MatcherInvariant.compileSubPattern wroot EE_ind wroot [] eq_refl rer CAPTURES forward as MI.
     unfold Semantics.compilePattern in COMP_SUCC.
     destruct Semantics.compileSubPattern as [msub|] eqn:COMPSUB_SUCC; try discriminate. simpl in COMP_SUCC.
     specialize (MI msub eq_refl).
