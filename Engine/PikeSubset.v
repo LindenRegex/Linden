@@ -222,6 +222,7 @@ Ltac invert_subset :=
   | [ H : pike_regex (Lookaround _ _) |- _ ] => inversion H; clear H
   | [ H : pike_regex (Anchor _) |- _ ] => inversion H; clear H
   | [ H : pike_regex (Backreference _) |- _ ] => inversion H; clear H
+  | [ H : pike_regex (Modifiers _ _) |- _ ] => inversion H; clear H
 
   | [ |- pike_list (suppl ((_, _) :: _) _) ] => simpl suppl
   | [ |- pike_list (suppl [] _) ] => simpl suppl

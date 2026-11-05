@@ -23,14 +23,15 @@ Fixpoint has_groups (r:regex) : bool :=
   match r with
   | Group _ _ => true
   | Sequence r1 r2 | Disjunction r1 r2 => has_groups r1 || has_groups r2
-  | Quantified _ _ _ r' | Lookaround _ r' => has_groups r'
+  | Quantified _ _ _ r' | Lookaround _ r' | Modifiers _ r' => has_groups r'
   | Regex.Character _ | Epsilon | Backreference _ | Anchor _ => false
   end.
 
 Fixpoint has_groups_actions (acts:list action) : bool :=
   match acts with
   | [] => false
-  | Areg r :: t => has_groups r || has_groups_actions t
+  | Areg r   :: t => has_groups r || has_groups_actions t
+  | Aunmod _ :: t => has_groups_actions t
   | Acheck _ :: t => has_groups_actions t
   | Aclose _ :: t => true
   end.
@@ -128,7 +129,7 @@ Proof.
     assert (extract_literal rer (lazy_prefix r) = Impossible). {
       assert (Hic: RegExpRecord.ignoreCase rer = false). {
         unfold extract_literal in Heq.
-        destruct RegExpRecord.ignoreCase eqn:Hicm, r; easy.
+        destruct RegExpRecord.ignoreCase eqn:Hicm, r; rewrite Hicm in *; simpl in *; (discriminate || reflexivity).
       }
       simpl. now rewrite Hic, Heq.
     }

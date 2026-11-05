@@ -289,8 +289,8 @@ Section RegexpTree.
           eexists. eapply compute_tr_is_tree.
         }
         destruct TREErcheck as [trcheck TREErcheck].
-        pose proof leaves_concat rer _ _ _ [Areg r; Acheck inp] _ _ _ ISTREE1 TREErcheck as CONCAT.
-        pose proof leaves_concat rer _ _ _ [Areg r; Acheck inp] _ _ _ ISTREE0 TREErcheck as CONCAT0.
+        pose proof leaves_concat _ _ _ _ [Areg r; Acheck inp] _ _ _ ISTREE1 TREErcheck as CONCAT.
+        pose proof leaves_concat _ _ _ _ [Areg r; Acheck inp] _ _ _ ISTREE0 TREErcheck as CONCAT0.
         intros lf Hin.
         apply in_app_or in Hin. destruct Hin.
         + apply in_or_app. left. eapply (flatmap_incl _ _ _ _ _ CONCAT CONCAT0); eauto.
@@ -351,12 +351,12 @@ Section RegexpTree.
       forall dir, actions_equiv_dir rer dir [Areg (Quantified true 0 m r); Areg (Quantified true 0 n r)]
         [Areg (Quantified true 0 (NoI.add m n) r)].
     Proof.
-      induction m as [|m IHm].
+      induction m as [|m IHm]; intros dir.
       - simpl. replace (match n with | NoI.N r' => NoI.N r' | +∞ => +∞ end) with n by now destruct n.
-        unfold actions_equiv_dir. intros dir inp gm t1 t2 TREE1 TREE2.
+        unfold actions_equiv_dir. split; try reflexivity. intros inp gm t1 t2 TREE1 TREE2.
         inversion TREE1; subst. 2: { destruct plus; discriminate. }
         replace t2 with t1 by eauto using is_tree_determ. reflexivity.
-      - intros dir i gm tr1 tr2 TREE1 TREE2.
+      - split; try reflexivity. intros i gm tr1 tr2 TREE1 TREE2.
         inversion TREE1; subst. inversion TREE2; subst. 1: destruct n; discriminate. inversion SKIP0; subst.
         simpl. clear TREE1 TREE2 SKIP0.
         assert (plus0 = (m + n)%NoI). { destruct plus0; destruct n; try discriminate. - injection H2 as ->. simpl. reflexivity. - reflexivity. }
@@ -382,8 +382,8 @@ Section RegexpTree.
             assert (TREErcheck: exists trcheck, is_tree rer [Areg r; Acheck i] i (GroupMap.reset (def_groups r) gm) dir trcheck)
               by (eexists; eapply compute_tr_is_tree).
             destruct TREErcheck as [trcheck TREErcheck].
-            pose proof leaves_concat rer _ _ _ [Areg r; Acheck i] [Areg (Quantified true 0 n r)] _ _ ISTREE2 TREErcheck as CONCAT2.
-            pose proof leaves_concat rer _ _ _ [Areg r; Acheck i] [Areg (Quantified true 0 (m + (1 + n))%NoI r)] _ _ ISTREE0 TREErcheck as CONCAT0.
+            pose proof leaves_concat _ _ _ _ [Areg r; Acheck i] [Areg (Quantified true 0 n r)] _ _ ISTREE2 TREErcheck as CONCAT2.
+            pose proof leaves_concat _ _ _ _ [Areg r; Acheck i] [Areg (Quantified true 0 (m + (1 + n))%NoI r)] _ _ ISTREE0 TREErcheck as CONCAT0.
             eapply (flatmap_incl _ _ _ _ _ CONCAT2 CONCAT0); eauto.
             unfold funct_incl. intros a l1 l2 ACT1 ACT2.
             inversion ACT1; subst. inversion ACT2; subst.
@@ -406,8 +406,9 @@ Section RegexpTree.
       forall dir, actions_equiv_dir rer dir [Areg (Quantified true 0 +∞ r); Areg (Quantified true 0 n r)]
         [Areg (Quantified true 0 +∞ r)].
     Proof.
-      unfold actions_equiv_dir.
-      intros dir inp.
+
+      unfold actions_equiv_dir. intros dir. split; try reflexivity.
+      intros inp.
       remember (remaining_length inp dir) as l.
       assert (Hlength_le: remaining_length inp dir <= l) by lia. clear Heql.
       generalize dependent inp.
@@ -417,15 +418,15 @@ Section RegexpTree.
         intros inp Hend gm t1 t2 TREE1 TREE2.
         inversion TREE1; subst. inversion TREE2; subst.
         inversion SKIP0; subst. unfold tree_equiv_tr_dir. simpl.
-        assert (NO_LEAVES: actions_no_leaves rer [Areg r; Acheck inp; Areg (Quantified true 0 plus r);
-          Areg (Quantified true 0 n r)] dir). {
+        assert (NO_LEAVES: actions_no_leaves [Areg r; Acheck inp; Areg (Quantified true 0 plus r);
+          Areg (Quantified true 0 n r)] rer dir). {
           apply actions_no_leaves_add_left with (a := [Areg r]).
           apply actions_no_leaves_add_right with (a := [Acheck inp]) (b := [Areg (Quantified true 0 plus r);
             Areg (Quantified true 0 n r)]).
           apply check_end_no_leaves. lia.
         }
-        assert (NO_LEAVES0: actions_no_leaves rer [Areg r; Acheck inp;
-          Areg (Quantified true 0 plus0 r)] dir). {
+        assert (NO_LEAVES0: actions_no_leaves [Areg r; Acheck inp;
+          Areg (Quantified true 0 plus0 r)] rer dir). {
           apply actions_no_leaves_add_left with (a := [Areg r]).
           apply actions_no_leaves_add_right with (a := [Acheck inp]) (b := [Areg (Quantified true 0 plus0 r)]).
           apply check_end_no_leaves. lia.
@@ -436,8 +437,8 @@ Section RegexpTree.
         inversion SKIP; subst.
         + inversion SKIP0; subst. simpl. reflexivity.
         + inversion SKIP0; subst. simpl.
-          assert (NO_LEAVES1: actions_no_leaves rer [Areg r; Acheck inp;
-            Areg (Quantified true 0 plus1 r)] dir). {
+          assert (NO_LEAVES1: actions_no_leaves [Areg r; Acheck inp;
+            Areg (Quantified true 0 plus1 r)] rer dir). {
             apply actions_no_leaves_add_left with (a := [Areg r]).
             apply actions_no_leaves_add_right with (a := [Acheck inp]) (b := [Areg (Quantified true 0 plus1 r)]).
             apply check_end_no_leaves. lia.
@@ -461,13 +462,13 @@ Section RegexpTree.
             (b2 := [Areg (Quantified true 0 +∞ r)])
             (P := fun lf => StrictSuffix.strict_suffix (fst lf) inp dir)
             (dir := dir).
-          - unfold actions_equiv_dir. intros.
+          - unfold actions_equiv_dir. split; try reflexivity. intros.
             replace t2 with t1 by eauto using is_tree_determ. reflexivity.
           - apply actions_respect_prop_add_left with (a := [Areg r]) (b := [Acheck inp]).
             apply check_actions_prop.
           - apply actions_respect_prop_add_left with (a := [Areg r]) (b := [Acheck inp]).
             apply check_actions_prop.
-          - unfold actions_equiv_dir_cond. intros lf SS t1 t2 TREE1 TREE2.
+          - unfold actions_equiv_dir_cond. split; try reflexivity. intros lf SS t1 t2 TREE1 TREE2.
             apply IHl; auto. pose proof strict_suffix_remaining_length _ _ _ SS. lia.
           - auto.
           - auto.
@@ -482,8 +483,8 @@ Section RegexpTree.
             assert (TREErcheck: exists trcheck, is_tree rer [Areg r; Acheck inp] inp (GroupMap.reset (def_groups r) gm) dir trcheck)
               by (eexists; eapply compute_tr_is_tree).
             destruct TREErcheck as [trcheck TREErcheck].
-            pose proof leaves_concat rer _ _ _ [Areg r; Acheck inp] [Areg (Quantified true 0 n r)] _ _ ISTREE2 TREErcheck as CONCAT2.
-            pose proof leaves_concat rer _ _ _ [Areg r; Acheck inp] [Areg (Quantified true 0 +∞ r)] _ _ ISTREE0 TREErcheck as CONCAT0.
+            pose proof leaves_concat _ _ _ _ [Areg r; Acheck inp] [Areg (Quantified true 0 n r)] _ _ ISTREE2 TREErcheck as CONCAT2.
+            pose proof leaves_concat _ _ _ _ [Areg r; Acheck inp] [Areg (Quantified true 0 +∞ r)] _ _ ISTREE0 TREErcheck as CONCAT0.
             eapply (flatmap_incl _ _ _ _ _ CONCAT2 CONCAT0); eauto.
             unfold funct_incl. intros a l1 l2 ACT1 ACT2.
             inversion ACT1; subst. inversion ACT2; subst.
@@ -500,7 +501,7 @@ Section RegexpTree.
       (Sequence (Quantified true 0 m r) (Quantified true 0 n r))
         ≅[rer] Quantified true 0 (m + n)%NoI r.
     Proof.
-      intros dir. split. 1: { simpl. solve_groups_equiv. }
+      intros dir. split. 1: { simpl. solve_groups_equiv. } split; try reflexivity.
       intros i gm tr1 tr2 TREE1. inversion TREE1; subst. clear TREE1. rewrite app_nil_r in CONT.
       destruct m as [m|]; destruct n as [n|]; destruct dir;
         simpl in CONT; revert i gm tr1 tr2 CONT; simpl.
