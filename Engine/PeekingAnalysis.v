@@ -3,7 +3,7 @@ Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree.
-From Linden Require Import Semantics PikeSubset.
+From Linden Require Import Semantics BooleanSemantics PikeSubset.
 From Linden Require Import Parameters LWParameters.
 From Warblre Require Import Numeric Base RegExpRecord.
 
@@ -21,6 +21,18 @@ Section PeekingAnalysis.
 
   Definition disjoint (cd1 cd2: char_descr) : Prop :=
     forall c, char_match rer c cd1 && char_match rer c cd2 = false.
+
+  Lemma disjoint_read:
+    forall cd1 cd2 inp c nextinp,
+      disjoint cd1 cd2 ->
+      read_char rer cd1 inp forward = Some (c, nextinp) ->
+      read_char rer cd2 inp forward = None.
+  Proof.
+    intros cd1 cd2 [next pref] c nextinp DISJ READ. simpl in *.
+    destruct next as [|h next]; auto.
+    specialize (DISJ h). destruct (char_match rer h cd1); [|discriminate].
+    simpl in DISJ. rewrite DISJ. auto.
+  Qed.
 
   (* the compiler relies only on a sound check of disjointness *)
   (* sound meaning an under-approximation of disjointness is allowed *)
@@ -278,41 +290,40 @@ Section PeekingAnalysis.
   Qed.
 
   Theorem begins_actions_correct:
-    forall act inp gm t cd
-      (TREE: is_tree rer act inp gm forward t)
+    forall act inp b t cd
+      (TREE: bool_tree rer act inp b t)
       (BEG: begins_actions act = Some cd)
       (READ: read_char rer cd inp forward = None),
-      tree_res t gm inp forward = None.
+    forall gm, tree_res t gm inp forward = None.
   Proof.
-    intros act inp gm t cd TREE. revert cd. remember forward as dir eqn:F.
-    induction TREE; intros d B R; subst; simpl in B; simpl; try discriminate; eauto.
+    intros act inp b t cd TREE. revert cd.
+    induction TREE; intros d B R gm; simpl in B; simpl; try discriminate; eauto.
     - inversion B. subst. congruence.
     - unfold union_option in B.
       destruct (begins r1 (begins_actions cont)) eqn:B1, (begins r2 (begins_actions cont)) eqn:B2; try discriminate.
       inversion B. subst. apply read_char_union in R as [R1 R2].
-      rewrite (IHTREE1 eq_refl c), (IHTREE2 eq_refl c0); auto.
+      rewrite (IHTREE1 c), (IHTREE2 c0); auto.
     - destruct min as [|min]; try discriminate.
       destruct plus as [[|k]|]; try discriminate.
-      apply (IHTREE eq_refl d); auto.
+      apply (IHTREE d); auto.
     - destruct plus as [[|k]|]; simpl in B; try discriminate.
       all: unfold union_option in B;
         destruct (begins r1 None) eqn:B1, (begins_actions cont) eqn:BC; try discriminate.
       all: inversion B; subst; apply read_char_union in R as [R1 R2].
-      all: assert (T1: tree_res titer (GroupMap.reset (def_groups r1) gm) inp forward = None)
-             by (apply (IHTREE1 eq_refl c); auto; simpl; apply begins_none; auto).
-      all: assert (T2: tree_res tskip gm inp forward = None) by (apply (IHTREE2 eq_refl c0); auto).
+      all: assert (T1: forall g, tree_res titer g inp forward = None)
+             by (intros; apply (IHTREE1 c); auto; simpl; apply begins_none; auto).
+      all: assert (T2: forall g, tree_res tskip g inp forward = None)
+             by (intros; apply (IHTREE2 c0); auto).
       all: destruct greedy; simpl; try rewrite T1; try rewrite T2; auto.
-    - destruct positivity; destruct tree_res as [[]|]; auto;
-        eapply res_indep; apply (IHTREE2 eq_refl d); auto.
   Qed.
 
   Corollary begins_correct:
-    forall r after cont inp gm t cd
+    forall r after cont inp b t cd
       (AFTER: after = None \/ after = begins_actions cont)
-      (TREE: is_tree rer (Areg r :: cont) inp gm forward t)
+      (TREE: bool_tree rer (Areg r :: cont) inp b t)
       (BEG: begins r after = Some cd)
       (READ: read_char rer cd inp forward = None),
-      tree_res t gm inp forward = None.
+    forall gm, tree_res t gm inp forward = None.
   Proof.
     intros. eapply begins_actions_correct; eauto. simpl.
     destruct AFTER; subst; auto. apply begins_none. auto.
