@@ -226,23 +226,23 @@ Section PeekingAnalysis.
 
   (* returns a character descriptor that a regex must begin by matching *)
   (* None means that we can't know for sure what the regex begins with *)
-  (* next is information about what comes after r: what we know we must begin by matching *)
-  Fixpoint begins (r:regex) (next:option char_descr) : option char_descr :=
+  (* after is information about what comes after r: what we know we must begin by matching *)
+  Fixpoint begins (r:regex) (after:option char_descr) : option char_descr :=
     match r with
     | Regex.Character cd => Some cd
-    | Epsilon | Anchor _ | Lookaround _ _ => next
-    | Group _ r1 => begins r1 next
-    | Sequence r1 r2 => begins r1 (begins r2 next)
-    | Disjunction r1 r2 => union_option (begins r1 next) (begins r2 next)
-    | Quantified _ 0 (NoI.N 0) _ => next
-    | Quantified _ 1 (NoI.N 0) r1 => begins r1 next
+    | Epsilon | Anchor _ | Lookaround _ _ => after
+    | Group _ r1 => begins r1 after
+    | Sequence r1 r2 => begins r1 (begins r2 after)
+    | Disjunction r1 r2 => union_option (begins r1 after) (begins r2 after)
+    | Quantified _ 0 (NoI.N 0) _ => after
+    | Quantified _ 1 (NoI.N 0) r1 => begins r1 after
     | Quantified _ 0 (NoI.N 1) r1 | Quantified _ 0 NoI.Inf r1 =>
-        union_option (begins r1 None) next
+        union_option (begins r1 None) after
     | _ => None
     end.
-  (* NOTE: there is a more natural way to define begins without next.
+  (* NOTE: there is a more natural way to define begins without after.
      However, this continuation-passing-style facilitates the proofs about
-     the compiler, since the compiler also has access to a next. *)
+     the compiler, since the compiler also has access to a after. *)
 
   (* lift to actions for the proof *)
   Fixpoint begins_actions (l:list action) : option char_descr :=
@@ -254,7 +254,7 @@ Section PeekingAnalysis.
 
   (* if the begins is found within the regex, adding to the continuation doesn't change that *)
   Lemma begins_none:
-    forall r cd next, begins r None = Some cd -> begins r next = Some cd.
+    forall r cd after, begins r None = Some cd -> begins r after = Some cd.
   Proof.
     induction r; simpl; intros d n BEG; try discriminate; auto.
     - unfold union_option in *.
@@ -307,15 +307,15 @@ Section PeekingAnalysis.
   Qed.
 
   Corollary begins_correct:
-    forall r next cont inp gm t cd
-      (NEXT: next = None \/ next = begins_actions cont)
+    forall r after cont inp gm t cd
+      (AFTER: after = None \/ after = begins_actions cont)
       (TREE: is_tree rer (Areg r :: cont) inp gm forward t)
-      (BEG: begins r next = Some cd)
+      (BEG: begins r after = Some cd)
       (READ: read_char rer cd inp forward = None),
       tree_res t gm inp forward = None.
   Proof.
     intros. eapply begins_actions_correct; eauto. simpl.
-    destruct NEXT; subst; auto. apply begins_none. auto.
+    destruct AFTER; subst; auto. apply begins_none. auto.
   Qed.
 
 End PeekingAnalysis.

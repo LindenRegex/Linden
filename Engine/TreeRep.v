@@ -210,10 +210,10 @@ Proof.
     2: { in_subset. }
     eapply tr_choice; eauto.
     + eapply IHTREE1. pike_subset.
-      eapply cons_bc with (pcmid:=end1); try constructor; eauto.
+      eapply cons_bc with (pcmid:=end1); [eapply areg_bc; eauto|assumption|].
       eapply jump_bc; eauto.
     + eapply IHTREE2; eauto. pike_subset.
-      repeat (econstructor; eauto).
+      prove_actions_rep.
   (* sequence *)
   - remember (Areg (Sequence r1 r2) :: cont) as seqcont.
     induction ACT; inversion Heqseqcont; subst;
@@ -221,7 +221,7 @@ Proof.
     invert_rep. inversion NFA; subst.
     2: { in_subset. }
     eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto).
+    prove_actions_rep.
   (* quantified, forced *)
   - remember (Areg (Quantified greedy (S min) plus r1) :: cont) as onecont.
     induction ACT; inversion Heqonecont; subst;
@@ -230,11 +230,7 @@ Proof.
     2: { in_subset. }
     eapply tr_reset; eauto.
     eapply IHTREE; eauto. pike_subset.
-    eapply cons_bc with (pcmid:=pcmid).
-    { constructor. eauto. }
-    eapply cons_bc with (pcmid:=pcmid).
-    { constructor. apply nfa_rep_done. }
-    auto.
+    prove_actions_rep.
   (* quantified, done *)
   - remember (Areg (Quantified greedy 0 (NoI.N 0) r1) :: cont) as zerocont.
     induction ACT; inversion Heqzerocont; subst;
@@ -259,14 +255,14 @@ Proof.
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.
            eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+           prove_actions_rep.
         ** eapply IHTREE2; eauto. pike_subset.
       * eapply tr_choice; eauto.
         ** eapply IHTREE2; eauto. pike_subset.
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.
            eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+           prove_actions_rep.
     (* Star *)
     + destruct plus; inversion DINF. clear DINF.
       simpl in ACT.
@@ -280,14 +276,14 @@ Proof.
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.
            eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+           prove_actions_rep.
         ** eapply IHTREE2; eauto. pike_subset.
       * eapply tr_choice; eauto.
         ** eapply IHTREE2; eauto. pike_subset.
         ** eapply tr_begin; eauto.
            eapply tr_reset; eauto.
            eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+           prove_actions_rep.
     (* Unsupported *)
     + rewrite DUN in SUBSET. inversion SUBSET; subst.
       inversion H1; subst. inversion H0; subst; lia.
@@ -299,7 +295,7 @@ Proof.
     2: { in_subset. }
     eapply tr_open; eauto.
     eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto).
+    prove_actions_rep.
   (* anchor *)
   - remember (Areg (Anchor a) :: cont) as anchorcont.
     induction ACT; inversion Heqanchorcont; subst;
