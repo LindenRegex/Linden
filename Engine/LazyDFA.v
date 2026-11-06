@@ -648,11 +648,6 @@ Proof.
   apply possible_all; auto.
 Qed.
 
-(* Ltac step_solver :=
-  match goal with
-  | H: ?l :: tail = ?new_wq ++ ?tail |- _ => assert (new_wq = l) by (apply (app_inv_tail tail); auto)
-  end.  *)
-
 Lemma eps_step_wf:
   forall code inp out1 out2 curr tail new_wq new_st i
   (STEP: epsilon_loop_rel code (LDFA_Eps_Running inp out1 (curr :: tail)) (LDFA_Eps_Running inp out2 (new_wq ++ tail)))
@@ -700,6 +695,31 @@ Proof.
   subst; inversion H; unfold next_step in *; simpl; auto; rewrite <- H0; simpl; lia. 
 Qed.
 
+Lemma full_out: forall (code: NFA.code) out (curr: internal_state)
+  (WFOUT : Forall (fun '(l, _) => l < length code) out)
+  (FULLOUT : length out = length (possible_elements (length code)))
+  (NODUP : NoDup out)
+  (WFCURR : fst curr < length code),
+    dfa_state_contains out curr = true.
+Proof.
+  unfold size; intros.
+  destruct (dfa_contains_in out curr) as [hin1 hin2].
+  destruct (dfa_state_contains out curr) eqn:H; [reflexivity |].
+  exfalso.
+  assert (NIN : ~ In curr out).
+  { intro HIN. specialize (hin2 HIN). congruence. }
+  assert (LEN : length (curr :: out) <= length (possible_elements (length code))).
+  { apply NoDup_incl_length.
+    - constructor; assumption.
+    - intros [l b] IN. destruct IN as [EQ | IN].
+      + subst curr. apply possible_all. exact WFCURR.
+      + rewrite Forall_forall in WFOUT.
+        specialize (WFOUT _ IN). simpl in WFOUT.
+        apply possible_all. exact WFOUT. }
+  simpl in LEN. rewrite <- FULLOUT in LEN.
+  eapply PeanoNat.Nat.nle_succ_diag_l; eauto.
+Qed.
+
 Theorem ldfa_eps_decreases:
   forall code s1 s2 m1,
     code_wf code (size code) ->
@@ -709,105 +729,21 @@ Theorem ldfa_eps_decreases:
     exists m2, ldfa_eps_inv code s2 m2 /\ m2 < m1.
 Proof.
   intros code s1 s2 m1 WFCODE STEP INV1.
-  (* 
-  inversion STEP; subst; inversion INV1; subst.
-  - exists 0. split; [constructor|unfold eps_measure; lia].
-  - exists (eps_measure code out tail); unfold eps_measure in *; split ; [constructor; auto | auto]. 
-  - exists (eps_measure code (out ++ [curr]) tail); unfold eps_measure in *; split; [constructor | ]. 
-  *)
   inversion STEP; inversion INV1; 
   exists (eps_measure code s2); subst; 
   pose proof (out_size _ _ NODUP WFOUT) as OUTBOUND; 
   unfold eps_measure, in_range, get_wq, get_out, code_wf, is_epsilon_skip in *
   ; [ .. | destruct (get_pc code (fst curr)) eqn:GET; [ destruct b | ]; try congruence].
-  all: split; [constructor | ]; repeat simpl_length; repeat solver. 
-  (* need to say next_step(curr) is also valid, like eps_step_x_wf -> done *)
-  (* need to say |out| < 2*codesize -> just need |out| != 2*codesize *)
-  
-(*   
-
-  all: split; [constructor(* ; unfold out_bound; auto *) | ](* ; simpl;
-    repeat match goal with
-    | H: _ |- context[length (_ ++ _)] => rewrite length_app
-    | H: _ |- context[length (_ :: _)] => rewrite length_cons
-    end; try lia *).
-  5: { unfold get_out, get_wq, out_nodup, out_bound in *. simpl.
-  repeat match goal with
-    | H: _ |- context[length (_ ++ _)] => rewrite length_app
-    | H: _ |- context[length (_ :: _)] => rewrite length_cons
-    | H: _ |- context[_ + 0] => rewrite PeanoNat.Nat.add_0_r
-    | H: _ |- S _ < S _ => rewrite <- PeanoNat.Nat.succ_lt_mono
-    end. simpl.
-    Search (_ <= _ <-> _ \/ _).
-    apply PeanoNat.Nat.le_lteq in OUTBOUND as [h1 | h2]. lia.
-     assert (2 * length code > length out) by admit; lia. }
-  
-  all: simpl;
-    repeat match goal with
-    | H: _ |- context[_ + 0] => rewrite PeanoNat.Nat.add_0_r
-    | H: _ |- S _ < S _ => rewrite <- PeanoNat.Nat.succ_lt_mono
-    end.
-  all: destruct (length out) eqn:hout; simpl; try lia.
-  
-  - inversion OUTBOUND. admit. lia.
-  (* 
-  PeanoNat.Nat.lt_pred_le: forall n m : nat, PeanoNat.Nat.pred n < m -> n <= m 
-  PeanoNat.Nat.lt_succ_r: forall n m : nat, n < S m <-> n <= m 
-  PeanoNat.Nat.le_succ_l: forall n m : nat, S n <= m <-> n < m
-  *)
-  all: assert (2 * length code > length out) by admit; lia.
-  all: unfold dfa_state, internal_state in *;
-    remember (length code) as c;
-    remember (length out) as o;
-    remember (length tail) as t.
-
-  (* all: assert (2*c > 1 + o) by admit.
-  all: lia. *)
-  - (* fork: we insert current in out, and head of workqueue is direct followup, but we also add the future explo at the tail *)
-(*   
-  simpl. remember (length code) as n. remember (length out) as o.
-  unfold internal_state in *.
-  remember (length tail) as t.
-  lia. *)
-  admit.
-
- (*  Search (_ + 0).
-  intros.
-  repeat match goal with
-  | H: _ |- context[_ + 0] => rewrite PeanoNat.Nat.add_0_r
-  end.
-  Search (S _ < S _).
-  repeat rewrite <- PeanoNat.Nat.succ_lt_mono.
-  repeat rewrite PeanoNat.Nat.sub_add_distr.
-  rewrite <- PeanoNat.Nat.add_succ_r.
-  rewrite <- PeanoNat.Nat.add_lt_mono_l.
-  rewrite <- PeanoNat.Nat.add_1_r.
-  assert (n + n - o + (n + n - o) >= 1) by admit.
-  lia.
-  rewrite <- PeanoNat.Nat.add_lt_mono_r.
-  Search (_ + _ < _ + _). *)
-  
-  (* Set Printing All. *)
-  
-  (* admit. *)
-  - (* jump : we go to the indicated label *)
-    (* unfold dfa_state, internal_state in *. 
-    (* Set Printing All. *)
-    remember (length code) as n.
-    remember (length out) as o.
-    remember (length tail) as t.
-    lia. *)
-  admit.
-  - (* satisfied anchor : we continue to the next pc *)
-  admit.
-  -  (* beginloop : we continue to next pc and set loop bool *)
-  admit.
-  - (* end_loop which can exit : we continue to next label *)
-  admit.
-  - (* we consider capture groups operations as nop and simply skip them *)
-  admit. *)
-
-Admitted.
+  all: split; [constructor | ]; repeat simpl_length; repeat solver.
+  all: unfold internal_state, label in *; rewrite PeanoNat.Nat.le_lteq in OUTBOUND; destruct OUTBOUND; try lia. 
+  all: 
+    replace (length code + length code) with (2 * length code) in * by lia;
+    rewrite <- possible_size in *;
+    destruct curr as [l0 b0] eqn:HCURR;
+    inversion WFWQ; subst;
+    pose proof (full_out code out (l0, b0) WFOUT H NODUP H2);
+    congruence.
+  Qed.
 
 
 (* 
