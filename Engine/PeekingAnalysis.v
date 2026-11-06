@@ -218,6 +218,12 @@ Section PeekingAnalysis.
   (* For quantifiers, to know if peeking is possible, we need to know what the
    sub-regex after the quantifier must begin with. *)
 
+  Definition union_option (o1 o2: option char_descr) : option char_descr :=
+    match o1, o2 with
+    | Some cd1, Some cd2 => Some (CdUnion cd1 cd2)
+    | _, _ => None
+    end.
+
   (* returns a character descriptor that a regex must begin by matching *)
   (* None means that we can't know for sure what the regex begins with *)
   (* next is information about what comes after r: what we know we must begin by matching *)
@@ -227,11 +233,11 @@ Section PeekingAnalysis.
     | Epsilon | Anchor _ | Lookaround _ _ => next
     | Group _ r1 => begins r1 next
     | Sequence r1 r2 => begins r1 (begins r2 next)
-    | Disjunction r1 r2 =>
-        match begins r1 next, begins r2 next with
-        | Some cd1, Some cd2 => Some (CdUnion cd1 cd2)
-        | _, _ => None
-        end
+    | Disjunction r1 r2 => union_option (begins r1 next) (begins r2 next)
+    | Quantified _ 0 (NoI.N 0) _ => next
+    | Quantified _ 1 (NoI.N 0) r1 => begins r1 next
+    | Quantified _ 0 (NoI.N 1) r1 | Quantified _ 0 NoI.Inf r1 =>
+        union_option (begins r1 None) next
     | _ => None
     end.
   (* NOTE: there is a more natural way to define begins without next.
@@ -251,10 +257,15 @@ Section PeekingAnalysis.
     forall r cd next, begins r None = Some cd -> begins r next = Some cd.
   Proof.
     induction r; simpl; intros d n BEG; try discriminate; auto.
-    - destruct (begins r1 None) eqn:B1; destruct (begins r2 None) eqn:B2; try discriminate.
+    - unfold union_option in *.
+      destruct (begins r1 None) eqn:B1; destruct (begins r2 None) eqn:B2; try discriminate.
       erewrite IHr1; try erewrite IHr2; eauto.
     - destruct (begins r2 None) eqn:B2; auto.
       erewrite IHr2; eauto.
+    - destruct min as [|[|min]]; try discriminate.
+      + destruct delta as [[|[|k]]|]; try discriminate;
+          unfold union_option in BEG; destruct (begins r None); discriminate.
+      + destruct delta as [[|k]|]; try discriminate. eapply IHr; eauto.
   Qed.
 
   Lemma read_char_union:
@@ -276,9 +287,21 @@ Section PeekingAnalysis.
     intros act inp gm t cd TREE. revert cd. remember forward as dir eqn:F.
     induction TREE; intros d B R; subst; simpl in B; simpl; try discriminate; eauto.
     - inversion B. subst. congruence.
-    - destruct (begins r1 (begins_actions cont)) eqn:B1, (begins r2 (begins_actions cont)) eqn:B2; try discriminate.
+    - unfold union_option in B.
+      destruct (begins r1 (begins_actions cont)) eqn:B1, (begins r2 (begins_actions cont)) eqn:B2; try discriminate.
       inversion B. subst. apply read_char_union in R as [R1 R2].
       rewrite (IHTREE1 eq_refl c), (IHTREE2 eq_refl c0); auto.
+    - destruct min as [|min]; try discriminate.
+      destruct plus as [[|k]|]; try discriminate.
+      apply (IHTREE eq_refl d); auto.
+    - destruct plus as [[|k]|]; simpl in B; try discriminate.
+      all: unfold union_option in B;
+        destruct (begins r1 None) eqn:B1, (begins_actions cont) eqn:BC; try discriminate.
+      all: inversion B; subst; apply read_char_union in R as [R1 R2].
+      all: assert (T1: tree_res titer (GroupMap.reset (def_groups r1) gm) inp forward = None)
+             by (apply (IHTREE1 eq_refl c); auto; simpl; apply begins_none; auto).
+      all: assert (T2: tree_res tskip gm inp forward = None) by (apply (IHTREE2 eq_refl c0); auto).
+      all: destruct greedy; simpl; try rewrite T1; try rewrite T2; auto.
     - destruct positivity; destruct tree_res as [[]|]; auto;
         eapply res_indep; apply (IHTREE2 eq_refl d); auto.
   Qed.
