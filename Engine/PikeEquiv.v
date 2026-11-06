@@ -6,6 +6,7 @@ Import ListNotations.
 From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree Semantics BooleanSemantics.
 From Linden Require Import NFA PikeTree PikeVM.
+From Linden Require Import PeekingAnalysis.
 From Linden Require Import PikeSubset.
 From Linden Require Import TreeRep SeenSets.
 From Linden Require Import Parameters Prefix.
@@ -17,6 +18,7 @@ Section PikeEquiv.
   Context {TS: TSeen params}.
   Context {VMS: VMSeen}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
 
 (** * Simulation Invariant  *)
 

@@ -21,6 +21,7 @@ Section CodeWF.
 
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
 
   Definition size (c:code) : nat := length c.
 
@@ -249,6 +250,8 @@ End CodeWF.
 Section CodeSize.
 
   Context {params: LindenParameters}.
+  Context {rer: RegExpRecord}.
+  Context {disj: Disjoint rer}.
 
   (** * Code Size  *)
 
@@ -468,6 +471,7 @@ End CountedTRC.
 Section PikeVMComplexity.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
   Context {VMS: VMSeen}.
 
   (** * Free slots  *)
@@ -867,6 +871,7 @@ Section MemoBTComplexity.
   Context {params: LindenParameters}.
   Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
   Context {VMS: VMSeen}.
 
   (** * Valid Inputs  *)

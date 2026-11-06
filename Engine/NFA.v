@@ -10,6 +10,8 @@ From Warblre Require Import Numeric.
 
 Section NFA.
   Context {params: LindenParameters}.
+  Context {rer: RegExpRecord.RegExpRecord}.
+  Context {disj: Disjoint rer}.
 
   (** * Peeking  *)
   (* As an optimization, we allow the Fork instruction to peek at
@@ -124,10 +126,35 @@ Section NFA.
 
   (** * NFA Compilation  *)
 
+  (* computes the annotation of a fork, given the result of the begins analysis *)
+  Definition compute_peek (g:bool) (o1 o2: option char_descr) : peek :=
+    match o1, o2 with
+    | Some cd1, Some cd2 => if disjoint_checker rer cd1 cd2 then Branch cd1 g else NoPeek
+    | _, _ => NoPeek
+    end.
+
+  Lemma compute_peek_cases:
+    forall g o1 o2,
+      compute_peek g o1 o2 = NoPeek \/
+        exists cd1 cd2, o1 = Some cd1 /\ o2 = Some cd2 /\
+                     disjoint_checker rer cd1 cd2 = true /\
+                     compute_peek g o1 o2 = Branch cd1 g.
+  Proof.
+    intros g [cd1|] [cd2|]; unfold compute_peek; auto.
+    destruct (disjoint_checker rer cd1 cd2) eqn:D; auto.
+    right. exists cd1, cd2. auto.
+  Qed.
+
+  (* a branch must not swap out its order of labels
+     because the character descriptor that we put inside it always
+     refers to the first label *)
   Definition greedy_fork (greedy:bool) (p:peek) (l1 l2:label) :=
     if greedy
     then Fork p l1 l2
-    else Fork p l2 l1.
+    else match p with
+         | Branch _ _ => Fork p l1 l2
+         | NoPeek => Fork p l2 l1
+         end.
 
   (* also returns the next fresh label *)
   (* after describes what must be read after the current regex being compiled,

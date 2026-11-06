@@ -9,6 +9,7 @@ From Linden.Rewriting Require Import QuantifierExpansion.
 From Warblre Require Import Numeric Base.
 From Linden Require Import Chars Groups Tree Semantics FunctionalUtils.
 From Linden Require Import NFA PikeVM SeenSets Correctness.
+From Linden Require Import PeekingAnalysis.
 From Linden Require Import Prefix MemoBT EquivMain RegexpTranslation ResultTranslation LWParameters.
 From Linden.Rewriting Require Import Equivalence.
 From Warblre Require Import RegExpRecord Semantics Result StaticSemantics.
@@ -99,6 +100,7 @@ Section ExpansionCorrectness.
   Context {params: LindenParameters}.
   Context {VMS: VMSeen}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
 
   (* Using equivaence to transfer a first leaf result *)
   Lemma first_leaf_transfer r1 r2 inp t1 result:
