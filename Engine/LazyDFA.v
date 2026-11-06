@@ -42,6 +42,16 @@ Definition dec_eqb {T} (dec : forall x y : T, {x = y} + {x <> y}) (x y : T) : bo
 Definition dfa_state_contains (st: dfa_state) (i: internal_state) : bool :=
   List.existsb (fun x => dec_eqb internal_state_eq_dec x i) st.
 
+Theorem dfa_contains_in:
+  forall st i,
+  dfa_state_contains st i = true <-> In i st.
+Proof.
+  split; unfold dfa_state_contains; intros;
+  destruct (existsb_exists (fun x => dec_eqb internal_state_eq_dec x i) st) as [Hex1 Hex2]; unfold dec_eqb in *.
+  - specialize (Hex1 H); destruct Hex1 as [ii[ h1 h2]]; destruct (internal_state_eq_dec ii i); subst; congruence.
+  - apply Hex2. exists i; split; destruct (internal_state_eq_dec i i); auto.
+Qed.
+
 Definition dfa_state_hasmatch (c:code) (st: dfa_state) : bool :=
   List.existsb (fun '(l, b) => match (get_pc c l) with | Some Accept => true | _ => false end) st.
 
@@ -289,7 +299,7 @@ Proof.
   apply IHc0_2; auto.
 Qed.
 
-(* 
+(*  
     x -> y & x -*> b means 
     either x->y was the first (deter) step towards b and thus we can continue y-*>b 
     or it already is b
@@ -505,7 +515,8 @@ Inductive ldfa_eps_inv (c:code): ldfa_epsilon_state -> nat -> Prop :=
 | eps_inv_done:
   forall out, ldfa_eps_inv c (LDFA_Eps_Done out) 0
 | eps_inv_running:
-  forall inp out wq,
+  forall inp out wq
+    (OUT_BOUND: length out <= 2 * length c),
     ldfa_eps_inv c (LDFA_Eps_Running inp out wq) (eps_measure c out wq). *)
 
 Definition eps_measure (c:code) (st: ldfa_epsilon_state): nat :=
@@ -514,38 +525,241 @@ Definition eps_measure (c:code) (st: ldfa_epsilon_state): nat :=
   | LDFA_Eps_Running inp out wq => 1 + length wq + 2 * (2 * length c - length out)
   end.
 
+(* 
+From Complexity.c :
+
+  (* Some bytecode is well-formed if every target label belongs in some range *)
+  Definition code_wf (c:code) (size:nat) :=
+    forall pc i next,
+      get_pc c pc = Some i ->
+      In next (next_pcs pc i) ->
+      next < size.
+
+  Theorem compiled_wf:
+    forall r, code_wf (compilation r) (size (compilation r)).
+
+  possible_elements & possible_all
+
+*)
+
+(* every label is in the code *)
+Definition in_range (c:code) (st: dfa_state) : Prop :=
+  List.Forall (fun '(l, b) => l < length c) st.
+
+Definition get_out (st: ldfa_epsilon_state): dfa_state :=
+  match st with
+  | LDFA_Eps_Done out => out
+  | LDFA_Eps_Running inp out wq => out
+  end.
+
+Definition get_wq (st: ldfa_epsilon_state): dfa_state :=
+  match st with
+  | LDFA_Eps_Done out => []
+  | LDFA_Eps_Running inp out wq => wq
+  end.
+
 (* The invariant that is preserved through epsilon steps, with a measure that strictly decreases *)
 Inductive ldfa_eps_inv (c:code): ldfa_epsilon_state -> nat -> Prop :=
-| eps_inv: forall st, ldfa_eps_inv c st (eps_measure c st).
+| eps_inv: forall st
+  (* (OUTBOUND: length (get_out st) <= 2 * length (c)) // découle de wf *)
+  (NODUP: NoDup (get_out st))
+  (WFOUT: in_range c (get_out st))
+  (WFWQ: in_range c (get_wq st)),
+  ldfa_eps_inv c st (eps_measure c st).
 
 (* on sait que forall out in Eps_Running states, out <= 2x codesize 
-parce que c'est des distinct states équiv à "seen" *)
+parce que c'est des distinct states équiv à "seen" 
+wf_size dit la même
+*)
+
+(* 
+peut etre faudrait une def de "valid state" càd un state atteignable -> wellformed??????
+
+comme ça on peut prouver que tt eps_stt atteignables a un out sans dupli
+
+en fait on sait que "2*codesize - |out|" c'est pas = 0 parce que out contient pas curr, donc forcément il reste des free spots 
+*)
+
+Ltac simpl_length := 
+  match goal with
+  | H: _ |- context[length (_ ++ _)] => rewrite length_app
+  | H: _ |- context[length (_ :: _)] => rewrite length_cons
+  | H: _ |- context[_ + 0] => rewrite PeanoNat.Nat.add_0_r
+  | H: context[_ + 0] |- _ => rewrite PeanoNat.Nat.add_0_r in H
+  | H: _ |- S _ < S _ => rewrite <- PeanoNat.Nat.succ_lt_mono 
+  | _ => unfold in_range; simpl in *; auto; try lia
+  end.
+
+Ltac solver :=
+  match goal with
+  | H: Forall ?P (?a :: ?l) |- Forall ?p ?l => eapply Forall_inv_tail; eauto
+  | H: NoDup ?out |- NoDup (?out ++ ?curr) => apply NoDup_app; auto; [constructor; auto; constructor | ]
+  | HIN: In ?a ?out, NOTSEEN: dfa_state_contains ?out ?a = false |- _ 
+    => destruct (dfa_contains_in out a) as [hin1 hin2]; specialize (hin2 HIN); congruence
+  | H: _ \/ _ |- _ => destruct H
+  | WFWQ: Forall ?P (?curr :: ?tail) |- Forall ?P (?out ++ [?curr]) 
+    => apply Forall_app; split; auto; apply Forall_cons; auto; eapply (Forall_inv WFWQ)
+  | H: _ |- Forall _ (_ :: _) => constructor
+  | WFCODE : forall (pc : label) (i : bytecode) (next : label),
+    get_pc ?c pc = Some i -> In next (next_pcs pc i) -> next < size ?code |- _ < length ?code 
+    => eapply WFCODE
+  | H: _ |- S (fst ?curr) = fst ?curr + 1 \/ _ => left; lia
+  | _ => unfold not; intros; subst; simpl in *; eauto
+  end.
+
+(* TODO ? unsure if really needed, surtout que on peut pas add à out de Done
+Lemma free_add:
+    forall seen size dist t,
+      wf seen size dist ->
+      seen_thread seen t = false ->
+      fst (fst t) < size ->
+      wf (add_thread seen t) size ((fst (fst t),snd t)::dist).
+
+===>
+Lemma add_to_out:
+  forall seen code dist t,
+    (* LDFA_Eps_Running (inp: input) (out: dfa_state) (workqueue: dfa_state) *)
+    in_range c out -> (* valid out *)
+    dfa_state_contains out curr = false -> (* curr not seen aka not in out *)
+    fst curr < length code ->
+    in_range c (). *)
+
+Lemma out_small:
+  forall code dfa_st l b 
+  (WFOUT: in_range code dfa_st) 
+  (INOUT: In (l, b) dfa_st), 
+    l < length code.
+Proof.
+  intros. unfold in_range in *.
+  rewrite Forall_forall in WFOUT.
+  specialize (WFOUT (l, b) INOUT). auto.
+Qed.
+
+Theorem out_size:
+  forall code dfa_st
+  (NODUP: NoDup dfa_st)
+  (WFOUT: in_range code dfa_st),
+    length dfa_st <= 2 * length code.
+Proof.
+  intros. rewrite <- possible_size.
+  apply NoDup_incl_length; auto.
+  unfold incl in *; intros [l b] HIN.
+  pose proof (out_small _ _ _ _ WFOUT HIN).
+  apply possible_all; auto.
+Qed.
+
+(* Ltac step_solver :=
+  match goal with
+  | H: ?l :: tail = ?new_wq ++ ?tail |- _ => assert (new_wq = l) by (apply (app_inv_tail tail); auto)
+  end.  *)
+
+Lemma eps_step_wf:
+  forall code inp out1 out2 curr tail new_wq new_st i
+  (STEP: epsilon_loop_rel code (LDFA_Eps_Running inp out1 (curr :: tail)) (LDFA_Eps_Running inp out2 (new_wq ++ tail)))
+  (GET: get_pc code (fst curr) = Some i)
+  (NOTSEEN: dfa_state_contains out1 curr = false),
+    In new_st new_wq ->
+      In (fst new_st) (next_pcs (fst curr) i).
+Proof.
+  intros.
+  inversion STEP; subst; [congruence | ..]; unfold is_epsilon_break, is_epsilon_skip, next_pcs in *.
+  - assert (new_wq = []) by 
+  (apply (app_inv_tail tail); auto). 
+  subst; inversion H.
+  - assert (new_wq = [(out0, snd curr); (out3, snd curr)]) by 
+  (apply (app_inv_tail tail); auto). 
+  assert (i = (Fork out0 out3)) by congruence.
+  subst; inversion H ; [| inversion H0]; subst; simpl; auto.
+  - assert (new_wq = [(l, snd curr)]) by 
+  (apply (app_inv_tail tail); auto). 
+  assert (i = (Jmp l)) by congruence.
+  subst; inversion H; [| inversion H0]; subst; simpl; auto.
+  - assert (new_wq = []) by 
+  (apply (app_inv_tail tail); auto). 
+  assert (i = (CheckAnchor anc)) by congruence.
+  subst; inversion H.
+  - assert (new_wq = [next_step curr]) by 
+  (apply (app_inv_tail tail); auto). 
+  assert (i = (CheckAnchor anc)) by congruence.
+  unfold next_step in *; subst; inversion H; subst; simpl; auto; lia.
+  - assert (new_wq = [(fst curr + 1, CannotExit)]) by 
+  (apply (app_inv_tail tail); auto). 
+  assert (i = (BeginLoop)) by congruence.
+  subst; inversion H; subst; simpl; auto; lia.
+  - assert (new_wq = [(l, CanExit)]) by 
+  (apply (app_inv_tail tail); auto). 
+  assert (i = (EndLoop l)) by congruence.
+  subst; inversion H; subst; simpl; auto; lia.
+  - assert (new_wq = []) by 
+  (apply (app_inv_tail tail); auto). 
+  assert (i = (EndLoop l)) by congruence.
+  subst; inversion H.  
+  - assert (new_wq = [next_step curr]) by 
+  (apply (app_inv_tail tail); auto). 
+  destruct (get_pc code (fst curr)); [destruct b|]; try congruence; inversion GET;
+  subst; inversion H; unfold next_step in *; simpl; auto; rewrite <- H0; simpl; lia. 
+Qed.
 
 Theorem ldfa_eps_decreases:
   forall code s1 s2 m1,
+    code_wf code (size code) ->
+    (* nonempty code -> *)
     epsilon_loop_rel code s1 s2 ->
     ldfa_eps_inv code s1 m1 ->
     exists m2, ldfa_eps_inv code s2 m2 /\ m2 < m1.
 Proof.
-  intros code s1 s2 m1 STEP INV1.
+  intros code s1 s2 m1 WFCODE STEP INV1.
+  (* 
+  inversion STEP; subst; inversion INV1; subst.
+  - exists 0. split; [constructor|unfold eps_measure; lia].
+  - exists (eps_measure code out tail); unfold eps_measure in *; split ; [constructor; auto | auto]. 
+  - exists (eps_measure code (out ++ [curr]) tail); unfold eps_measure in *; split; [constructor | ]. 
+  *)
   inversion STEP; inversion INV1; 
-  exists (eps_measure code s2); subst; unfold eps_measure in *. 
+  exists (eps_measure code s2); subst; 
+  pose proof (out_size _ _ NODUP WFOUT) as OUTBOUND; 
+  unfold eps_measure, in_range, get_wq, get_out, code_wf, is_epsilon_skip in *
+  ; [ .. | destruct (get_pc code (fst curr)) eqn:GET; [ destruct b | ]; try congruence].
+  all: split; [constructor | ]; repeat simpl_length; repeat solver. 
+  (* need to say next_step(curr) is also valid, like eps_step_x_wf -> done *)
+  (* need to say |out| < 2*codesize -> just need |out| != 2*codesize *)
+  
+(*   
 
-  all: split; [constructor | ]; simpl;
+  all: split; [constructor(* ; unfold out_bound; auto *) | ](* ; simpl;
     repeat match goal with
     | H: _ |- context[length (_ ++ _)] => rewrite length_app
     | H: _ |- context[length (_ :: _)] => rewrite length_cons
+    end; try lia *).
+  5: { unfold get_out, get_wq, out_nodup, out_bound in *. simpl.
+  repeat match goal with
+    | H: _ |- context[length (_ ++ _)] => rewrite length_app
+    | H: _ |- context[length (_ :: _)] => rewrite length_cons
+    | H: _ |- context[_ + 0] => rewrite PeanoNat.Nat.add_0_r
     | H: _ |- S _ < S _ => rewrite <- PeanoNat.Nat.succ_lt_mono
-    end; try lia.
+    end. simpl.
+    Search (_ <= _ <-> _ \/ _).
+    apply PeanoNat.Nat.le_lteq in OUTBOUND as [h1 | h2]. lia.
+     assert (2 * length code > length out) by admit; lia. }
   
+  all: simpl;
+    repeat match goal with
+    | H: _ |- context[_ + 0] => rewrite PeanoNat.Nat.add_0_r
+    | H: _ |- S _ < S _ => rewrite <- PeanoNat.Nat.succ_lt_mono
+    end.
+  all: destruct (length out) eqn:hout; simpl; try lia.
+  
+  - inversion OUTBOUND. admit. lia.
+  (* 
+  PeanoNat.Nat.lt_pred_le: forall n m : nat, PeanoNat.Nat.pred n < m -> n <= m 
+  PeanoNat.Nat.lt_succ_r: forall n m : nat, n < S m <-> n <= m 
+  PeanoNat.Nat.le_succ_l: forall n m : nat, S n <= m <-> n < m
+  *)
+  all: assert (2 * length code > length out) by admit; lia.
   all: unfold dfa_state, internal_state in *;
     remember (length code) as c;
     remember (length out) as o;
-    remember (length tail) as t;
-    simpl;
-    repeat match goal with
-    | H: _ |- context[_ + 0] => rewrite PeanoNat.Nat.add_0_r
-    end.
+    remember (length tail) as t.
 
   (* all: assert (2*c > 1 + o) by admit.
   all: lia. *)
@@ -591,7 +805,7 @@ Proof.
   - (* end_loop which can exit : we continue to next label *)
   admit.
   - (* we consider capture groups operations as nop and simply skip them *)
-  admit.
+  admit. *)
 
 Admitted.
 
