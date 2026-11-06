@@ -165,6 +165,7 @@ Section PeekingAnalysis.
 
   (** * Strictly Nullable Analysis  *)
   (* this is used to analyze a sequence after a quantifier in the begins analysis below *)
+  (* NOTE: using the new begins analysis, strictly nullable analysis might not be needed anymore *)
 
   (* an under-approximating strictly nullable analysis to help analyze the sequence *)
   Fixpoint strictly_nullable (r:regex) : bool :=
@@ -219,51 +220,41 @@ Section PeekingAnalysis.
 
   (* returns a character descriptor that a regex must begin by matching *)
   (* None means that we can't know for sure what the regex begins with *)
-  Fixpoint begins (r:regex) : option char_descr :=
+  (* next is information about what comes after r: what we know we must begin by matching *)
+  Fixpoint begins (r:regex) (next:option char_descr) : option char_descr :=
     match r with
     | Regex.Character cd => Some cd
-    | Group _ r1 => begins r1
-    | Sequence r1 r2 =>
-        match strictly_nullable r1 with
-        | true => begins r2
-        | false => begins r1
-        end
+    | Epsilon | Anchor _ | Lookaround _ _ => next
+    | Group _ r1 => begins r1 next
+    | Sequence r1 r2 => begins r1 (begins r2 next)
     | Disjunction r1 r2 =>
-        match begins r1, begins r2 with
+        match begins r1 next, begins r2 next with
         | Some cd1, Some cd2 => Some (CdUnion cd1 cd2)
         | _, _ => None
         end
     | _ => None
     end.
+  (* NOTE: there is a more natural way to define begins without next.
+     However, this continuation-passing-style facilitates the proofs about
+     the compiler, since the compiler also has access to a next. *)
 
   (* lift to actions for the proof *)
   Fixpoint begins_actions (l:list action) : option char_descr :=
     match l with
     | [] => None
-    | Areg r :: cont =>
-        match begins r with
-        | Some cd => Some cd
-        | None => if strictly_nullable r then begins_actions cont else None
-        end
+    | Areg r :: cont => begins r (begins_actions cont)
     | _ :: cont => begins_actions cont
     end.
 
-  Lemma begins_not_nullable:
-    forall r cd, begins r = Some cd -> strictly_nullable r = false.
+  (* if the begins is found within the regex, adding to the continuation doesn't change that *)
+  Lemma begins_none:
+    forall r cd next, begins r None = Some cd -> begins r next = Some cd.
   Proof.
-    induction r; simpl; intros d B; try discriminate; auto.
-    - destruct (begins r1) eqn:B1, (begins r2) eqn:B2; try discriminate.
-      erewrite IHr1; eauto.
-    - destruct (strictly_nullable r1); auto. eapply IHr2; eauto.
-    - eapply IHr; eauto.
-  Qed.
-
-  Lemma begins_actions_nullable:
-    forall r l, strictly_nullable r = true -> begins_actions (Areg r :: l) = begins_actions l.
-  Proof.
-    intros r l SN. simpl. destruct (begins r) eqn:B.
-    - apply begins_not_nullable in B. rewrite SN in B. inversion B.
-    - rewrite SN. auto.
+    induction r; simpl; intros d n BEG; try discriminate; auto.
+    - destruct (begins r1 None) eqn:B1; destruct (begins r2 None) eqn:B2; try discriminate.
+      erewrite IHr1; try erewrite IHr2; eauto.
+    - destruct (begins r2 None) eqn:B2; auto.
+      erewrite IHr2; eauto.
   Qed.
 
   Lemma read_char_union:
@@ -275,17 +266,6 @@ Section PeekingAnalysis.
     destruct (char_match rer h c1), (char_match rer h c2); simpl in *; try discriminate; auto.
   Qed.
 
-  Lemma begins_actions_seq:
-    forall r1 r2 cont cd,
-      begins_actions (Areg (Sequence r1 r2) :: cont) = Some cd ->
-      begins_actions (Areg r1 :: Areg r2 :: cont) = Some cd.
-  Proof.
-    intros r1 r2 cont cd B. simpl in *.
-    destruct (strictly_nullable r1) eqn:N1.
-    - destruct (begins r1) eqn:B1; [apply begins_not_nullable in B1; congruence|]. auto.
-    - destruct (begins r1); auto.
-  Qed.
-
   Theorem begins_actions_correct:
     forall act inp gm t cd
       (TREE: is_tree rer act inp gm forward t)
@@ -293,41 +273,26 @@ Section PeekingAnalysis.
       (READ: read_char rer cd inp forward = None),
       tree_res t gm inp forward = None.
   Proof.
-    intros act inp gm t cd TREE. generalize dependent cd. remember forward as dir eqn:F.
-    induction TREE; intros d BEG READC; subst; simpl in BEG; simpl; try discriminate; eauto.
-    - inversion BEG. subst. congruence.
-    - destruct (begins r1) eqn:B1, (begins r2) eqn:B2.
-      + inversion BEG. subst. apply read_char_union in READC as [R1 R2].
-        rewrite (IHTREE1 eq_refl c), (IHTREE2 eq_refl c0); auto; simpl;
-          try rewrite B1; try rewrite B2; auto.
-      + apply begins_not_nullable in B1. rewrite B1 in BEG. simpl in BEG. inversion BEG.
-      + apply begins_not_nullable in B2. rewrite B2, andb_false_r in BEG. inversion BEG.
-      + destruct (strictly_nullable r1) eqn:SN1, (strictly_nullable r2) eqn:SN2; simpl in BEG; try discriminate.
-        rewrite (IHTREE1 eq_refl d), (IHTREE2 eq_refl d); auto; simpl;
-          try rewrite B1; try rewrite B2; try rewrite SN1; try rewrite SN2; auto.
-    - apply (IHTREE eq_refl d); auto. simpl. apply (begins_actions_seq r1 r2 cont d). auto.
-    - destruct (strictly_nullable r1) eqn:SN; try discriminate.
-      apply (IHTREE eq_refl d); auto. rewrite begins_actions_nullable by auto. simpl. rewrite SN. auto.
-    - destruct (strictly_nullable r1) eqn:SN; try discriminate. apply (IHTREE eq_refl d); auto.
-    - destruct (strictly_nullable r1) eqn:SN; try discriminate.
-      assert (T1: tree_res titer (GroupMap.reset (def_groups r1) gm) inp forward = None).
-      { apply (IHTREE1 eq_refl d); auto. rewrite begins_actions_nullable by auto.
-        simpl. rewrite SN. auto. }
-      assert (T2: tree_res tskip gm inp forward = None).
-      { apply (IHTREE2 eq_refl d); auto. }
-      subst. destruct greedy; simpl; try rewrite T1; try rewrite T2; auto.
+    intros act inp gm t cd TREE. revert cd. remember forward as dir eqn:F.
+    induction TREE; intros d B R; subst; simpl in B; simpl; try discriminate; eauto.
+    - inversion B. subst. congruence.
+    - destruct (begins r1 (begins_actions cont)) eqn:B1, (begins r2 (begins_actions cont)) eqn:B2; try discriminate.
+      inversion B. subst. apply read_char_union in R as [R1 R2].
+      rewrite (IHTREE1 eq_refl c), (IHTREE2 eq_refl c0); auto.
     - destruct positivity; destruct tree_res as [[]|]; auto;
         eapply res_indep; apply (IHTREE2 eq_refl d); auto.
   Qed.
 
   Corollary begins_correct:
-    forall r cont inp gm t cd
+    forall r next cont inp gm t cd
+      (NEXT: next = None \/ next = begins_actions cont)
       (TREE: is_tree rer (Areg r :: cont) inp gm forward t)
-      (BEG: begins r = Some cd)
+      (BEG: begins r next = Some cd)
       (READ: read_char rer cd inp forward = None),
       tree_res t gm inp forward = None.
   Proof.
-    intros. eapply begins_actions_correct; eauto. simpl. rewrite BEG. auto.
+    intros. eapply begins_actions_correct; eauto. simpl.
+    destruct NEXT; subst; auto. apply begins_none. auto.
   Qed.
 
 End PeekingAnalysis.
