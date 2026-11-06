@@ -147,7 +147,6 @@ Section PeekingAnalysis.
       ?CharSet.union_spec in *; intuition (try lia).
   Qed.
 
-
   Lemma practical_disjoint_sound: forall cd1 cd2, practical_disjoint cd1 cd2 = true -> disjoint cd1 cd2.
   Proof.
     assert (E: forall cd2 cd1, excludes cd1 cd2 = true -> disjoint cd1 cd2).
@@ -163,5 +162,172 @@ Section PeekingAnalysis.
   (* it is given priority 0: this is the default checker *)
   #[global] Instance practical_disjointness : Disjoint | 0 :=
     {| disjoint_checker := practical_disjoint; checker_sound := practical_disjoint_sound |}.
+
+  (** * Strictly Nullable Analysis  *)
+  (* this is used to analyze a sequence after a quantifier in the begins analysis below *)
+
+  (* an under-approximating strictly nullable analysis to help analyze the sequence *)
+  Fixpoint strictly_nullable (r:regex) : bool :=
+    match r with
+    | Epsilon | Lookaround _ _ | Anchor _ => true
+    | Regex.Character _ | Backreference _ => false
+    | Disjunction r1 r2 | Sequence r1 r2 => andb (strictly_nullable r1) (strictly_nullable r2)
+    | Quantified _ _ _ r1 | Group _ r1 => strictly_nullable r1
+    end.
+
+  (* lifted to actions to facilitate the proofs *)
+  Definition strictly_nullable_action (a:action) : bool :=
+    match a with
+    | Areg r => strictly_nullable r
+    | Acheck _ | Aclose _ => true
+    end.
+
+  Definition strictly_nullable_actions (l:actions) : bool :=
+    forallb strictly_nullable_action l.
+
+  Ltac sn_ih IH := apply IH; simpl; repeat (apply andb_true_intro; split); auto.
+
+  Lemma strictly_nullable_actions_leaves:
+    forall act inp gm dir t,
+      is_tree rer act inp gm dir t ->
+      strictly_nullable_actions act = true ->
+      forall gm', Forall (fun lf => fst lf = inp) (tree_leaves t gm' inp dir).
+  Proof.
+    unfold strictly_nullable_actions.
+    intros act inp gm dir t TREE. induction TREE; intros SN gm'; simpl in *; try discriminate;
+      repeat match goal with H: _ && _ = true |- _ => apply andb_prop in H as [? ?] end;
+      try solve [auto | sn_ih IHTREE].
+    - apply Forall_app. split; [sn_ih IHTREE1|sn_ih IHTREE2].
+    - destruct dir; sn_ih IHTREE.
+    - subst. destruct greedy; simpl; try apply Forall_app; split; try sn_ih IHTREE1; sn_ih IHTREE2.
+    - destruct positivity; destruct tree_leaves as [|[]]; auto; sn_ih IHTREE2.
+  Qed.
+
+  Lemma strictly_nullable_leaves_no_adv:
+    forall r inp gm dir t, strictly_nullable r = true ->
+         is_tree rer [Areg r] inp gm dir t ->
+         Forall (fun lf => fst lf = inp) (tree_leaves t gm inp dir).
+  Proof.
+    intros r SN inp gm dir t TREE.
+    eapply strictly_nullable_actions_leaves; eauto.
+    simpl. apply andb_true_iff. auto.
+  Qed.
+
+  (** * Begins Analysis  *)
+  (* For quantifiers, to know if peeking is possible, we need to know what the
+   sub-regex after the quantifier must begin with. *)
+
+  (* returns a character descriptor that a regex must begin by matching *)
+  (* None means that we can't know for sure what the regex begins with *)
+  Fixpoint begins (r:regex) : option char_descr :=
+    match r with
+    | Regex.Character cd => Some cd
+    | Group _ r1 => begins r1
+    | Sequence r1 r2 =>
+        match strictly_nullable r1 with
+        | true => begins r2
+        | false => begins r1
+        end
+    | Disjunction r1 r2 =>
+        match begins r1, begins r2 with
+        | Some cd1, Some cd2 => Some (CdUnion cd1 cd2)
+        | _, _ => None
+        end
+    | _ => None
+    end.
+
+  (* lift to actions for the proof *)
+  Fixpoint begins_actions (l:list action) : option char_descr :=
+    match l with
+    | [] => None
+    | Areg r :: cont =>
+        match begins r with
+        | Some cd => Some cd
+        | None => if strictly_nullable r then begins_actions cont else None
+        end
+    | _ :: cont => begins_actions cont
+    end.
+
+  Lemma begins_not_nullable:
+    forall r cd, begins r = Some cd -> strictly_nullable r = false.
+  Proof.
+    induction r; simpl; intros d B; try discriminate; auto.
+    - destruct (begins r1) eqn:B1, (begins r2) eqn:B2; try discriminate.
+      erewrite IHr1; eauto.
+    - destruct (strictly_nullable r1); auto. eapply IHr2; eauto.
+    - eapply IHr; eauto.
+  Qed.
+
+  Lemma begins_actions_nullable:
+    forall r l, strictly_nullable r = true -> begins_actions (Areg r :: l) = begins_actions l.
+  Proof.
+    intros r l SN. simpl. destruct (begins r) eqn:B.
+    - apply begins_not_nullable in B. rewrite SN in B. inversion B.
+    - rewrite SN. auto.
+  Qed.
+
+  Lemma read_char_union:
+    forall c1 c2 inp, read_char rer (CdUnion c1 c2) inp forward = None ->
+      read_char rer c1 inp forward = None /\ read_char rer c2 inp forward = None.
+  Proof.
+    intros c1 c2 [next pref] R. simpl in *. destruct next as [|h next]; auto.
+    change (char_match rer h (CdUnion c1 c2)) with (char_match rer h c1 || char_match rer h c2) in R.
+    destruct (char_match rer h c1), (char_match rer h c2); simpl in *; try discriminate; auto.
+  Qed.
+
+  Lemma begins_actions_seq:
+    forall r1 r2 cont cd,
+      begins_actions (Areg (Sequence r1 r2) :: cont) = Some cd ->
+      begins_actions (Areg r1 :: Areg r2 :: cont) = Some cd.
+  Proof.
+    intros r1 r2 cont cd B. simpl in *.
+    destruct (strictly_nullable r1) eqn:N1.
+    - destruct (begins r1) eqn:B1; [apply begins_not_nullable in B1; congruence|]. auto.
+    - destruct (begins r1); auto.
+  Qed.
+
+  Theorem begins_actions_correct:
+    forall act inp gm t cd
+      (TREE: is_tree rer act inp gm forward t)
+      (BEG: begins_actions act = Some cd)
+      (READ: read_char rer cd inp forward = None),
+      tree_res t gm inp forward = None.
+  Proof.
+    intros act inp gm t cd TREE. generalize dependent cd. remember forward as dir eqn:F.
+    induction TREE; intros d BEG READC; subst; simpl in BEG; simpl; try discriminate; eauto.
+    - inversion BEG. subst. congruence.
+    - destruct (begins r1) eqn:B1, (begins r2) eqn:B2.
+      + inversion BEG. subst. apply read_char_union in READC as [R1 R2].
+        rewrite (IHTREE1 eq_refl c), (IHTREE2 eq_refl c0); auto; simpl;
+          try rewrite B1; try rewrite B2; auto.
+      + apply begins_not_nullable in B1. rewrite B1 in BEG. simpl in BEG. inversion BEG.
+      + apply begins_not_nullable in B2. rewrite B2, andb_false_r in BEG. inversion BEG.
+      + destruct (strictly_nullable r1) eqn:SN1, (strictly_nullable r2) eqn:SN2; simpl in BEG; try discriminate.
+        rewrite (IHTREE1 eq_refl d), (IHTREE2 eq_refl d); auto; simpl;
+          try rewrite B1; try rewrite B2; try rewrite SN1; try rewrite SN2; auto.
+    - apply (IHTREE eq_refl d); auto. simpl. apply (begins_actions_seq r1 r2 cont d). auto.
+    - destruct (strictly_nullable r1) eqn:SN; try discriminate.
+      apply (IHTREE eq_refl d); auto. rewrite begins_actions_nullable by auto. simpl. rewrite SN. auto.
+    - destruct (strictly_nullable r1) eqn:SN; try discriminate. apply (IHTREE eq_refl d); auto.
+    - destruct (strictly_nullable r1) eqn:SN; try discriminate.
+      assert (T1: tree_res titer (GroupMap.reset (def_groups r1) gm) inp forward = None).
+      { apply (IHTREE1 eq_refl d); auto. rewrite begins_actions_nullable by auto.
+        simpl. rewrite SN. auto. }
+      assert (T2: tree_res tskip gm inp forward = None).
+      { apply (IHTREE2 eq_refl d); auto. }
+      subst. destruct greedy; simpl; try rewrite T1; try rewrite T2; auto.
+    - destruct positivity; destruct tree_res as [[]|]; auto;
+        eapply res_indep; apply (IHTREE2 eq_refl d); auto.
+  Qed.
+
+  Corollary begins_correct:
+    forall r cont inp gm t cd
+      (TREE: is_tree rer (Areg r :: cont) inp gm forward t)
+      (BEG: begins r = Some cd)
+      (READ: read_char rer cd inp forward = None),
+      tree_res t gm inp forward = None.
+  Proof.
+    intros. eapply begins_actions_correct; eauto. simpl. rewrite BEG. auto.
+  Qed.
 
 End PeekingAnalysis.
