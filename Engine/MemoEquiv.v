@@ -461,9 +461,10 @@ Section MemoEquiv.
       (TREESTEP: exec_tree (Choice tree1 tree2, gm, inp) = TExplore exptree)
       (NOSTUTTER: stutters pc code = false)
       (Tc: tree_config code (Choice tree1 tree2, gm, inp) (pc, gm, b, inp)),
-    exists expconfig,
+    exists trimmed expconfig,
+      trim exptree trimmed /\
       exec_instr rer code (pc, gm, b, inp) = Explore expconfig /\
-        list_tree_config code exptree expconfig.
+        list_tree_config code trimmed expconfig.
   Proof.
     intros tree1 tree2 gm inp code pc b exptree TREESTEP NOSTUTTER TC.
     unfold exec_tree in TREESTEP. inversion TREESTEP. subst. clear TREESTEP.
@@ -471,7 +472,8 @@ Section MemoEquiv.
     remember (Choice tree1 tree2) as TCHOICE.
     induction TREE; intros; subst; try inversion HeqTCHOICE; subst.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    - repeat invert_rep. exists [(S pc,gm,b,inp);(S end1,gm,b,inp)]. split.
+    - repeat invert_rep. eexists. exists [(S pc,gm,b,inp);(S end1,gm,b,inp)].
+      split; [apply trim_refl|split].
       + unfold exec_instr. rewrite FORK. auto.
       + constructor.
         * constructor. constructor.
@@ -493,7 +495,8 @@ Section MemoEquiv.
           destruct plus; inversion D1. subst.
           repeat invert_rep. destruct greedy; inversion CHOICE; subst.
           +                           (* greedy qmark *)
-            simpl. rewrite FORK. exists [(S pc, gm, b, inp); (S end1, gm, b, inp)]. split; auto.
+            simpl. rewrite FORK. eexists. exists [(S pc, gm, b, inp); (S end1, gm, b, inp)].
+            split; [apply trim_refl|split; auto].
             econstructor.
             * econstructor. constructor.
               apply tc_eq with (actions:=cont); auto. pike_subset.
@@ -509,7 +512,8 @@ Section MemoEquiv.
                 replace (S (S pc+1)) with (S (S (S pc))) by lia. eauto. }
               all: prove_actions_rep.
           +                           (* lazy qmark *)
-            simpl. rewrite FORK. exists [(S end1, gm, b, inp); (S pc, gm, b, inp)]. split; auto.
+            simpl. rewrite FORK. eexists. exists [(S end1, gm, b, inp); (S pc, gm, b, inp)].
+            split; [apply trim_refl|split; auto].
             econstructor.
             * constructor. constructor. apply tc_begin; auto.
               replace (S (S pc)) with (S pc + 1) in RESET by lia.
@@ -528,7 +532,8 @@ Section MemoEquiv.
           destruct plus; inversion DINF.
           repeat invert_rep. destruct greedy; inversion CHOICE; subst.
           +                           (* greedy star *)
-            simpl. rewrite FORK. exists [(S pc, gm, b, inp); (S end1, gm, b, inp)]. split; auto.
+            simpl. rewrite FORK. eexists. exists [(S pc, gm, b, inp); (S end1, gm, b, inp)].
+            split; [apply trim_refl|split; auto].
             econstructor.
             * econstructor. constructor.
               apply tc_eq with (actions:=cont); auto. pike_subset.
@@ -545,7 +550,8 @@ Section MemoEquiv.
               all: prove_actions_rep.
               replace (S (S pc)) with (S pc + 1) by lia. auto.
           +                           (* lazy star *)
-            simpl. rewrite FORK. exists [(S end1, gm, b, inp); (S pc, gm, b, inp)]. split; auto.
+            simpl. rewrite FORK. eexists. exists [(S end1, gm, b, inp); (S pc, gm, b, inp)].
+            split; [apply trim_refl|split; auto].
             econstructor.
             * constructor. constructor. apply tc_begin; auto.
               replace (S (S pc)) with (S pc + 1) in RESET by lia.
@@ -571,36 +577,41 @@ Section MemoEquiv.
       (TREESTEP: exec_tree (tree,gm,inp) = TExplore exptree)
       (NOSTUTTER: stutters pc code = false)
       (TT: tree_config code (tree, gm, inp) (pc, gm, b, inp)),
-    exists expconfig,
+    exists trimmed expconfig,
+      trim exptree trimmed /\
       exec_instr rer code (pc, gm, b, inp) = Explore expconfig /\
-        list_tree_config code exptree expconfig.
+        list_tree_config code trimmed expconfig.
   Proof.
     intros tree gm inp code pc b exptree TREESTEP NOSTUTTER TC.
     destruct tree; simpl in TREESTEP; inversion TREESTEP; subst.
-    - eapply exec_dead in TC; auto. exists []. split; eauto. constructor.
+    - eapply exec_dead in TC; auto. eexists. exists [].
+      split; [apply trim_refl|split; eauto]. constructor.
     - eapply exec_choice; eauto.
     - eapply exec_read in TC as [nextinp [ADV [EXEC TC]]]; eauto.
       apply PikeTree.advance_next in ADV. subst.
-      eexists. split; eauto.
+      eexists. eexists. split; [apply trim_refl|split; eauto].
       constructor; eauto. constructor.
     - inversion TC; subst; try no_stutter.
       eapply subset_semantics in TREE as SUBSETTREE; auto.
       inversion SUBSETTREE.
     - eapply exec_checkpass in TC as [nextpc [STEP EQ]]; auto.
-      exists [(nextpc,gm,CanExit,inp)]. split; eauto.
+      eexists. exists [(nextpc,gm,CanExit,inp)]. split; [apply trim_refl|split; eauto].
       constructor; auto. constructor.
     - eapply exec_anchorpass in TC as [STEP EQ]; auto.
-      exists [(pc+1,gm,b,inp)]. split; eauto.
+      eexists. exists [(pc+1,gm,b,inp)]. split; [apply trim_refl|split; eauto].
       constructor; auto. constructor.
     - destruct g.
       + eapply exec_open in TC as [STEP EQ]; auto.
-        exists [(pc+1,GroupMap.open (idx inp) g gm,b,inp)]. split; eauto.
+        eexists. exists [(pc+1,GroupMap.open (idx inp) g gm,b,inp)].
+        split; [apply trim_refl|split; eauto].
         constructor; auto. constructor.
       + eapply exec_close in TC as [STEP EQ]; auto.
-        exists [(pc+1,GroupMap.close (idx inp) g gm,b,inp)]. split; eauto.
+        eexists. exists [(pc+1,GroupMap.close (idx inp) g gm,b,inp)].
+        split; [apply trim_refl|split; eauto].
         constructor; auto. constructor.
       + eapply exec_reset in TC as [STEP EQ]; auto.
-        exists [(pc + 1, GroupMap.reset gl gm, b, inp)]. split; eauto.
+        eexists. exists [(pc + 1, GroupMap.reset gl gm, b, inp)].
+        split; [apply trim_refl|split; eauto].
         constructor; auto. constructor.
     - inversion TC; subst; try no_stutter.
       eapply subset_semantics in TREE as SUBSETTREE; auto.
@@ -811,12 +822,12 @@ Section MemoEquiv.
       inversion 1.
     }
     (* We keep exploring *)
-    specialize (exec_explore _ _ _ _ _ _ _ EXEC STUTTERS TC) as [expconfig [EXECBT LTCNEXT]].
+    specialize (exec_explore _ _ _ _ _ _ _ EXEC STUTTERS TC) as [trimmed [expconfig [TRIM [EXECBT LTCNEXT]]]].
     assert (mbs2 = MBT (expconfig++stk) (memoize memoset pc b inp)); subst.
     { eapply memobt_deterministic; eauto. constructor; auto. }
-    exists (MTree (l++treestk) (add_seentrees treeseen t)).
+    exists (MTree (trimmed++treestk) (add_seentrees treeseen t)).
     split.
-    { econstructor; eauto. apply trim_refl. }
+    { econstructor; eauto. }
     constructor; auto.
     { apply ltc_app; auto. }
     eapply add_inclusion; eauto.

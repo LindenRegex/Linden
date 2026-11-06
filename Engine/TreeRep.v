@@ -38,6 +38,12 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
     (TR1: tree_rep t1 code pc1 inp b)
     (TR2: tree_rep t2 code pc2 inp b),
     tree_rep (Choice t1 t2) code pc inp b
+| tr_branch:
+  forall code pc pc1 pc2 inp b t1 t2 cd g
+    (FORK: get_pc code pc = Some (Fork (Branch cd g) pc1 pc2))
+    (TR1: tree_rep t1 code pc1 inp b)
+    (TR2: tree_rep t2 code pc2 inp b),
+    tree_rep (greedy_choice g t1 t2) code pc inp b
 | tr_read:
   forall code pc inp nextinp b cd c t
     (CONSUME: get_pc code pc = Some (Consume cd))
@@ -111,6 +117,10 @@ Proof.
     specialize (IHtree_rep _ TR) as EQT.
     subst. split; auto.
   - inversion H0; subst; auto; same_instr.
+  - inversion H1; subst; auto; same_instr.
+    specialize (IHtree_rep1 _ TR1) as EQT1.
+    specialize (IHtree_rep2 _ TR2) as EQT2.
+    subst. split; auto.
   - inversion H1; subst; auto; same_instr.
     specialize (IHtree_rep1 _ TR1) as EQT1.
     specialize (IHtree_rep2 _ TR2) as EQT2.

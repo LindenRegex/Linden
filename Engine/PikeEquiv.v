@@ -283,9 +283,10 @@ Theorem generate_choice:
     (TREESTEP: tree_bfs_step (Choice tree1 tree2) gm (idx inp) = StepActive treeactive)
     (NOSTUTTER: stutters pc code = false)
     (TT: tree_thread code inp (Choice tree1 tree2, gm) (pc, gm, b)),
-  exists threadactive,
+  exists trimmed threadactive,
+    trim inp treeactive trimmed /\
     epsilon_step rer (pc, gm, b) code inp = EpsActive threadactive /\
-      list_tree_thread code inp treeactive threadactive.
+      list_tree_thread code inp trimmed threadactive.
 Proof.
   intros tree1 tree2 gm inp code pc b treeactive TREESTEP NOSTUTTER TT.
   unfold tree_bfs_step in TREESTEP. inversion TREESTEP. subst. clear TREESTEP.
@@ -293,7 +294,8 @@ Proof.
   remember (Choice tree1 tree2) as TCHOICE.
   induction TREE; intros; subst; try inversion HeqTCHOICE; subst.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-  - repeat invert_rep. exists [(S pc,gm,b);(S end1,gm,b)]. split.
+  - repeat invert_rep. eexists. exists [(S pc,gm,b);(S end1,gm,b)].
+    split; [apply trim_refl|split].
     + unfold epsilon_step. rewrite FORK. auto.
     + constructor.
       * constructor. constructor.
@@ -315,7 +317,8 @@ Proof.
         destruct plus; inversion D1. subst.
         repeat invert_rep. destruct greedy; inversion CHOICE; subst.
         +                           (* greedy qmark *)
-          simpl. rewrite FORK. exists [(S pc, gm, b); (S end1, gm, b)]. split; auto.
+          simpl. rewrite FORK. eexists. exists [(S pc, gm, b); (S end1, gm, b)].
+          split; [apply trim_refl|split; auto].
           econstructor.
           * econstructor. constructor.
             apply tt_eq with (actions:=cont); auto. pike_subset.
@@ -331,7 +334,8 @@ Proof.
               replace (S (S pc+1)) with (S (S (S pc))) by lia. eauto. }
             all: prove_actions_rep.
         +                           (* lazy qmark *)
-          simpl. rewrite FORK. exists [(S end1, gm, b); (S pc, gm, b)]. split; auto.
+          simpl. rewrite FORK. eexists. exists [(S end1, gm, b); (S pc, gm, b)].
+          split; [apply trim_refl|split; auto].
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
             replace (S (S pc)) with (S pc + 1) in RESET by lia.
@@ -350,7 +354,8 @@ Proof.
         destruct plus; inversion DINF.
         repeat invert_rep. destruct greedy; inversion CHOICE; subst.
         +                           (* greedy star *)
-          simpl. rewrite FORK. exists [(S pc, gm, b); (S end1, gm, b)]. split; auto.
+          simpl. rewrite FORK. eexists. exists [(S pc, gm, b); (S end1, gm, b)].
+          split; [apply trim_refl|split; auto].
           econstructor.
           * econstructor. constructor.
             apply tt_eq with (actions:=cont); auto. pike_subset.
@@ -367,7 +372,8 @@ Proof.
             all: prove_actions_rep.
             replace (S (S pc)) with (S pc + 1) by lia. auto.
         +                           (* lazy star *)
-          simpl. rewrite FORK. exists [(S end1, gm, b); (S pc, gm, b)]. split; auto.
+          simpl. rewrite FORK. eexists. exists [(S end1, gm, b); (S pc, gm, b)].
+          split; [apply trim_refl|split; auto].
           econstructor.
           * constructor. constructor. apply tt_begin; auto.
             replace (S (S pc)) with (S pc + 1) in RESET by lia.
@@ -394,32 +400,37 @@ Theorem generate_active:
     (TREESTEP: tree_bfs_step tree gm (idx inp) = StepActive treeactive)
     (NOSTUTTER: stutters pc code = false)
     (TT: tree_thread code inp (tree, gm) (pc, gm, b)),
-  exists threadactive,
+  exists trimmed threadactive,
+    trim inp treeactive trimmed /\
     epsilon_step rer (pc, gm, b) code inp = EpsActive threadactive /\
-      list_tree_thread code inp treeactive threadactive.
+      list_tree_thread code inp trimmed threadactive.
 Proof.
   intros tree gm inp code pc b treeactive TREESTEP NOSTUTTER TT.
   destruct tree; simpl in TREESTEP; inversion TREESTEP; subst.
-  - eapply generate_mismatch in TT; auto. exists []. split; eauto. constructor.
+  - eapply generate_mismatch in TT; auto. eexists. exists [].
+    split; [apply trim_refl|split; eauto]. constructor.
   - eapply generate_choice; eauto.
   - inversion TT; subst; try no_stutter.
     eapply subset_semantics in TREE as SUBSETTREE; auto.
     inversion SUBSETTREE.
   - eapply generate_checkpass in TT as [nextpc [STEP EQ]]; auto.
-    exists [(nextpc,gm,CanExit)]. split; eauto.
+    eexists. exists [(nextpc,gm,CanExit)]. split; [apply trim_refl|split; eauto].
     constructor; auto. constructor.
   - eapply generate_anchorpass in TT as [STEP EQ]; auto.
-    exists [(pc+1,gm,b)]. split; eauto.
+    eexists. exists [(pc+1,gm,b)]. split; [apply trim_refl|split; eauto].
     constructor; auto. constructor.
   - destruct g.
     + eapply generate_open in TT as [STEP EQ]; auto.
-      exists [(pc+1,GroupMap.open (idx inp) g gm,b)]. split; eauto.
+      eexists. exists [(pc+1,GroupMap.open (idx inp) g gm,b)].
+      split; [apply trim_refl|split; eauto].
       constructor; auto. constructor.
     + eapply generate_close in TT as [STEP EQ]; auto.
-      exists [(pc+1,GroupMap.close (idx inp) g gm,b)]. split; eauto.
+      eexists. exists [(pc+1,GroupMap.close (idx inp) g gm,b)].
+      split; [apply trim_refl|split; eauto].
       constructor; auto. constructor.
     + eapply generate_reset in TT as [STEP EQ]; auto.
-      exists [(pc + 1, GroupMap.reset gl gm, b)]. split; eauto.
+      eexists. exists [(pc + 1, GroupMap.reset gl gm, b)].
+      split; [apply trim_refl|split; eauto].
       constructor; auto. constructor.
   - inversion TT; subst; try no_stutter.
     eapply subset_semantics in TREE as SUBSETTREE; auto.
@@ -1241,11 +1252,11 @@ Proof.
   }
   destruct (tree_bfs_step t gm (idx inp)) eqn:TREESTEP.
   (* active *)
-  - left. eapply generate_active in TREESTEP as H; eauto. destruct H as [newthreads [EPS LTT2]].
+  - left. eapply generate_active in TREESTEP as H; eauto. destruct H as [trimmed [newthreads [TRIM [EPS LTT2]]]].
     assert (pvs2 = PVS inp (newthreads ++ threadactive) best threadblocked nextprefix (add_thread threadseen (pc,gm,b))).
     { eapply pikevm_deterministic; eauto. constructor; auto. }
-    subst. exists (PTS inp (l ++ treeactive) best treeblocked future (add_seentrees treeseen t)). split.
-    + eapply pts_active; eauto. apply trim_refl.
+    subst. exists (PTS inp (trimmed ++ treeactive) best treeblocked future (add_seentrees treeseen t)). split.
+    + eapply pts_active; eauto.
     + eapply pikeinv; try (eapply add_inclusion; eauto); try constructor; eauto.
       apply ltt_app; eauto.
   (* match *)
