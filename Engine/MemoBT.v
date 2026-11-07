@@ -62,7 +62,12 @@ Section MemoBT.
                 | true => Explore [(pc+1, gm, b, i)]
                 end
             | Jmp next => Explore [(next, gm, b, i)]
-            | Fork lbl1 lbl2 => Explore [(lbl1, gm, b, i); (lbl2, gm, b, i)]
+            | Fork NoPeek lbl1 lbl2 => Explore [(lbl1, gm, b, i); (lbl2, gm, b, i)]
+            | Fork (Branch cd _) lbl1 lbl2 =>
+                match read_char rer cd i forward with
+                | Some _ => Explore [(lbl1, gm, b, i)]
+                | None => Explore [(lbl2, gm, b, i)]
+                end
             | SetRegOpen gid => Explore [(pc+1, GroupMap.open (idx i) gid gm, b, i)]
             | SetRegClose gid => Explore [(pc+1, GroupMap.close (idx i) gid gm, b, i)]
             | ResetRegs gidl => Explore [(pc+1, GroupMap.reset gidl gm, b, i)]
