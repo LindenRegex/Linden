@@ -175,10 +175,14 @@ Section NFA.
     | Quantified greedy 0 (NoI.N 0) r1 => ([], fresh)
     | Quantified greedy 0 (NoI.N 1) r1 =>
         let (bc1, f1) := compile r1 (S (S (S fresh))) after in
-        ([greedy_fork greedy NoPeek (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1)
+        (* the body must read a character to survive, so we use None as after for the body *)
+        let annot := compute_peek greedy (begins r1 None) after in
+        ([greedy_fork greedy annot (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1)
     | Quantified greedy 0 (NoI.Inf) r1 =>
         let (bc1, f1) := compile r1 (S (S (S fresh))) None in
-        ([greedy_fork greedy NoPeek (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1)
+        (* we don't know what comes after the iteration: we use None as after for the body *)
+        let annot := compute_peek greedy (begins r1 None) after in
+        ([greedy_fork greedy annot (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1)
     | Quantified greedy 1 (NoI.N 0) r1 =>
         let (bc1, f1) := compile r1 (S fresh) after in
         ([ResetRegs (def_groups r1)] ++ bc1, f1)
@@ -188,6 +192,9 @@ Section NFA.
     | Anchor a => ([CheckAnchor a], S fresh)
     | _ => ([KillThread], S fresh) (* unsupported features *)
     end.
+
+  (* LATER: when compiling the body inside a star, we should be able to use
+     (union_option (begins r1 None) after) instead of None as after *)
 
   (* adds an accept at the end of the code *)
   Definition compilation (r:regex) : code :=
@@ -226,7 +233,7 @@ Section NFA.
       nfa_rep (Quantified greedy 0 (NoI.N 0) r1) after c lbl lbl
   | nfa_rep_qmark:
     forall c r1 greedy after start end1
-      (FORK: get_pc c start = Some (greedy_fork greedy NoPeek (S start) (S end1)))
+      (FORK: get_pc c start = Some (greedy_fork greedy (compute_peek greedy (begins r1 None) after) (S start) (S end1)))
       (BEGIN: get_pc c (S start) = Some (BeginLoop))
       (RESET: get_pc c (S (S start)) = Some (ResetRegs (def_groups r1)))
       (NFA1: nfa_rep r1 after c (S (S (S start))) end1)
@@ -234,7 +241,7 @@ Section NFA.
       nfa_rep (Quantified greedy 0 (NoI.N 1) r1) after c start (S end1)
   | nfa_rep_star:
     forall c r1 greedy after start end1
-      (FORK: get_pc c start = Some (greedy_fork greedy NoPeek (S start) (S end1)))
+      (FORK: get_pc c start = Some (greedy_fork greedy (compute_peek greedy (begins r1 None) after) (S start) (S end1)))
       (BEGIN: get_pc c (S start) = Some (BeginLoop))
       (RESET: get_pc c (S (S start)) = Some (ResetRegs (def_groups r1)))
       (NFA1: nfa_rep r1 None c (S (S (S start))) end1)
@@ -370,15 +377,15 @@ Section NFA.
         * rewrite get_first. simpl. auto.
         * rewrite get_second. simpl. auto.
         * rewrite get_third. simpl. auto.
-        * apply IHr with (prev:=prev ++ [greedy_fork greedy NoPeek (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
+        * apply IHr with (prev:=prev ++ [greedy_fork greedy (compute_peek greedy (begins r None) after) (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
           ** rewrite <- app_assoc in COMP1. simpl in COMP1.
-             replace (prev ++ greedy_fork greedy NoPeek (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
-               ((prev ++ greedy_fork greedy NoPeek (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
+             replace (prev ++ greedy_fork greedy (compute_peek greedy (begins r None) after) (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
+               ((prev ++ greedy_fork greedy (compute_peek greedy (begins r None) after) (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
              2: { rewrite <- app_assoc. auto. }
              apply nfa_rep_extend. auto.
           ** rewrite length_app. simpl. lia.
-        * replace (prev ++ greedy_fork greedy NoPeek (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
-            ((prev ++ greedy_fork greedy NoPeek (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
+        * replace (prev ++ greedy_fork greedy (compute_peek greedy (begins r None) after) (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (S end1)]) with
+            ((prev ++ greedy_fork greedy (compute_peek greedy (begins r None) after) (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (S end1)]).
           2: { rewrite <- app_assoc. auto. }
           apply fresh_correct in COMP1. subst. apply get_first_0.
           simpl. rewrite length_app. simpl. lia.
@@ -387,15 +394,15 @@ Section NFA.
         * rewrite get_first. simpl. auto.
         * rewrite get_second. simpl. auto.
         * rewrite get_third. simpl. auto.
-        * apply IHr with (prev:=prev ++ [greedy_fork greedy NoPeek (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
+        * apply IHr with (prev:=prev ++ [greedy_fork greedy (compute_peek greedy (begins r None) after) (S (length prev)) (S end1); BeginLoop; ResetRegs (def_groups r)]) in COMP1.
           ** rewrite <- app_assoc in COMP1. simpl in COMP1.
-             replace (prev ++ greedy_fork greedy NoPeek (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
-               ((prev ++ greedy_fork greedy NoPeek (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
+             replace (prev ++ greedy_fork greedy (compute_peek greedy (begins r None) after) (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
+               ((prev ++ greedy_fork greedy (compute_peek greedy (begins r None) after) (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
              2: { rewrite <- app_assoc. auto. }
              apply nfa_rep_extend. auto.
           ** rewrite length_app. simpl. lia.
-        * replace (prev ++ greedy_fork greedy NoPeek (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
-            ((prev ++ greedy_fork greedy NoPeek (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
+        * replace (prev ++ greedy_fork greedy (compute_peek greedy (begins r None) after) (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1 ++ [EndLoop (length prev)]) with
+            ((prev ++ greedy_fork greedy (compute_peek greedy (begins r None) after) (S (length prev)) (S end1) :: BeginLoop :: ResetRegs (def_groups r) :: bc1) ++ [EndLoop (length prev)]).
           2: { rewrite <- app_assoc. auto. }
           apply fresh_correct in COMP1. subst. apply get_first_0.
           simpl. rewrite length_app. simpl. lia.

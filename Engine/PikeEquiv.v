@@ -279,6 +279,51 @@ Proof.
     assumption.
 Qed.
 
+Lemma generate_fork:
+  forall code pc inp gm b g o1 o2 t1 t2 l1 l2
+    (FORK: get_pc code pc = Some (greedy_fork g (compute_peek g o1 o2) l1 l2))
+    (TT1: tree_thread code inp (t1, gm) (l1, gm, b))
+    (TT2: tree_thread code inp (t2, gm) (l2, gm, b))
+    (DEAD1: forall cd, o1 = Some cd -> read_char rer cd inp forward = None ->
+                  tree_res t1 gm inp forward = None)
+    (DEAD2: forall cd, o2 = Some cd -> read_char rer cd inp forward = None ->
+                  tree_res t2 gm inp forward = None),
+  exists trimmed threadactive,
+    trim inp (if g then [(t1, gm); (t2, gm)] else [(t2, gm); (t1, gm)]) trimmed /\
+    epsilon_step rer (pc, gm, b) code inp = EpsActive threadactive /\
+      list_tree_thread code inp trimmed threadactive.
+Proof.
+  intros. destruct (compute_peek_cases g o1 o2) as [P|[cd1 [cd2 [B1 [B2 [D P]]]]]]; rewrite P in FORK.
+  (* Un-annotated Fork *)
+  - destruct g; simpl in FORK.
+    + exists [(t1, gm); (t2, gm)], [(l1, gm, b); (l2, gm, b)].
+      split; [apply trim_refl|split].
+      * unfold epsilon_step. rewrite FORK. auto.
+      * eauto using ltt_cons, ltt_nil.
+    + exists [(t2, gm); (t1, gm)], [(l2, gm, b); (l1, gm, b)].
+      split; [apply trim_refl|split].
+      * unfold epsilon_step. rewrite FORK. auto.
+      * eauto using ltt_cons, ltt_nil.
+  (* Branch. One of the subtrees has no result *)
+  - assert (F: get_pc code pc = Some (Fork (Branch cd1 g) l1 l2)) by (destruct g; auto).
+    apply checker_sound in D. destruct (check_read rer cd1 inp forward) eqn:R.
+    + assert (E2: tree_res t2 gm inp forward = None).
+      { eapply DEAD2; eauto. eapply disjoint_check_read; eauto. }
+      exists [(t1, gm)], [(l1, gm, b)]. split; [|split].
+      * destruct g.
+        ** apply trim_keep. apply trim_drop; [constructor|auto].
+        ** apply trim_drop; auto. apply trim_keep. constructor.
+      * unfold epsilon_step. rewrite F, R. auto.
+      * eauto using ltt_cons, ltt_nil.
+    + assert (E1: tree_res t1 gm inp forward = None).
+      { eapply DEAD1; eauto. apply cannot_read_correct. auto. }
+      exists [(t2, gm)], [(l2, gm, b)]. split; [|split].
+      * destruct g.
+        ** apply trim_drop; auto. apply trim_keep. constructor.
+        ** apply trim_keep. apply trim_drop; [constructor|auto].
+      * unfold epsilon_step. rewrite F, R. auto.
+      * eauto using ltt_cons, ltt_nil.
+Qed.
 
 Theorem generate_choice:
   forall tree1 tree2 gm inp code pc b treeactive
@@ -306,27 +351,9 @@ Proof.
     { apply tt_eq with (actions:=Areg r2::cont); auto.
       2: { pike_subset. }
       prove_actions_rep. }
-    destruct (compute_peek_cases true (begins r1 after) (begins r2 after)) as [P|[cd1 [cd2 [B1 [B2 [D P]]]]]];
-      rewrite P in FORK.
-    (* Un-annotated Fork *)
-    + exists [(tree1, gm); (tree2, gm)], [(S pc,gm,b);(S end1,gm,b)].
-      split; [apply trim_refl|split].
-      * unfold epsilon_step. rewrite FORK. auto.
-      * eauto using ltt_cons, ltt_nil.
-    (* Branch. One of the subtrees has no result *)
-    + apply checker_sound in D. destruct (check_read rer cd1 inp forward) eqn:R.
-      * exists [(tree1, gm)], [(S pc,gm,b)]. repeat split.
-        ** repeat constructor.
-           eapply begins_correct with (r:=r2) (cd:=cd2); eauto.
-           eapply disjoint_check_read; eauto.
-        ** unfold epsilon_step. rewrite FORK, R. auto.
-        ** constructor. apply ltt_nil. auto.
-      * exists [(tree2, gm)], [(S end1,gm,b)]. repeat split.
-        ** repeat constructor.
-           eapply begins_correct with (r:=r1) (cd:=cd1); eauto.
-           apply cannot_read_correct. auto.
-        ** unfold epsilon_step. rewrite FORK, R. auto.
-        ** constructor. apply ltt_nil. auto.
+    eapply (generate_fork _ _ _ _ _ true); [exact FORK|exact TT1|exact TT2| |].
+    + intros. eapply begins_correct with (r:=r1); eauto.
+    + intros. eapply begins_correct with (r:=r2); eauto.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     prove_actions_rep. pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
@@ -335,80 +362,57 @@ Proof.
     (* Zero Repetition *)
     + destruct plus; inversion DZ.
     + { (* Question Mark *)
-        destruct plus; inversion D1. subst.
-        repeat invert_rep. destruct greedy; inversion CHOICE; subst.
-        +                           (* greedy qmark *)
-          simpl. rewrite FORK. eexists. exists [(S pc, gm, b); (S end1, gm, b)].
-          split; [apply trim_refl|split; auto].
-          econstructor.
-          * econstructor. constructor.
-            apply tt_eq with (actions:=cont); auto. pike_subset.
-          * apply tt_begin; auto.
-            replace (S (S pc)) with (S pc +1) in RESET by lia.
-            (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
-            apply tt_eq with (actions:=Areg (Quantified true 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified true 0 (NoI.N 0) r1)::cont).
-            { econstructor; [reflexivity|].
-              apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
-            2: { pike_subset. }
-            eapply cons_bc with (pcmid:=end1).
-            { eapply areg_bc. apply nfa_rep_one; auto.
-              replace (S (S pc+1)) with (S (S (S pc))) by lia. eauto. }
-            all: prove_actions_rep.
-        +                           (* lazy qmark *)
-          simpl. rewrite FORK. eexists. exists [(S end1, gm, b); (S pc, gm, b)].
-          split; [apply trim_refl|split; auto].
-          econstructor.
-          * constructor. constructor. apply tt_begin; auto.
-            replace (S (S pc)) with (S pc + 1) in RESET by lia.
-            (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
-            apply tt_eq with (actions:=Areg (Quantified false 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified false 0 (NoI.N 0) r1)::cont).
-            { econstructor; [reflexivity|].
-              apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
-            2: { pike_subset. }
-            eapply cons_bc with (pcmid:=end1).
-            { eapply areg_bc. apply nfa_rep_one; auto.
-              replace (S (S pc+1)) with (S (S (S pc))) by lia. eauto. }
-            all: prove_actions_rep.
-          * apply tt_eq with (actions:=cont); auto. pike_subset.
+        destruct plus; inversion D1. subst. repeat invert_rep.
+        assert (TT1: tree_thread code inp (GroupAction (Reset (def_groups r1)) titer, gm) (S pc, gm, b)).
+        { apply tt_begin; auto.
+          replace (S (S pc)) with (S pc +1) in RESET by lia.
+          (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
+          apply tt_eq with (actions:=Areg (Quantified greedy 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified greedy 0 (NoI.N 0) r1)::cont).
+          { econstructor; [reflexivity|].
+            apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
+          2: { pike_subset. }
+          eapply cons_bc with (pcmid:=end1).
+          { eapply areg_bc. apply nfa_rep_one; auto.
+            replace (S (S pc+1)) with (S (S (S pc))) by lia. eauto. }
+          all: prove_actions_rep. }
+        assert (TT2: tree_thread code inp (tskip, gm) (S end1, gm, b)).
+        { apply tt_eq with (actions:=cont); auto. pike_subset. }
+        assert (DEAD1: forall cd, begins r1 None = Some cd -> read_char rer cd inp forward = None ->
+                             tree_res (GroupAction (Reset (def_groups r1)) titer) gm inp forward = None).
+        { intros. simpl. eapply begins_correct with (r:=r1) (after:=None); eauto. }
+        assert (DEAD2: forall cd, after = Some cd -> read_char rer cd inp forward = None ->
+                             tree_res tskip gm inp forward = None).
+        { intros. subst. eapply after_trimming_correct; eauto. }
+        destruct greedy; inversion CHOICE; subst.
+        - eapply (generate_fork _ _ _ _ _ true); eauto.
+        - eapply (generate_fork _ _ _ _ _ false); eauto.
       }
     + { (* Star *)
-        destruct plus; inversion DINF.
-        repeat invert_rep. destruct greedy; inversion CHOICE; subst.
-        +                           (* greedy star *)
-          simpl. rewrite FORK. eexists. exists [(S pc, gm, b); (S end1, gm, b)].
-          split; [apply trim_refl|split; auto].
-          econstructor.
-          * econstructor. constructor.
-            apply tt_eq with (actions:=cont); auto. pike_subset.
-          * apply tt_begin; auto.
-            replace (S (S pc)) with (S pc +1) in RESET by lia.
-            (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
-            apply tt_eq with (actions:=Areg (Quantified true 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified true 0 +∞ r1)::cont).
-            { econstructor; [reflexivity|].
-              apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
-            2: { pike_subset. }
-            eapply cons_bc with (pcmid:=end1).
-            { eapply areg_bc. apply nfa_rep_one; auto.
-              replace (S (S pc+1)) with (S (S (S pc))) by lia. eauto. }
-            all: prove_actions_rep.
-            replace (S (S pc)) with (S pc + 1) by lia. auto.
-        +                           (* lazy star *)
-          simpl. rewrite FORK. eexists. exists [(S end1, gm, b); (S pc, gm, b)].
-          split; [apply trim_refl|split; auto].
-          econstructor.
-          * constructor. constructor. apply tt_begin; auto.
-            replace (S (S pc)) with (S pc + 1) in RESET by lia.
-            (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
-            apply tt_eq with (actions:=Areg (Quantified false 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified false 0 +∞ r1)::cont).
-            { econstructor; [reflexivity|].
-              apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
-            2: { pike_subset. }
-            eapply cons_bc with (pcmid:=end1).
-            { eapply areg_bc. apply nfa_rep_one; auto.
-              replace (S (S pc+1)) with (S (S (S pc))) by lia. eauto. }
-            all: prove_actions_rep.
-            replace (S (S pc)) with (S pc + 1) by lia. auto.
-          * apply tt_eq with (actions:=cont); auto. pike_subset.
+        destruct plus; inversion DINF. repeat invert_rep.
+        assert (TT1: tree_thread code inp (GroupAction (Reset (def_groups r1)) titer, gm) (S pc, gm, b)).
+        { apply tt_begin; auto.
+          replace (S (S pc)) with (S pc +1) in RESET by lia.
+          (* we add r1{1} at the head of the list to represent being at the Reset instruction *)
+          apply tt_eq with (actions:=Areg (Quantified greedy 1 (NoI.N 0) r1) :: Acheck(inp)::Areg(Quantified greedy 0 +∞ r1)::cont).
+          { econstructor; [reflexivity|].
+            apply (bool_tree_insert_zero rer _ _ _ _ _ _ TREE1 [Areg r1] _ eq_refl). }
+          2: { pike_subset. }
+          eapply cons_bc with (pcmid:=end1).
+          { eapply areg_bc. apply nfa_rep_one; auto.
+            replace (S (S pc+1)) with (S (S (S pc))) by lia. eauto. }
+          all: prove_actions_rep.
+          replace (S (S pc)) with (S pc + 1) by lia. auto. }
+        assert (TT2: tree_thread code inp (tskip, gm) (S end1, gm, b)).
+        { apply tt_eq with (actions:=cont); auto. pike_subset. }
+        assert (DEAD1: forall cd, begins r1 None = Some cd -> read_char rer cd inp forward = None ->
+                             tree_res (GroupAction (Reset (def_groups r1)) titer) gm inp forward = None).
+        { intros. simpl. eapply begins_correct with (r:=r1) (after:=None); eauto. }
+        assert (DEAD2: forall cd, after = Some cd -> read_char rer cd inp forward = None ->
+                             tree_res tskip gm inp forward = None).
+        { intros. subst. eapply after_trimming_correct; eauto. }
+        destruct greedy; inversion CHOICE; subst.
+        - eapply (generate_fork _ _ _ _ _ true); eauto.
+        - eapply (generate_fork _ _ _ _ _ false); eauto.
       }
     (* Unsupported *)
     + rewrite DUN in SUBSET. inversion SUBSET; subst. inversion H1; subst. inversion H0; subst; lia.
@@ -543,14 +547,14 @@ Proof.
     + destruct plus; inversion DZ.
     (* Question Mark *)
     + destruct plus; inversion D1. subst. invert_rep.
-      { invert_rep. invert_rep; try in_subset. destruct greedy; stutter. }
+      { invert_rep. invert_rep; try in_subset. destruct (compute_peek _ _ _); destruct greedy; stutter. }
       exists pcstart. exists b. split; try split; try lia.
       * simpl. rewrite JMP. auto.
       * apply tt_eq with (actions:=Areg (Quantified greedy 0 (NoI.N 1 + NoI.N 0)%NoI r1) :: cont); try constructor; auto; pike_subset.
         eapply tree_quant_free; eauto.
     (* Star *)
     + destruct plus; inversion DINF. invert_rep.
-      { invert_rep. invert_rep; try in_subset. destruct greedy; stutter. }
+      { invert_rep. invert_rep; try in_subset. destruct (compute_peek _ _ _); destruct greedy; stutter. }
       exists pcstart. exists b. split; try split; try lia.
       * simpl. rewrite JMP. auto.
       * apply tt_eq with (actions:=Areg (Quantified greedy 0 (NoI.N 1 + +∞)%NoI r1) :: cont); try constructor; auto; pike_subset.
@@ -707,8 +711,8 @@ Proof.
     destruct IHnfa_rep2 as [SAME2 | [i [START2 REP2]]]; subst.
     + left. auto.
     + right. eexists. split; eauto.
-  - right. destruct greedy; inversion FORK; eexists; split; eauto; constructor.
-  - right. destruct greedy; inversion FORK; eexists; split; eauto; constructor.
+  - right. destruct (compute_peek _ _ _); destruct greedy; inversion FORK; eexists; split; eauto; constructor.
+  - right. destruct (compute_peek _ _ _); destruct greedy; inversion FORK; eexists; split; eauto; constructor.
 Qed.
 
 Lemma action_rep_start:
@@ -1003,7 +1007,7 @@ Proof.
   - apply nfa_rep_incr in REP as INC.
     assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
     (* fork *)
-    { subst. rewrite FORK in GET. destruct greedy; inversion GET. }
+    { subst. rewrite FORK in GET. destruct (compute_peek _ _ _); destruct greedy; inversion GET. }
     assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
     (* Begin *)
     { subst. rewrite BEGIN in GET. inversion GET. }
@@ -1018,7 +1022,7 @@ Proof.
   - apply nfa_rep_incr in REP as INC.
     assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
     (* fork *)
-    { subst. rewrite FORK in GET. destruct greedy; inversion GET. }
+    { subst. rewrite FORK in GET. destruct (compute_peek _ _ _); destruct greedy; inversion GET. }
     assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
     (* Begin *)
     { subst. rewrite BEGIN in GET. inversion GET. }

@@ -242,6 +242,14 @@ Section PeekingAnalysis.
   (* For quantifiers, to know if peeking is possible, we need to know what the
    sub-regex after the quantifier must begin with. *)
 
+  (* LATER: instead of working with option char_descr,
+     we should use a more precise abstract domain:
+     | Unknown | Known (charset * bool)
+     where the boolean indicates cases where we know that we can have
+     the end of the string. This would help to analyze end anchors like $
+     For instance, we woulc create a branch for a*$
+   *)
+
   Definition union_option (o1 o2: option char_descr) : option char_descr :=
     match o1, o2 with
     | Some cd1, Some cd2 => Some (CdUnion cd1 cd2)
@@ -339,6 +347,17 @@ Section PeekingAnalysis.
   Proof.
     intros. eapply begins_actions_correct; eauto. simpl.
     destruct AFTER; subst; auto. apply begins_none. auto.
+  Qed.
+
+  Corollary after_trimming_correct:
+    forall cd cont inp b t
+      (AFTER: Some cd = None \/ Some cd = begins_actions cont)
+      (TREE: bool_tree rer cont inp b t)
+      (READ: read_char rer cd inp forward = None),
+    forall gm, tree_res t gm inp forward = None.
+  Proof.
+    intros. destruct AFTER as [E|E]; [discriminate|].
+    eapply begins_actions_correct; eauto.
   Qed.
 
 End PeekingAnalysis.

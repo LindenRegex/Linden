@@ -157,6 +157,20 @@ Qed.
 
 (** * Relation to actions_rep  *)
 
+(* representations of greedy_choice *)
+Lemma tr_greedy_fork:
+  forall code pc g o1 o2 pc1 pc2 inp b t1 t2
+    (FORK: get_pc code pc = Some (greedy_fork g (compute_peek g o1 o2) pc1 pc2))
+    (TR1: tree_rep t1 code pc1 inp b)
+    (TR2: tree_rep t2 code pc2 inp b),
+    tree_rep (greedy_choice g t1 t2) code pc inp b.
+Proof.
+  intros. destruct (compute_peek_cases g o1 o2) as [P|[cd1 [cd2 [_ [_ [_ P]]]]]]; rewrite P in FORK.
+  - destruct g; simpl in *; eapply tr_choice; eauto.
+  - assert (F: get_pc code pc = Some (Fork (Branch cd1 g) pc1 pc2)) by (destruct g; auto).
+    eapply tr_branch; eauto.
+Qed.
+
 (* Actions rep to tree rep *)
 
 (* NOTE: here the induction on ACT only serves when there are jmps. In the other case, IHACT is never needed *)
@@ -266,19 +280,12 @@ Proof.
         try solve[eapply tr_jmp; eauto]; clear IHACT.
       invert_rep. inversion NFA; subst.
       2: { in_subset. }
-      destruct greedy; simpl.
-      * eapply tr_choice; eauto.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           prove_actions_rep.
-        ** eapply IHTREE2; eauto. pike_subset.
-      * eapply tr_choice; eauto.
-        ** eapply IHTREE2; eauto. pike_subset.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           prove_actions_rep.
+      eapply tr_greedy_fork; eauto.
+      * eapply tr_begin; eauto.
+        eapply tr_reset; eauto.
+        eapply IHTREE1; eauto. pike_subset.
+        prove_actions_rep.
+      * eapply IHTREE2; eauto. pike_subset.
     (* Star *)
     + destruct plus; inversion DINF. clear DINF.
       simpl in ACT.
@@ -287,19 +294,12 @@ Proof.
         try solve[eapply tr_jmp; eauto]; clear IHACT.
       invert_rep. inversion NFA; subst.
       2: { in_subset. }
-      destruct greedy; simpl.
-      * eapply tr_choice; eauto.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           prove_actions_rep.
-        ** eapply IHTREE2; eauto. pike_subset.
-      * eapply tr_choice; eauto.
-        ** eapply IHTREE2; eauto. pike_subset.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           prove_actions_rep.
+      eapply tr_greedy_fork; eauto.
+      * eapply tr_begin; eauto.
+        eapply tr_reset; eauto.
+        eapply IHTREE1; eauto. pike_subset.
+        prove_actions_rep.
+      * eapply IHTREE2; eauto. pike_subset.
     (* Unsupported *)
     + rewrite DUN in SUBSET. inversion SUBSET; subst.
       inversion H1; subst. inversion H0; subst; lia.

@@ -87,7 +87,7 @@ Section CodeWF.
     - apply nfa_rep_incr in REP as INC.
       assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
       (* fork *)
-      { subst. rewrite FORK in GET. destruct greedy; inversion GET; subst;
+      { subst. rewrite FORK in GET. destruct compute_peek; destruct greedy; inversion GET; subst;
           simpl in IN; destruct IN as [IN|[IN|IN]]; inversion IN; lia. }
       assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
       (* Begin *)
@@ -106,7 +106,7 @@ Section CodeWF.
     - apply nfa_rep_incr in REP as INC.
       assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
       (* fork *)
-      { subst. rewrite FORK in GET. destruct greedy; inversion GET; subst;
+      { subst. rewrite FORK in GET. destruct compute_peek; destruct greedy; inversion GET; subst;
           simpl in IN; destruct IN as [IN|[IN|IN]]; inversion IN; lia. }
       assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
       (* Begin *)
