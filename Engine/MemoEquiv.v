@@ -474,18 +474,36 @@ Section MemoEquiv.
     remember (Choice tree1 tree2) as TCHOICE.
     induction TREE; intros; subst; try inversion HeqTCHOICE; subst.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-    - repeat invert_rep. eexists. exists [(S pc,gm,b,inp);(S end1,gm,b,inp)].
-      split; [apply trim_refl|split].
-      + unfold exec_instr. rewrite FORK. auto.
-      + constructor.
-        * constructor. constructor.
-          apply tc_eq with (actions:=Areg r2::cont); auto.
-          2: { pike_subset. }
-          prove_actions_rep.
-        * apply tc_eq with (actions:=Areg r1::cont); auto.
-          2: { pike_subset. }
-          eapply cons_bc with (pcmid:=end1); [eapply areg_bc; eauto|assumption|].
-          eapply jump_bc; eauto.
+    - repeat invert_rep.
+      assert (TC1: tree_config code (tree1, gm, inp) (S pc, gm, b, inp)).
+      { apply tc_eq with (actions:=Areg r1::cont); auto.
+        2: { pike_subset. }
+        eapply cons_bc with (pcmid:=end1); [eapply areg_bc; eauto|assumption|].
+        eapply jump_bc; eauto. }
+      assert (TC2: tree_config code (tree2, gm, inp) (S end1, gm, b, inp)).
+      { apply tc_eq with (actions:=Areg r2::cont); auto.
+        2: { pike_subset. }
+        prove_actions_rep. }
+      destruct (compute_peek_cases true (begins r1 after) (begins r2 after)) as [P|[cd1 [cd2 [B1 [B2 [D P]]]]]];
+        rewrite P in FORK.
+      (* Un-annotated Fork *)
+      + exists [(tree1, gm, inp); (tree2, gm, inp)], [(S pc,gm,b,inp);(S end1,gm,b,inp)].
+        split; [apply trim_refl|split].
+        * unfold exec_instr. rewrite FORK. auto.
+        * eauto using ltc_cons, ltc_nil.
+      (* Branch. One of the subtrees has no result *)
+      + apply checker_sound in D. destruct (read_char rer cd1 inp forward) as [[c nextinp]|] eqn:R.
+        * exists [(tree1, gm, inp)], [(S pc,gm,b,inp)]. repeat split.
+          ** repeat constructor.
+             eapply begins_correct with (r:=r2) (cd:=cd2); eauto.
+             eapply disjoint_read; eauto.
+          ** unfold exec_instr. rewrite FORK, R. auto.
+          ** constructor. apply ltc_nil. auto.
+        * exists [(tree2, gm, inp)], [(S end1,gm,b,inp)]. repeat split.
+          ** repeat constructor.
+             eapply begins_correct with (r:=r1) (cd:=cd1); eauto.
+          ** unfold exec_instr. rewrite FORK, R. auto.
+          ** constructor. apply ltc_nil. auto.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
       prove_actions_rep. pike_subset.
     - repeat invert_rep. eapply IHTREE; eauto. pike_subset.

@@ -166,7 +166,8 @@ Section NFA.
     | Disjunction r1 r2 =>
         let (bc1, f1) := compile r1 (S fresh) after in
         let (bc2, f2) := compile r2 (S f1) after in
-        ([Fork NoPeek (S fresh) (S f1)] ++ bc1 ++ [Jmp f2] ++ bc2, f2)
+        let annot := compute_peek true (begins r1 after) (begins r2 after) in
+        ([Fork annot (S fresh) (S f1)] ++ bc1 ++ [Jmp f2] ++ bc2, f2)
     | Sequence r1 r2 =>
         let (bc1, f1) := compile r1 fresh (begins r2 after) in
         let (bc2, f2) := compile r2 f1 after in
@@ -209,7 +210,7 @@ Section NFA.
       nfa_rep (Character cd) after c lbl (S lbl)
   | nfa_rep_disj:
     forall c r1 r2 after start end1 end2
-      (FORK: get_pc c start = Some (Fork NoPeek (S start) (S end1)))
+      (FORK: get_pc c start = Some (Fork (compute_peek true (begins r1 after) (begins r2 after)) (S start) (S end1)))
       (NFA1: nfa_rep r1 after c (S start) end1)
       (JMP: get_pc c end1 = Some (Jmp end2))
       (NFA2: nfa_rep r2 after c (S end1) end2),
@@ -326,18 +327,18 @@ Section NFA.
     - inversion H. destruct (compile r1 (S start) after) as [bc1 end1] eqn:COMP1. destruct (compile r2 (S end1) after) as [bc2 end2] eqn:COMP2.
       inversion H2. subst. apply nfa_rep_disj with (end1:=end1).
       + rewrite get_first. simpl. auto.
-      + apply IHr1 with (prev:=prev ++ [Fork NoPeek (S (length prev)) (S end1)]) in COMP1.
+      + apply IHr1 with (prev:=prev ++ [Fork (compute_peek true (begins r1 after) (begins r2 after)) (S (length prev)) (S end1)]) in COMP1.
         2: { rewrite length_app. simpl. lia. }
-        replace (prev ++ Fork NoPeek (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
-          (((prev ++ [Fork NoPeek (S (length prev)) (S end1)]) ++ bc1) ++ (Jmp endl :: bc2)).
+        replace (prev ++ Fork (compute_peek true (begins r1 after) (begins r2 after)) (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
+          (((prev ++ [Fork (compute_peek true (begins r1 after) (begins r2 after)) (S (length prev)) (S end1)]) ++ bc1) ++ (Jmp endl :: bc2)).
         2:{ rewrite <- app_assoc. rewrite <- app_assoc. auto. }
         apply nfa_rep_extend. auto.
       + apply fresh_correct in COMP1. rewrite <- COMP1.
         replace (S (length prev) + length bc1) with (length prev + (S (length bc1))) by lia.
         rewrite get_prefix. rewrite cons_app. rewrite app_assoc. apply get_first.
-      + apply IHr2 with (prev:= prev ++ Fork NoPeek (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) in COMP2.
-        * replace (prev ++ Fork NoPeek (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
-            ((prev ++ Fork NoPeek (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) ++ bc2).
+      + apply IHr2 with (prev:= prev ++ Fork (compute_peek true (begins r1 after) (begins r2 after)) (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) in COMP2.
+        * replace (prev ++ Fork (compute_peek true (begins r1 after) (begins r2 after)) (S (length prev)) (S end1) :: bc1 ++ Jmp endl :: bc2) with
+            ((prev ++ Fork (compute_peek true (begins r1 after) (begins r2 after)) (S (length prev)) (S end1) :: bc1 ++ [Jmp endl]) ++ bc2).
           2: { rewrite <- app_assoc. simpl. apply f_equal. apply f_equal. rewrite <- app_assoc. auto. }
           auto.
         * apply fresh_correct in COMP1. rewrite <- COMP1. simpl.

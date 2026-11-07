@@ -296,18 +296,37 @@ Proof.
   remember (Choice tree1 tree2) as TCHOICE.
   induction TREE; intros; subst; try inversion HeqTCHOICE; subst.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
-  - repeat invert_rep. eexists. exists [(S pc,gm,b);(S end1,gm,b)].
-    split; [apply trim_refl|split].
-    + unfold epsilon_step. rewrite FORK. auto.
-    + constructor.
-      * constructor. constructor.
-        apply tt_eq with (actions:=Areg r2::cont); auto.
-        2: { pike_subset. }
-        prove_actions_rep.
-      * apply tt_eq with (actions:=Areg r1::cont); auto.
-        2: { pike_subset. }
-        eapply cons_bc with (pcmid:=end1); [eapply areg_bc; eauto|assumption|].
-        eapply jump_bc; eauto.
+  - repeat invert_rep.
+    assert (TT1: tree_thread code inp (tree1, gm) (S pc, gm, b)).
+    { apply tt_eq with (actions:=Areg r1::cont); auto.
+      2: { pike_subset. }
+      eapply cons_bc with (pcmid:=end1); [eapply areg_bc; eauto|assumption|].
+      eapply jump_bc; eauto. }
+    assert (TT2: tree_thread code inp (tree2, gm) (S end1, gm, b)).
+    { apply tt_eq with (actions:=Areg r2::cont); auto.
+      2: { pike_subset. }
+      prove_actions_rep. }
+    destruct (compute_peek_cases true (begins r1 after) (begins r2 after)) as [P|[cd1 [cd2 [B1 [B2 [D P]]]]]];
+      rewrite P in FORK.
+    (* Un-annotated Fork *)
+    + exists [(tree1, gm); (tree2, gm)], [(S pc,gm,b);(S end1,gm,b)].
+      split; [apply trim_refl|split].
+      * unfold epsilon_step. rewrite FORK. auto.
+      * eauto using ltt_cons, ltt_nil.
+    (* Branch. One of the subtrees has no result *)
+    + apply checker_sound in D. destruct (check_read rer cd1 inp forward) eqn:R.
+      * exists [(tree1, gm)], [(S pc,gm,b)]. repeat split.
+        ** repeat constructor.
+           eapply begins_correct with (r:=r2) (cd:=cd2); eauto.
+           eapply disjoint_check_read; eauto.
+        ** unfold epsilon_step. rewrite FORK, R. auto.
+        ** constructor. apply ltt_nil. auto.
+      * exists [(tree2, gm)], [(S end1,gm,b)]. repeat split.
+        ** repeat constructor.
+           eapply begins_correct with (r:=r1) (cd:=cd1); eauto.
+           apply cannot_read_correct. auto.
+        ** unfold epsilon_step. rewrite FORK, R. auto.
+        ** constructor. apply ltt_nil. auto.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.
     prove_actions_rep. pike_subset.
   - repeat invert_rep. eapply IHTREE; eauto. pike_subset.

@@ -1265,7 +1265,7 @@ Section MemoBTComplexity.
       intros r inp ms SUBSET WF.
       destruct WF as [dist WF].
       specialize (initial_memo_measure inp r ms dist SUBSET WF) as [measure [LE INV]].
-      specialize (memobt_bound _ _ _ _ (compiled_wf r) INV) as [result [finalms [STEPS VALID]]].
+      specialize (memobt_bound _ _ _ _ (compiled_wf rer r) INV) as [result [finalms [STEPS VALID]]].
       exists result. exists finalms. rewrite <- compilation_size; auto. split;auto. eapply more_steps; eauto.
     Qed.
 

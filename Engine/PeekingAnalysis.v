@@ -34,6 +34,18 @@ Section PeekingAnalysis.
     simpl in DISJ. rewrite DISJ. auto.
   Qed.
 
+  Lemma disjoint_check_read:
+    forall cd1 cd2 inp,
+      disjoint cd1 cd2 ->
+      check_read rer cd1 inp forward = CanRead ->
+      read_char rer cd2 inp forward = None.
+  Proof.
+    intros cd1 cd2 inp D R.
+    destruct (read_char rer cd1 inp forward) as [[c nextinp]|] eqn:R1.
+    - eapply disjoint_read; eauto.
+    - apply cannot_read_correct in R1. congruence.
+  Qed.
+
   (* the compiler relies only on a sound check of disjointness *)
   (* sound meaning an under-approximation of disjointness is allowed *)
   Class Disjoint := {

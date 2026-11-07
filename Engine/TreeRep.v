@@ -220,12 +220,16 @@ Proof.
       try solve[eapply tr_jmp; eauto]; clear IHACT.
     invert_rep. inversion NFA; subst.
     2: { in_subset. }
-    eapply tr_choice; eauto.
-    + eapply IHTREE1. pike_subset.
+    assert (TR1: tree_rep t1 c (S pcstart) inp b).
+    { eapply IHTREE1. pike_subset.
       eapply cons_bc with (pcmid:=end1); [eapply areg_bc; eauto|assumption|].
-      eapply jump_bc; eauto.
-    + eapply IHTREE2; eauto. pike_subset.
-      prove_actions_rep.
+      eapply jump_bc; eauto. }
+    assert (TR2: tree_rep t2 c (S end1) inp b).
+    { eapply IHTREE2; eauto. pike_subset. prove_actions_rep. }
+    destruct (compute_peek_cases true (begins r1 after) (begins r2 after)) as [P|[cd1 [cd2 [_ [_ [_ P]]]]]];
+      rewrite P in FORK.
+    + eapply tr_choice; eauto.
+    + change (Choice t1 t2) with (greedy_choice true t1 t2). eapply tr_branch; eauto.
   (* sequence *)
   - remember (Areg (Sequence r1 r2) :: cont) as seqcont.
     induction ACT; inversion Heqseqcont; subst;
