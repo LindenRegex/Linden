@@ -432,7 +432,6 @@ Section NFA.
       + rewrite get_first. simpl. auto.
   Qed.
 
-
   (** * Lifting the representation predicate to continuations  *)
   (* This is useful to relate the continuations used in the tree semantics to the code produced by the NFA compiler *)
 
@@ -540,6 +539,123 @@ Section NFA.
   Proof.
     unfold stutters, not. intros. destruct get_pc; try destruct b; inversion H0. inversion H.
   Qed.
+
+  (** * Compilation Properties *)
+  (* properties that can justify using a more compact representation of Bytecode *)
+
+  (* what we expect from the labels of our fork instructions *)
+  Definition fork_next (pc:label) (i:bytecode) : Prop :=
+    match i with
+    | Fork (Branch _ _) lbl1 _ => lbl1 = pc + 1
+    | Fork NoPeek lbl1 lbl2 => lbl1 = pc + 1 \/ lbl2 = pc + 1
+    | _ => True
+    end.
+
+  Lemma nfa_rep_start_end:
+    forall r after c start endl,
+      nfa_rep r after c start endl ->
+      start <= endl.
+  Proof. intros r after c start endl H. induction H; try lia. Qed.
+
+  Lemma nfa_rep_fork_next:
+    forall r after c start endl pc i,
+      nfa_rep r after c start endl ->
+      start <= pc ->
+      pc < endl ->
+      get_pc c pc = Some i ->
+      fork_next pc i.
+  Proof.
+    intros r after c start endl pc i REP GE LT GET.
+    generalize dependent pc. induction REP; intros; try lia.
+    - assert (pc = lbl) by lia. subst.
+      rewrite CONSUME in GET. inversion GET. simpl. auto.
+    - apply nfa_rep_start_end in REP1 as INCR1.
+      apply nfa_rep_start_end in REP2 as INCR2.
+      assert (pc = start \/ pc >= S start) as [ST|H] by lia.
+      { subst. rewrite FORK in GET. inversion GET. destruct compute_peek; simpl; lia. }
+      assert (pc < end1 \/ pc >= end1) as [R1|H1] by lia.
+      { apply IHREP1; auto. }
+      assert (pc = end1 \/ pc >= S end1) as [J|H2] by lia.
+      { subst. rewrite JMP in GET. inversion GET. simpl. auto. }
+      apply IHREP2; auto.
+    - assert (pc < end1 \/ pc >= end1) as [H1|H2] by lia.
+      + apply IHREP1; auto.
+      + apply IHREP2; auto.
+    - assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
+      { subst. rewrite FORK in GET. inversion GET.
+        destruct compute_peek; destruct greedy; simpl; lia. }
+      assert (pc = S start \/ pc = S (S start) \/ pc >= S (S (S start))) as [BEG|[RES|H1]] by lia.
+      { subst. rewrite BEGIN in GET. inversion GET. simpl. auto. }
+      { subst. rewrite RESET in GET. inversion GET. simpl. auto. }
+      assert (pc < end1 \/ pc = end1) as [R1|H2] by lia.
+      { apply IHREP; auto. }
+      subst. rewrite END in GET. inversion GET. simpl. auto.
+    - assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
+      { subst. rewrite FORK in GET. inversion GET.
+        destruct compute_peek; destruct greedy; simpl; lia. }
+      assert (pc = S start \/ pc = S (S start) \/ pc >= S (S (S start))) as [BEG|[RES|H1]] by lia.
+      { subst. rewrite BEGIN in GET. inversion GET. simpl. auto. }
+      { subst. rewrite RESET in GET. inversion GET. simpl. auto. }
+      assert (pc < end1 \/ pc = end1) as [R1|H2] by lia.
+      { apply IHREP; auto. }
+      subst. rewrite END in GET. inversion GET. simpl. auto.
+    - assert (pc = start \/ pc >= S start) as [RES|H] by lia.
+      { subst. rewrite RESET in GET. inversion GET. simpl. auto. }
+      apply IHREP; auto.
+    - assert (pc = start \/ pc >= S start) as [ST|H] by lia.
+      { subst. rewrite OPEN in GET. inversion GET. simpl. auto. }
+      assert (pc = end1 \/ pc < end1) as [END|H1] by lia.
+      { subst. rewrite CLOSE in GET. inversion GET. simpl. auto. }
+      apply IHREP; auto.
+    - assert (pc = lbl) by lia. subst.
+      rewrite CHECK in GET. inversion GET. simpl. auto.
+    - assert (pc = lbl) by lia. subst.
+      rewrite KILL in GET. inversion GET. simpl. auto.
+  Qed.
+
+  Lemma get_app_cases:
+    forall c1 c2 pc i,
+      get_pc (c1 ++ c2) pc = Some i ->
+      get_pc c1 pc = Some i \/ (length c1 <= pc /\ get_pc c2 (pc - length c1) = Some i).
+  Proof.
+    unfold get_pc. intros c1 c2 pc i H. rewrite nth_error_app in H.
+    destruct (PeanoNat.Nat.ltb_spec pc (length c1)); auto.
+  Qed.
+
+  Lemma compilation_fork_next_all:
+    forall r pc i
+      (GET: get_pc (compilation r) pc = Some i),
+      fork_next pc i.
+  Proof.
+    unfold compilation. intros.
+    destruct (compile r 0 None) as [c endl] eqn:COMP.
+    eapply compile_nfa_rep with (prev:=[]) in COMP as REP; simpl in *; auto.
+    apply fresh_correct in COMP. simpl in COMP. subst.
+    apply get_app_cases in GET as [GET|[_ GET]].
+    - assert (pc < length c).
+      { unfold get_pc in GET. apply nth_error_Some. rewrite GET. discriminate. }
+      eapply nfa_rep_fork_next; eauto. lia.
+    - assert (i = Accept).
+      { unfold get_pc in GET. destruct (pc - length c); inversion GET; auto.
+        destruct n; inversion H0. }
+      subst. simpl. auto.
+  Qed.
+
+  (* when Branches are compiled, their first label is always pc+1 *)
+  Corollary compilation_branch_next:
+    forall r code pc cd g lbl1 lbl2
+      (COMP: compilation r = code)
+      (GET: get_pc code pc = Some (Fork (Branch cd g) lbl1 lbl2)),
+      lbl1 = pc+1.
+  Proof. intros. subst. apply (compilation_fork_next_all _ _ _ GET). Qed.
+
+  (* For unannotated forks, either the first label is pc+1 or the second *)
+  Corollary compilation_fork_next:
+    forall r code pc lbl1 lbl2
+      (COMP: compilation r = code)
+      (GET: get_pc code pc = Some (Fork NoPeek lbl1 lbl2)),
+      (lbl1 = pc+1) \/ (lbl2 = pc+1).
+  Proof. intros. subst. apply (compilation_fork_next_all _ _ _ GET). Qed.
 
 End NFA.
 
