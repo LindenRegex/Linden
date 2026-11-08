@@ -308,7 +308,7 @@ Section CodeSize.
       + destruct (compile r (S (S (S start))) after) eqn:C1.
         erewrite <- IHr; eauto. 2: pike_subset.
         inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-      + destruct (compile r (S (S (S start))) None) eqn:C1.
+      + destruct (compile r (S (S (S start))) (union_option (begins r None) after)) eqn:C1.
         erewrite <- IHr; eauto. 2: pike_subset.
         inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
       + inversion SUBSET; subst; lia.

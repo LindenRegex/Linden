@@ -179,7 +179,7 @@ Section NFA.
         let annot := compute_peek greedy (begins r1 None) after in
         ([greedy_fork greedy annot (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop (S f1)], S f1)
     | Quantified greedy 0 (NoI.Inf) r1 =>
-        let (bc1, f1) := compile r1 (S (S (S fresh))) None in
+        let (bc1, f1) := compile r1 (S (S (S fresh))) (union_option (begins r1 None) after) in
         (* we don't know what comes after the iteration: we use None as after for the body *)
         let annot := compute_peek greedy (begins r1 None) after in
         ([greedy_fork greedy annot (S fresh) (S f1); BeginLoop; ResetRegs (def_groups r1)] ++ bc1 ++ [EndLoop fresh], S f1)
@@ -192,9 +192,6 @@ Section NFA.
     | Anchor a => ([CheckAnchor a], S fresh)
     | _ => ([KillThread], S fresh) (* unsupported features *)
     end.
-
-  (* LATER: when compiling the body inside a star, we should be able to use
-     (union_option (begins r1 None) after) instead of None as after *)
 
   (* adds an accept at the end of the code *)
   Definition compilation (r:regex) : code :=
@@ -244,7 +241,7 @@ Section NFA.
       (FORK: get_pc c start = Some (greedy_fork greedy (compute_peek greedy (begins r1 None) after) (S start) (S end1)))
       (BEGIN: get_pc c (S start) = Some (BeginLoop))
       (RESET: get_pc c (S (S start)) = Some (ResetRegs (def_groups r1)))
-      (NFA1: nfa_rep r1 None c (S (S (S start))) end1)
+      (NFA1: nfa_rep r1 (union_option (begins r1 None) after) c (S (S (S start))) end1)
       (END: get_pc c end1 = Some (EndLoop start)),
       nfa_rep (Quantified greedy 0 (NoI.Inf) r1) after c start (S end1)
   | nfa_rep_one:
@@ -313,7 +310,7 @@ Section NFA.
         destruct (compile r (S (S (S fresh))) after) as [bc1 f1] eqn:COMP1.
         inversion H0. apply IHr in COMP1.
         subst. simpl. rewrite length_app. simpl. lia.
-      + destruct (compile r (S (S (S fresh))) None) as [bc1 f1] eqn:COMP1.
+      + destruct (compile r (S (S (S fresh))) (union_option (begins r None) after)) as [bc1 f1] eqn:COMP1.
         inversion H0. apply IHr in COMP1.
         subst. simpl. rewrite length_app. simpl. lia.
     - inversion COMPILE.
@@ -390,7 +387,8 @@ Section NFA.
           apply fresh_correct in COMP1. subst. apply get_first_0.
           simpl. rewrite length_app. simpl. lia.
       (* Star *)
-      + destruct (compile r (S (S (S start))) None) as [bc1 end1] eqn:COMP1. inversion H2. subst. constructor.
+      + destruct (compile r (S (S (S start))) (union_option (begins r None) after)) as [bc1 end1] eqn:COMP1.
+        inversion H2. subst. constructor.
         * rewrite get_first. simpl. auto.
         * rewrite get_second. simpl. auto.
         * rewrite get_third. simpl. auto.
@@ -493,6 +491,17 @@ Section NFA.
     - destruct (begins r None) eqn:B; [right|left]; auto.
       symmetry. apply begins_none. auto.
     - right. auto.
+  Qed.
+
+  (* for what's inside the body *)
+  Lemma after_ok_star:
+    forall after r cont inp g,
+      after_ok after cont ->
+      after_ok (union_option (begins r None) after) (Acheck inp :: Areg (Quantified g 0 NoI.Inf r) :: cont).
+  Proof.
+    intros after r cont inp g [N|E]; subst.
+    - left. unfold union_option. destruct begins; auto.
+    - right. simpl. auto.
   Qed.
 
   (** * Stuttering  *)
@@ -677,7 +686,7 @@ Ltac stutter :=
 Ltac solve_after_ok :=
   match goal with
   | [ |- after_ok _ _ ] =>
-      first [assumption | apply after_ok_none | apply after_ok_seq; assumption]
+      first [assumption | apply after_ok_none | apply after_ok_seq; assumption | apply after_ok_star; assumption]
   end.
 
 Ltac prove_actions_rep := repeat (first [solve_after_ok | econstructor]; eauto).
