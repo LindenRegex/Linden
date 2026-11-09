@@ -72,24 +72,66 @@ Proof.
   cbn. unfold whole_range. do 4 f_equal. apply map_ext. intro n. rewrite OTHERS by lia. reflexivity.
 Qed.
 
-(** The compiled matcher's attempt at any input decodes the leaf of [whole_regex r] there. *)
-Lemma whole_attempt pattern rer r matcher inp :
+(** The compiled matcher's attempt at any input decodes the leaf of [r] there. *)
+Lemma linden_attempt pattern rer r matcher inp :
   lower pattern = Result.Success r ->
   RegExpRecord.capturingGroupsCount rer = StaticSemantics.countLeftCapturingParensWithin pattern [] ->
   early_errors pattern [] = Result.Success false ->
   warblre_compile pattern rer = Result.Success matcher ->
-  exists a, matcher (input_str inp) (idx inp) = Result.Success a /\
-    whole_decode (RegExpRecord.capturingGroupsCount rer) (linden_result rer (whole_regex r) inp) =
-      Some (option_map (whole_range (idx inp)) a).
+  matcher (input_str inp) (idx inp) =
+    Result.Success (to_MatchState (linden_result rer r inp) (RegExpRecord.capturingGroupsCount rer)).
 Proof.
   intros LOWER COUNT EARLY COMP.
-  pose proof (warblre_to_linden_sound_root _ _ LOWER) as EQUIV.
-  assert (DEFS : ~ In 0 (def_groups r)) by (rewrite (equiv_def_groups' _ _ _ _ EQUIV), in_seq; lia).
-  destruct (equiv_main pattern r rer inp EQUIV COUNT (EarlyErrors.earlyErrors _ EARLY)) as [m [res [COMP' [RUN EQUIVALENT]]]].
-  rewrite COMP in COMP'. injection COMP' as <-. exists res. split; [exact RUN|].
-  rewrite whole_at by exact DEFS. do 2 f_equal.
-  apply to_MatchState_equal; [eauto using compilePattern_preserves_groupcount|].
-  now apply EQUIVALENT.
+  destruct (equiv_main pattern r rer inp (warblre_to_linden_sound_root _ _ LOWER) COUNT (EarlyErrors.earlyErrors _ EARLY))
+    as [m [res [COMP' [RUN EQUIVALENT]]]].
+  rewrite COMP in COMP'. injection COMP' as <-. rewrite RUN. f_equal. symmetry.
+  apply to_MatchState_equal; [eauto using compilePattern_preserves_groupcount|now apply EQUIVALENT].
+Qed.
+
+(** From [start], a search whose attempts decode the leaves of [r] decodes its first leaf, anchored or not. *)
+Lemma linden_search {A B E} rer r (attempt : string -> nat -> Result (option A) E) (project : nat -> A -> B)
+    decode input start (anchored : bool) :
+  decode None = Some None -> (forall l, decode (Some l) <> Some None) ->
+  (forall inp, exists a, attempt (input_str inp) (idx inp) = Result.Success a /\
+    decode (linden_result rer r inp) = Some (option_map (project (idx inp)) a)) ->
+  start <= length input ->
+  exists expected,
+    first_success (attempt input) project (seq start (if anchored then 1 else S (length input) - start)) = Result.Success expected /\
+    decode (linden_result rer (if anchored then r else lazy_prefix r) (Input (skipn start input) (rev (firstn start input)))) = Some expected.
+Proof.
+  intros NONE SOME STEP WITHIN. set (inp := Input (skipn start input) (rev (firstn start input))).
+  assert (STR : input_str inp = input) by (cbn; now rewrite rev_involutive, firstn_skipn).
+  assert (IDX : idx inp = start) by (cbn; rewrite length_rev, length_firstn; lia).
+  destruct anchored.
+  - destruct (STEP inp) as [a [RUN DECODE]]. rewrite STR, IDX in *.
+    exists (option_map (project start) a). split; [cbn; rewrite RUN; now destruct a|exact DECODE].
+  - destruct (search_suffixes attempt project (linden_result rer r) decode (skipn start input) (rev (firstn start input)) NONE SOME STEP)
+      as [expected [SEARCH DECODE]].
+    rewrite <- lazy_prefix_first in DECODE. fold inp in SEARCH, DECODE.
+    exists expected. split; [|exact DECODE].
+    rewrite STR, length_rev, length_firstn, length_skipn, Nat.min_l in SEARCH by lia.
+    replace (S (length input) - start) with (S (length input - start)) by lia. exact SEARCH.
+Qed.
+
+(** From [start], Warblre's search for a match decodes Linden's first leaf of [r], anchored or not. *)
+Theorem linden_match pattern rer r input start (anchored : bool) :
+  lower pattern = Result.Success r ->
+  RegExpRecord.capturingGroupsCount rer = StaticSemantics.countLeftCapturingParensWithin pattern [] ->
+  early_errors pattern [] = Result.Success false ->
+  start <= length input ->
+  exists matcher,
+    warblre_compile pattern rer = Result.Success matcher /\
+    first_success (matcher input) (fun _ state => state) (seq start (if anchored then 1 else S (length input) - start)) =
+      Result.Success (to_MatchState (linden_result rer (if anchored then r else lazy_prefix r)
+        (Input (skipn start input) (rev (firstn start input)))) (RegExpRecord.capturingGroupsCount rer)).
+Proof.
+  intros LOWER COUNT EARLY WITHIN.
+  destruct (@Compile.compilePattern_success (@LWParameters params) pattern rer (eq_sym COUNT) (EarlyErrors.earlyErrors _ EARLY)) as [matcher COMP].
+  exists matcher. split; [exact COMP|].
+  destruct (linden_search rer r matcher (fun _ state => state) (fun leaf => Some (to_MatchState leaf (RegExpRecord.capturingGroupsCount rer)))
+    input start anchored) as [expected [SEARCH DECODE]]; [reflexivity|intros [? ?]; cbn; discriminate| |exact WITHIN|].
+  - intro inp. eexists. split; [exact (linden_attempt pattern rer r matcher inp LOWER COUNT EARLY COMP)|now destruct to_MatchState].
+  - injection DECODE as <-. exact SEARCH.
 Qed.
 
 (** From [start], Warblre's search decodes Linden's first leaf of [whole_regex r], anchored or not. *)
@@ -107,21 +149,10 @@ Theorem linden_whole_match pattern rer r input start (anchored : bool) :
 Proof.
   intros LOWER COUNT EARLY WITHIN inp.
   destruct (@Compile.compilePattern_success (@LWParameters params) pattern rer (eq_sym COUNT) (EarlyErrors.earlyErrors _ EARLY)) as [matcher COMP].
-  exists matcher.
-  assert (STR : input_str inp = input) by (cbn; now rewrite rev_involutive, firstn_skipn).
-  assert (IDX : idx inp = start) by (cbn; rewrite length_rev, length_firstn; lia).
-  destruct anchored.
-  - destruct (whole_attempt pattern rer r matcher inp LOWER COUNT EARLY COMP) as [a [RUN DECODE]].
-    exists (option_map (whole_range start) a). rewrite STR, IDX in *.
-    split; [exact COMP|]. split; [cbn; rewrite RUN; now destruct a|exact DECODE].
-  - destruct (search_suffixes matcher whole_range (linden_result rer (whole_regex r))
-      (whole_decode (RegExpRecord.capturingGroupsCount rer)) (skipn start input) (rev (firstn start input)))
-      as [expected [SEARCH DECODE]]; [reflexivity|intros [? ?]; cbn; destruct to_capture_range; discriminate|
-        intro; exact (whole_attempt pattern rer r matcher _ LOWER COUNT EARLY COMP)|].
-    rewrite <- lazy_prefix_first in DECODE. fold inp in SEARCH, DECODE.
-    exists expected. split; [exact COMP|]. split; [|exact DECODE].
-    rewrite STR, length_rev, length_firstn, length_skipn, Nat.min_l in SEARCH by lia.
-    replace (S (length input) - start) with (S (length input - start)) by lia. exact SEARCH.
+  destruct (linden_search rer (whole_regex r) matcher whole_range (whole_decode (RegExpRecord.capturingGroupsCount rer)) input start anchored)
+    as [expected [SEARCH DECODE]]; [reflexivity|intros [? ?]; cbn; destruct to_capture_range; discriminate| |exact WITHIN|eauto].
+  intro. eexists. split; [exact (linden_attempt pattern rer r matcher _ LOWER COUNT EARLY COMP)|].
+  apply whole_at. rewrite (equiv_def_groups' _ _ _ _ (warblre_to_linden_sound_root _ _ LOWER)), in_seq. lia.
 Qed.
 
 (** The PikeVM, anchored or not, run on the expansion of a source regex, computes Linden's first leaf of the regex. *)
