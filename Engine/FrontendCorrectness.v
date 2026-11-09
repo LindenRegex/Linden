@@ -206,14 +206,12 @@ Theorem linden_frontend_search R r input :
       (linden_result rer (if RegExpFlags.y flags then whole_regex r else lazy_prefix (whole_regex r)) inp) = Some expected.
 Proof.
   intros [_ COUNT COMP _] EARLY LOWER. cbv zeta. set (start := frontend_index R).
-  rewrite repeat_matcher_loop_search by lia.
   destruct (Nat.ltb_spec (length input) start) as [PAST|WITHIN].
-  - exists None. replace (S (length input) - start) with 0 by lia. split; [now destruct RegExpFlags.y|reflexivity].
+  - exists None. rewrite repeat_matcher_loop_search by lia. replace (S (length input) - start) with 0 by lia. split; [now destruct RegExpFlags.y|reflexivity].
   - destruct (linden_whole_match _ _ r input start (RegExpFlags.y (RegExpInstance.originalFlags R)) LOWER (eq_sym COUNT) EARLY WITHIN)
       as [matcher [expected [COMP' [SEARCH DECODE]]]].
     rewrite COMP in COMP'. injection COMP' as <-.
-    exists expected. replace (Nat.min 1 (S (length input) - start)) with 1 by lia. split; [|exact DECODE].
-    match goal with |- Result.bind ?search _ = _ => replace search with (Result.Success (F := Errors.MatchError.type) expected) end; easy.
+    exists expected. split; [now apply whole_search_loop|exact DECODE].
 Qed.
 
 (** One PikeVM run of the expansion of a source regex, from the frontend's start index and anchored iff sticky, computes its search loop. *)

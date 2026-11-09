@@ -109,4 +109,17 @@ Section FrontendSearch.
       unfold loop_result. cbv zeta. now rewrite STICKY.
   Qed.
 
+  (* Within the input, the loop reports the search over its positions: the start alone if sticky. *)
+  Corollary whole_search_loop (R : Instance) (input : string) start expected :
+    let flags := RegExpInstance.originalFlags R in
+    start <= length input ->
+    whole_search (RegExpInstance.regExpMatcher R) input
+      (seq start (if RegExpFlags.y flags then 1 else S (length input) - start)) = Result.Success expected ->
+    repeat_matcher_loop R input (length input) (RegExpFlags.g flags) (RegExpFlags.y flags)
+      (RegExpInstance.regExpMatcher R) input start (length input + 2) = Result.Success (loop_result R expected).
+  Proof.
+    cbv zeta. intros WITHIN SEARCH. rewrite repeat_matcher_loop_search by lia.
+    replace (Nat.min 1 (S (length input) - start)) with 1 by lia. now rewrite SEARCH.
+  Qed.
+
 End FrontendSearch.
