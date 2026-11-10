@@ -5,6 +5,7 @@ Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree Semantics NFA.
+From Linden Require Import PeekingAnalysis.
 From Linden Require Import BooleanSemantics PikeSubset.
 From Linden Require Import MemoBT Correctness SeenSets.
 From Linden Require Import Complexity.
@@ -16,6 +17,7 @@ Section FunctionMemoBT.
   Context {params: LindenParameters}.
   Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
 (** * Functional Definition  *)
 
 (* a functional version of the small step *)
@@ -154,7 +156,7 @@ Theorem memobt_match_terminates:
     exists result ms, memobt_match r inp = Finished result ms.
 Proof.
   intros r inp SUBSET. unfold memobt_match, memobt_fuel.
-  eapply memobt_complexity_empty_memoset with (rer:=rer) (r:=r) (inp:=inp) in SUBSET as [result [finalms [TERM VAL]]].
+  eapply memobt_complexity_empty_memoset with (rer:=rer) (disj:=disj) (r:=r) (inp:=inp) in SUBSET as [result [finalms [TERM VAL]]].
   exists result. exists finalms. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 

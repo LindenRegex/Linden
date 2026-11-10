@@ -10,15 +10,12 @@ Module Right.
     Context (rer: RegExpRecord).
 
     Context (x0 x1 y: regex).
-    Context (NO_GROUPS_IN_Y: def_groups y = []).
 
     Definition factored: regex :=
       Sequence (Disjunction x0 x1) y.
 
     Definition expanded: regex :=
       Disjunction (Sequence x0 y) (Sequence x1 y).
-
-    Hint Rewrite NO_GROUPS_IN_Y : tree_equiv.
 
     Theorem factored_expanded_right_equiv: (* Proof using inversion on the is_tree predicate *)
       factored ≅[rer][forward] expanded.
@@ -43,15 +40,12 @@ Module LeftBackward.
     Context (rer: RegExpRecord).
 
     Context (x y0 y1: regex).
-    Context (NO_GROUPS_IN_X: def_groups x = []).
 
     Definition factored: regex :=
       Sequence x (Disjunction y0 y1).
 
     Definition expanded: regex :=
       Disjunction (Sequence x y0) (Sequence x y1).
-
-    Hint Rewrite NO_GROUPS_IN_X : tree_equiv.
 
     Theorem factored_expanded_left_equiv: (* Proof using inversion on the is_tree predicate *)
       factored ≅[rer][backward] expanded.

@@ -6,6 +6,7 @@ Import ListNotations.
 From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree Semantics BooleanSemantics.
 From Linden Require Import NFA PikeVM PikeSubset Prefix.
+From Linden Require Import PeekingAnalysis.
 From Linden Require Import MemoBT.
 From Linden Require Import Correctness PikeEquiv SeenSets.
 From Linden Require Import StrictSuffix.
@@ -20,6 +21,7 @@ Section CodeWF.
 
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
 
   Definition size (c:code) : nat := length c.
 
@@ -44,15 +46,15 @@ Section CodeWF.
       next < size.
 
   Lemma nfa_wf:
-    forall r c startl endl pc next i,
-      nfa_rep r c startl endl ->
+    forall r after c startl endl pc next i,
+      nfa_rep r after c startl endl ->
       pc >= startl ->
       pc < endl ->
       get_pc c pc = Some i ->
       In next (next_pcs pc i) ->
       next <= endl.
   Proof.
-    intros r c startl endl pc next i REP GE LT GET IN.
+    intros r after c startl endl pc next i REP GE LT GET IN.
     generalize dependent pc. induction REP; intros.
     - lia.
     (* char *)
@@ -85,7 +87,7 @@ Section CodeWF.
     - apply nfa_rep_incr in REP as INC.
       assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
       (* fork *)
-      { subst. rewrite FORK in GET. destruct greedy; inversion GET; subst;
+      { subst. rewrite FORK in GET. destruct compute_peek; destruct greedy; inversion GET; subst;
           simpl in IN; destruct IN as [IN|[IN|IN]]; inversion IN; lia. }
       assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
       (* Begin *)
@@ -104,7 +106,7 @@ Section CodeWF.
     - apply nfa_rep_incr in REP as INC.
       assert (pc = start \/ pc >= S start) as [FOR|H] by lia.
       (* fork *)
-      { subst. rewrite FORK in GET. destruct greedy; inversion GET; subst;
+      { subst. rewrite FORK in GET. destruct compute_peek; destruct greedy; inversion GET; subst;
           simpl in IN; destruct IN as [IN|[IN|IN]]; inversion IN; lia. }
       assert (pc = S start \/ pc >= S (S start)) as [BEG|H1] by lia.
       (* Begin *)
@@ -120,6 +122,13 @@ Section CodeWF.
       (* endloop *)
       subst. rewrite END in GET. inversion GET. subst.
       simpl in IN. destruct IN as [IN|IN]; inversion IN; lia.
+    - apply nfa_rep_incr in REP as INC.
+      assert (pc = start \/ pc >= S start) as [RES|H] by lia.
+      (* Reset *)
+      { subst. rewrite RESET in GET. inversion GET. subst.
+        simpl in IN. destruct IN as [IN|IN]; inversion IN; lia. }
+      (* in r1 *)
+      apply IHREP in IN; auto.
     - apply nfa_rep_incr in REP as INC.
       assert (pc = start \/ pc >= S start) as [ST|H] by lia.
       (* open *)
@@ -142,7 +151,7 @@ Section CodeWF.
   Theorem compiled_wf:
     forall r, code_wf (compilation r) (size (compilation r)).
   Proof.
-    intros r.  destruct (compile r 0) as [c endl] eqn:COMP.
+    intros r.  destruct (compile r 0 None) as [c endl] eqn:COMP.
     eapply compile_nfa_rep with (prev:=[]) in COMP as REP; simpl in *; auto.
     unfold compilation. rewrite COMP. unfold code_wf.
     apply fresh_correct in COMP as FRESH. simpl in FRESH. subst.
@@ -160,7 +169,7 @@ Section CodeWF.
     assert (GETI: get_pc c pc = Some i).
     { unfold get_pc in GET. rewrite nth_error_app1 in GET; auto. }
     assert (POS: pc >= 0) by lia.
-    specialize (nfa_wf r c 0 (length c) pc next i REP POS H1 GETI IN) as WF.
+    specialize (nfa_wf r None c 0 (length c) pc next i REP POS H1 GETI IN) as WF.
     unfold size. rewrite length_app. simpl. lia.
   Qed.
 
@@ -176,6 +185,8 @@ Section CodeWF.
     - destruct (check_read rer c inp forward); inversion H1; subst.
       simpl; eexists; split; eauto; simpl; auto; lia.
     - destruct (anchor_satisfied rer a inp); inversion H1; subst.
+    - destruct p; inversion H.
+      destruct (check_read rer cd inp forward); inversion H1; subst.
     - destruct b; inversion H1.
   Qed.
 
@@ -198,7 +209,8 @@ Section CodeWF.
     - destruct (anchor_satisfied rer a inp); inversion H1; subst;
         inversion IN; subst; try solve [inversion H0];
         simpl; eexists; split; eauto; simpl; auto; lia.
-    - inversion IN; [|inversion H0]; subst; try solve [inversion H1];
+    - destruct p; [|destruct check_read]; inversion H; subst;
+        simpl in IN; intuition subst;
         simpl; eexists; split; eauto; simpl; auto.
     - destruct b; subst; inversion H1; subst;
         inversion IN; subst; try solve [inversion H0];
@@ -224,7 +236,8 @@ Section CodeWF.
     - destruct (anchor_satisfied rer a i); try destruct p; inversion H1; subst;
         inversion IN; subst; try solve [inversion H0];
         simpl; eexists; split; eauto; simpl; auto; lia.
-    - inversion IN; [|inversion H0]; subst; try solve [inversion H1];
+    - destruct p; [|destruct read_char]; inversion H; subst;
+        simpl in IN; intuition subst;
         simpl; eexists; split; eauto; simpl; auto.
     - destruct b; subst; inversion H1; subst;
         inversion IN; subst; try solve [inversion H0];
@@ -237,6 +250,8 @@ End CodeWF.
 Section CodeSize.
 
   Context {params: LindenParameters}.
+  Context {rer: RegExpRecord}.
+  Context {disj: Disjoint rer}.
 
   (** * Code Size  *)
 
@@ -253,6 +268,7 @@ Section CodeSize.
     | Quantified g 0 (NoI.N 0) r1 => 0
     | Quantified g 0 (NoI.N 1) r1 => 4 + compsize r1
     | Quantified g 0 (NoI.Inf) r1 => 4 + compsize r1
+    | Quantified g 1 (NoI.N 0) r1 => 1 + compsize r1
     | Group _ r1 => 2 + compsize r1
     | Anchor _ => 1
     | _ => 0
@@ -261,33 +277,42 @@ Section CodeSize.
   Definition codesize (r:regex) := S (compsize r).
 
   Lemma compile_size:
-    forall r start endl code,
+    forall r start after endl code,
       pike_regex r ->
-      compile r start = (code, endl) ->
+      compile r start after = (code, endl) ->
       length (code) = compsize r.
   Proof.
-    intros r start endl code SUBSET COMP.
-    generalize dependent start. generalize dependent endl. generalize dependent code.
+    intros r start after endl code SUBSET COMP.
+    generalize dependent start. generalize dependent after.
+    generalize dependent endl. generalize dependent code.
     induction r; simpl; intros;
       try solve [inversion COMP; subst; auto]; try solve[pike_subset].
-    - destruct (compile r1 (S start)) eqn:C1. destruct (compile r2 (S l)) eqn:C2.
+    - destruct (compile r1 (S start) after) eqn:C1. destruct (compile r2 (S l) after) eqn:C2.
       erewrite <- IHr1; eauto. 2: pike_subset.
       erewrite <- IHr2; eauto. 2: pike_subset.
       inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-    - destruct (compile r1 start) eqn:C1. destruct (compile r2 l) eqn:C2.
+    - destruct (compile r1 start (begins r2 after)) eqn:C1. destruct (compile r2 l after) eqn:C2.
       erewrite <- IHr1; eauto. 2: pike_subset.
       erewrite <- IHr2; eauto. 2: pike_subset.
       inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-    - destruct min; destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst; try solve[pike_subset].
+    - destruct min as [|[|min]].
+      2: { (* r{1} *)
+           destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst;
+             try solve[pike_subset]; try solve[inversion SUBSET; subst; lia].
+           destruct (compile r (S start) after) eqn:C1.
+           erewrite <- IHr; eauto. 2: pike_subset.
+           inversion COMP. subst. simpl. lia. }
+      2: { inversion SUBSET. }
+      destruct (destruct_delta delta) as [DZ | [D1 | [DINF | [delta' [DUN N3]]]]]; subst; try solve[pike_subset].
       + inversion COMP. auto.
-      + destruct (compile r (S (S (S start)))) eqn:C1.
+      + destruct (compile r (S (S (S start))) after) eqn:C1.
         erewrite <- IHr; eauto. 2: pike_subset.
         inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
-      + destruct (compile r (S (S (S start)))) eqn:C1.
+      + destruct (compile r (S (S (S start))) (union_option (begins r None) after)) eqn:C1.
         erewrite <- IHr; eauto. 2: pike_subset.
         inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
       + inversion SUBSET; subst; lia.
-    - destruct (compile r (S start)) eqn:C1.
+    - destruct (compile r (S start) after) eqn:C1.
       erewrite <- IHr; eauto. 2: pike_subset.
       inversion COMP. subst. simpl. rewrite length_app. simpl. lia.
   Qed.
@@ -297,7 +322,7 @@ Section CodeSize.
       pike_regex r ->
       size (compilation r) = codesize r.
   Proof.
-    unfold codesize, size, compilation. intros r H. destruct (compile r 0) eqn:COMP.
+    unfold codesize, size, compilation. intros r H. destruct (compile r 0 None) eqn:COMP.
     apply compile_size in COMP; auto. rewrite <- COMP. rewrite length_app. simpl. lia.
   Qed.
 
@@ -307,7 +332,8 @@ Section CodeSize.
       S (compsize r) <= 4 * (regex_size r).
   Proof.
     intros r. induction r; simpl; try lia.
-    - destruct min; simpl; [|lia].
+    - destruct min as [|[|min]]; simpl; try lia.
+      2: { destruct delta as [[|]|]; simpl; lia. }
       destruct delta; simpl; [|lia].
       destruct n; simpl; [lia|].
       destruct n; simpl; lia.
@@ -445,6 +471,7 @@ End CountedTRC.
 Section PikeVMComplexity.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
   Context {VMS: VMSeen}.
 
   (** * Free slots  *)
@@ -616,6 +643,7 @@ Section PikeVMComplexity.
     destruct b0; try solve [inversion H; simpl; lia].
     - destruct (check_read rer c inp forward); try solve [inversion H; simpl; lia].
     - destruct (anchor_satisfied rer a inp); try solve [inversion H; simpl; lia].
+    - destruct p; [|destruct check_read]; inversion H; simpl; lia.
     - destruct b; try solve [inversion H; simpl; lia].
   Qed.
 
@@ -736,7 +764,7 @@ Section PikeVMComplexity.
     - unfold pike_vm_initial_state. rewrite <- compilation_size; auto.
       constructor; auto.
       + intros t H. destruct H. 2: inversion H.
-        subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
+        subst. simpl. unfold compilation. destruct (compile r 0 None) eqn:C. unfold size. rewrite length_app.
         simpl. lia.
       + intros t H. inversion H.
       + constructor.
@@ -755,7 +783,7 @@ Section PikeVMComplexity.
     - unfold pike_vm_initial_state_unanchored. rewrite <- compilation_size; auto.
       constructor; auto.
       + intros t H. destruct H. 2: inversion H.
-        subst. simpl. unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
+        subst. simpl. unfold compilation. destruct (compile r 0 None) eqn:C. unfold size. rewrite length_app.
         simpl. lia.
       + intros t H. inversion H.
       + constructor.
@@ -843,6 +871,7 @@ Section MemoBTComplexity.
   Context {params: LindenParameters}.
   Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
   Context {VMS: VMSeen}.
 
   (** * Valid Inputs  *)
@@ -1100,6 +1129,7 @@ Section MemoBTComplexity.
     destruct b0; try solve [inversion E; simpl; lia].
     - destruct (read_char rer c inp forward) as [[char i]|]; try solve [inversion E; simpl; lia].
     - destruct (anchor_satisfied rer a inp); try solve [inversion E; simpl; lia].
+    - destruct p; [|destruct read_char]; inversion E; simpl; lia.
     - destruct b; try solve [inversion E; simpl; lia].
   Qed.
 
@@ -1123,7 +1153,8 @@ Section MemoBTComplexity.
         ** eapply ss_next; eauto.
       * inversion E; subst. inversion IN.
     - destruct anchor_satisfied; inversion E; subst; inversion IN; subst; inversion H; subst; auto.
-    - inversion E; subst. inversion IN; subst; inversion H; subst; try inversion H0; subst; auto.
+    - destruct p; [|destruct read_char]; inversion E; subst;
+        simpl in IN; intuition congruence.
     - destruct gm1; inversion E; subst; inversion IN; subst; inversion H; subst; auto.
   Qed.
 
@@ -1191,7 +1222,7 @@ Section MemoBTComplexity.
       pose proof (msfree_initial_dist (size (compilation r)) (inpsize inp) dist) as FREE. simpl. lia.
     - unfold initial_state. rewrite <- compilation_size; auto. constructor; auto.
       + intros pc gm b inp0 H. inversion H; inversion H0.
-        unfold compilation. destruct (compile r 0) eqn:C. unfold size. rewrite length_app.
+        unfold compilation. destruct (compile r 0 None) eqn:C. unfold size. rewrite length_app.
         simpl. lia.
       + intros pc gm b inp0 H. inversion H; inversion H0. subst. left.
       + rewrite compilation_size; auto.
@@ -1234,7 +1265,7 @@ Section MemoBTComplexity.
       intros r inp ms SUBSET WF.
       destruct WF as [dist WF].
       specialize (initial_memo_measure inp r ms dist SUBSET WF) as [measure [LE INV]].
-      specialize (memobt_bound _ _ _ _ (compiled_wf r) INV) as [result [finalms [STEPS VALID]]].
+      specialize (memobt_bound _ _ _ _ (compiled_wf rer r) INV) as [result [finalms [STEPS VALID]]].
       exists result. exists finalms. rewrite <- compilation_size; auto. split;auto. eapply more_steps; eauto.
     Qed.
 
