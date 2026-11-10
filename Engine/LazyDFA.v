@@ -8,6 +8,7 @@ From Linden Require Import BooleanSemantics.
 From Linden Require Import Parameters (* SeenSets Prefix *).
 From Linden Require Import Complexity.
 From Warblre Require Import Base RegExpRecord.
+From Linden Require Import PikeSubset.
 
 
 Section LazyDFA.
@@ -743,20 +744,109 @@ Proof.
     inversion WFWQ; subst;
     pose proof (full_out code out (l0, b0) WFOUT H NODUP H2);
     congruence.
+Qed.
+
+Lemma ldfa_bound:
+  forall s code n,
+    code_wf code (size code) ->
+    ldfa_eps_inv code s n ->
+    exists result, steps (epsilon_loop_rel code) s n (LDFA_Eps_Done result).
+Proof.
+  intros s code n WF INV. generalize dependent s. induction n using (strong_ind); intros.
+  destruct s.
+  2: { exists out. constructor. }
+  specialize (ldfa_eps_progress code inp out workqueue) as [next STEP].
+  specialize (ldfa_eps_decreases code _ next n WF STEP INV) as [newm [INV2 DECR]].
+  specialize (H newm DECR next INV2) as [result STEPS].
+  exists result. apply more_steps with (n:=S newm); try lia.
+  econstructor; eauto.
+Qed.
+
+Definition eps_complexity (r:regex) : nat :=
+  2 + 4 * (codesize r).
+(* 1 + length wq + 2 * (2 * length c - length out) *)
+
+Theorem ldfa_eps_initial_measure:
+  forall inp r,
+    pike_regex r ->
+    ldfa_eps_inv (compilation r) (initial_epsilon_state inp) (eps_complexity r).
+Proof.
+  intros inp r SUBSET.
+  replace (eps_complexity r) with (eps_measure (compilation r) (initial_epsilon_state inp)); unfold initial_epsilon_state.
+  - constructor; auto; unfold get_out, get_wq, in_range, initial_int_state; constructor; auto. apply (compilation_nonempty r).
+  - unfold eps_complexity, eps_measure, initial_int_state. rewrite <- compilation_size; auto. unfold size. simpl. lia. 
+Qed.
+
+Theorem ldfa_eps_complexity:
+  forall (r:regex) (inp:input),
+    (* for any supported regex r and input inp *)
+    pike_regex r ->
+    (* The initial state reaches a final state in at most (complexity r) steps. *)
+    exists result, steps (epsilon_loop_rel (compilation r))
+                (initial_epsilon_state inp) (eps_complexity r) (LDFA_Eps_Done result).
+Proof.
+  intros r inp SUBSET.
+  apply ldfa_bound.
+  - apply compiled_wf.
+  - apply ldfa_eps_initial_measure; auto.
+Qed.
+
+Lemma steps_crt:
+  forall A (R:A->A->Prop) (x y:A) n,
+    steps R x n y -> clos_refl_trans _ R x y.
+Proof.
+  intros A R x y n H.
+  induction H as [a n | x y z n STEP TRC IH].
+  - apply rt_refl.
+  - eapply rt_trans.
+    + apply rt_step. exact STEP.
+    + exact IH.
+Qed.
+
+Lemma steps_app:
+  forall A (R:A->A->Prop) (x y z:A) n1 n2,
+    steps R x n1 y -> steps R y n2 z -> exists n, steps R x n z.
+Proof.
+  intros A R x y z n1 n2 H1.
+  induction H1 as [a n | x' y' z' n STEP TRC IH]; intros H2.
+  - eexists. exact H2.
+  - destruct (IH H2) as [m Hm].
+    exists (S m). eapply steps_cons; eauto.
+Qed.
+
+Lemma crt_steps:
+  forall A (R:A->A->Prop) (x y:A),
+    clos_refl_trans _ R x y -> exists n, steps R x n y.
+Proof.
+  intros A R x y H.
+  induction H as [x y Hxy | x | x y z H1 IH1 H2 IH2].
+  - exists 1. eapply steps_cons; [exact Hxy | apply steps_refl].
+  - exists 0. apply steps_refl.
+  - destruct IH1 as [n1 S1], IH2 as [n2 S2].
+    destruct (steps_app _ _ _ _ _ _ _ S1 S2) as [n S].
+    exists n. exact S.
+Qed.
+
+Theorem ldfa_eps_init_terminates:
+    forall r inp,
+      pike_regex r ->
+      exists result, clos_refl_trans _ (epsilon_loop_rel (compilation r)) (initial_epsilon_state inp) (LDFA_Eps_Done result).
+  Proof.
+    intros. eapply ldfa_eps_complexity in H as [result STEPS]; eauto.
+    exists result. eapply steps_crt; eauto.
   Qed.
 
+(* what we need to prove for progress *)
+(* Theorem ldfa_eps_terminates:
+  forall r inp,
+    pike_regex r ->
+    (* need assumption valid curr *)
+    exists out, clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp n ([next_step pc])) (LDFA_Eps_Done out).
+Proof.
+  intros r inp H. eapply memobt_complexity_empty_memoset in H as [result [finalms [STEPS VALID]]]; eauto.
+  exists result. exists finalms. eapply steps_trc; eauto.
+Qed. *)
 
-(* 
-TODO
-
-decrease:
-step s s'
--> ldfa_inv s n
--> exists n', n' < n /\ ldfa_inv s' n'
-
-bound:
-ldfa_inv s n 
--> exists result, steps (eps_step) s n (Done result). *)
 
 Theorem ldfa_next_progress:
   forall c inp next current_pcs,
