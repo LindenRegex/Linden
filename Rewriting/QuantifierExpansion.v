@@ -88,16 +88,16 @@ Section QuantifierExpansion.
   Fixpoint expand_lazy_atmost (k: nat) (r: regex) : regex :=
     match k with
     | 0 => Quantified false 0 (NoI.N 0) r
+    | 1 => Quantified false 0 (NoI.N 1) r
     | S k' => Disjunction Epsilon (Sequence (Quantified true 0 (NoI.N 1) r) (expand_lazy_atmost k' r))
     end.
 
   Theorem expand_lazy_atmost_equiv k r:
     Quantified false 0 (NoI.N k) r ≅[rer][forward] expand_lazy_atmost k r.
   Proof.
-    induction k as [|k IHk]; simpl.
-    - reflexivity.
-    - etransitivity. 1: apply lazy_atmost_expand.
-      apply regex_equiv_ctx_samedir with (ctx := CDisjunctionL Epsilon (CSequenceL (Quantified true 0 (NoI.N 1) r) CHole)); auto.
+    induction k as [|[|k] IHk]; simpl; try reflexivity.
+    etransitivity. 1: apply lazy_atmost_expand.
+    apply regex_equiv_ctx_samedir with (ctx := CDisjunctionL Epsilon (CSequenceL (Quantified true 0 (NoI.N 1) r) CHole)); auto.
   Qed.
 
   (** * Greedy Optional Quantifier  *)
@@ -106,16 +106,16 @@ Section QuantifierExpansion.
   Fixpoint expand_greedy_atmost (k: nat) (r: regex) : regex :=
     match k with
     | 0 => Quantified true 0 (NoI.N 0) r
+    | 1 => Quantified true 0 (NoI.N 1) r
     | S k' => Sequence (Quantified true 0 (NoI.N 1) r) (expand_greedy_atmost k' r)
     end.
 
   Theorem expand_greedy_atmost_equiv k r:
     Quantified true 0 (NoI.N k) r ≅[rer] expand_greedy_atmost k r.
   Proof.
-    induction k as [|k IHk]; simpl; intro dir.
-    - reflexivity.
-    - etransitivity. 1: { symmetry. apply (atmost_atmost_equiv rer (NoI.N 1) (NoI.N k) r). }
-      apply regex_equiv_ctx_samedir with (ctx := CSequenceL (Quantified true 0 (NoI.N 1) r) CHole); auto.
+    induction k as [|[|k] IHk]; simpl; intro dir; try reflexivity.
+    etransitivity. 1: { symmetry. apply (atmost_atmost_equiv rer (NoI.N 1) (NoI.N (S k)) r). }
+    apply regex_equiv_ctx_samedir with (ctx := CSequenceL (Quantified true 0 (NoI.N 1) r) CHole); auto.
   Qed.
 
   (** * Forced iterations *)
@@ -123,18 +123,22 @@ Section QuantifierExpansion.
 
   (* r{n,Δ} ≅[forward] r{1} r{1} ... r{1} r{0,Δ} *)
   Fixpoint expand_forced (n: nat) (greedy: bool) (delta: non_neg_integer_or_inf) (r: regex) : regex :=
-    match n with
-    | 0 => Quantified greedy 0 delta r
-    | S n' => Sequence (Quantified greedy 1 (NoI.N 0) r) (expand_forced n' greedy delta r)
+    match n,delta with
+    | 0,_ => Quantified greedy 0 delta r
+    | 1,NoI.N 0 => Quantified greedy 1 (NoI.N 0) r
+    | S n',_ => Sequence (Quantified greedy 1 (NoI.N 0) r) (expand_forced n' greedy delta r)
     end.
 
   Theorem expand_forced_equiv n greedy delta r:
     Quantified greedy n delta r ≅[rer][forward] expand_forced n greedy delta r.
   Proof.
-    induction n as [|n IHn]; simpl.
+    induction n as [|n IHn].
     - reflexivity.
-    - etransitivity. 1: apply quantified_S_equiv_forward.
-      eapply regex_equiv_ctx_samedir with (ctx := CSequenceL (Quantified greedy 1 (NoI.N 0) r) CHole); auto.
+    - assert (Quantified greedy (S n) delta r ≅[rer][forward]
+               Sequence (Quantified greedy 1 (NoI.N 0) r) (expand_forced n greedy delta r)).
+      { etransitivity. 1: apply quantified_S_equiv_forward.
+        eapply regex_equiv_ctx_samedir with (ctx := CSequenceL (Quantified greedy 1 (NoI.N 0) r) CHole); auto. }
+      destruct n; [destruct delta as [[|k]|]|]; auto. reflexivity.
   Qed.
 
 
@@ -144,13 +148,11 @@ Section QuantifierExpansion.
   (* forced iterations become r{1}, then the remaining free iterations r{0,Δ}
      become r{0,1} and r{0,0} when Δ is finite. *)
   Fixpoint expand_counted (greedy: bool) (min: nat) (delta: non_neg_integer_or_inf) (r: regex) : regex :=
-    match min with
-    | S n => Sequence (Quantified greedy 1 (NoI.N 0) r) (expand_counted greedy n delta r)
-    | 0 =>
-        match delta with
-        | NoI.N k => if greedy then expand_greedy_atmost k r else expand_lazy_atmost k r
-        | NoI.Inf => Quantified greedy 0 NoI.Inf r
-        end
+    match min,delta with
+    | 0, NoI.Inf => Quantified greedy 0 NoI.Inf r
+    | 1, NoI.N 0 => Quantified greedy 1 (NoI.N 0) r
+    | 0, NoI.N k => if greedy then expand_greedy_atmost k r else expand_lazy_atmost k r
+    | S n, _ => Sequence (Quantified greedy 1 (NoI.N 0) r) (expand_counted greedy n delta r)
     end.
 
   (* genealized to regexes *)
@@ -171,8 +173,11 @@ Section QuantifierExpansion.
       + apply expand_greedy_atmost_equiv.
       + apply expand_lazy_atmost_equiv.
       + reflexivity.
-    - etransitivity. { apply quantified_S_equiv_forward. }
-      apply regex_equiv_ctx_samedir with (ctx := CSequenceL (Quantified greedy 1 (NoI.N 0) r) CHole); auto.
+    - assert (Quantified greedy (S n) delta r ≅[rer][forward]
+                Sequence (Quantified greedy 1 (NoI.N 0) r) (expand_counted greedy n delta r)).
+      { etransitivity. 1: apply quantified_S_equiv_forward.
+        apply regex_equiv_ctx_samedir with (ctx := CSequenceL (Quantified greedy 1 (NoI.N 0) r) CHole); auto. }
+      destruct n as [|n]; [destruct delta as [[|k]|]|]; auto; reflexivity.
   Qed.
 
   Theorem expand_quant_equiv r:

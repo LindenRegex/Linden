@@ -57,7 +57,7 @@ Section Expansion.
       pike_regex r -> pike_regex (expand_greedy_atmost n r).
   Proof.
     intros n r SUBSET. induction n; simpl;
-      repeat (constructor; auto).
+      try destruct n; repeat (constructor; auto).
   Qed.
 
   Lemma expand_lazy_atmost_subset:
@@ -65,7 +65,7 @@ Section Expansion.
       pike_regex r -> pike_regex (expand_lazy_atmost n r).
   Proof.
     intros n r SUBSET. induction n; simpl;
-      repeat (constructor; auto).
+      try destruct n; repeat (constructor; auto).
   Qed.
 
   Lemma expand_counted_subset:
@@ -77,7 +77,7 @@ Section Expansion.
       + apply expand_greedy_atmost_subset. auto.
       + apply expand_lazy_atmost_subset. auto.
       + constructor. auto.
-    - repeat (constructor; auto).
+    - destruct min; destruct delta; try destruct n; repeat (constructor; auto).
   Qed.
 
   Theorem expand_quant_subset:
