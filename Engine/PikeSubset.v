@@ -17,6 +17,7 @@ Section PikeSubset.
 
   (* since the tree of r{0,1} will generate the tree of r{0,0},
      it's quite convenient to add r{0,0} to the language as well *)
+  (* also, we add r{1}, because many counted quantifiers will expanded to it *)
   Inductive pike_regex : regex -> Prop :=
   | pike_eps:
     pike_regex Epsilon
@@ -43,6 +44,10 @@ Section PikeSubset.
   | pike_zero:
     forall r1 b,
       pike_regex (Quantified b 0 (NoI.N 0) r1)
+  | pike_one:
+    forall r1 b,
+      pike_regex r1 ->
+      pike_regex (Quantified b 1 (NoI.N 0) r1)
   | pike_group:
     forall g r1,
       pike_regex r1 ->
@@ -101,6 +106,7 @@ Section PikeSubset.
     | Sequence r1 r2 => is_pike_regex r1 && is_pike_regex r2
     | Quantified _ 0 (NoI.N 0) r1 => true
     | Quantified _ 0 NoI.Inf r1 | Quantified _ 0 (NoI.N 1) r1 => is_pike_regex r1
+    | Quantified _ 1 (NoI.N 0) r1 => is_pike_regex r1
     | Group _ r1 => is_pike_regex r1
     | Anchor _ => true
     | _ => false
@@ -113,10 +119,12 @@ Section PikeSubset.
     intros r. split; intros H.
     - induction r; try econstructor; simpl in *; boolprop; eauto; try discriminate.
       (* quatified *)
-      destruct min; [|discriminate].
-      destruct delta; [|constructor; eauto].
-      destruct n; [constructor|].
-      destruct n; [constructor; eauto|discriminate].
+      destruct min as [|[|min]]; [| |discriminate].
+      + destruct delta; [|constructor; eauto].
+        destruct n; [constructor|].
+        destruct n; [constructor; eauto|discriminate].
+      + destruct delta; [|discriminate].
+        destruct n; [constructor; eauto|discriminate].
     - induction H; simpl in *; boolprop; eauto.
   Qed.
 
@@ -263,6 +271,7 @@ Section PikeSubsetLemma.
     - apply IHISTREE1. pike_subset.
     - apply IHISTREE2. pike_subset.
     - destruct dir; simpl; pike_subset.
+    - apply IHISTREE. pike_subset.
     - destruct greedy.
       + pike_subset. apply IHISTREE1. destruct plus; inversion H3. pike_subset.
       + pike_subset. apply IHISTREE1. destruct plus; inversion H3. pike_subset.

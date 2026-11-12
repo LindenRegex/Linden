@@ -28,6 +28,21 @@ Section MemoTree.
   Definition initial_tree_state (t:tree) (i:input) (ts:seentrees): mtree_state :=
     MTree [(t, GroupMap.empty, i)] ts.
 
+  (** * Empty Tree Trimming *)
+  (* Like in PikeTree, to model optimizations that remove threads that are known to fail,
+     we allow MemoTree to remove newly generated trees without results. *)
+
+  (* when trim i l1 l2, l2 is a trimmed list of trees, where empty trees MAY have been removed  *)
+  Inductive trim : list tree_config -> list tree_config -> Prop :=
+  | trim_nil: trim [] []
+  | trim_keep: forall tgmi l1 l2 (TRIM: trim l1 l2),
+      trim (tgmi::l1) (tgmi::l2)
+  | trim_drop:
+    forall t gm i l1 l2
+      (TRIM: trim l1 l2)
+      (EMPTY: tree_res t gm i forward = None),
+      trim ((t,gm,i)::l1) l2.
+
   (** * MemoTree small-step semantics *)
 
   Inductive exec_tree_result : Type :=
@@ -67,22 +82,10 @@ Section MemoTree.
       memotree_step (MTree ((t,gm,i)::stk) ts) (MTree_final (Some leaf) ts)
   (* we keep exploring, and add each handled tree to the treeseen set *)
   | mtree_explore:
-    forall ts t gm i nextconfs stk
-      (EXPLORE: exec_tree (t,gm,i) = TExplore nextconfs),
-      memotree_step (MTree ((t,gm,i)::stk) ts) (MTree (nextconfs++stk) (add_seentrees ts t)).
-
-  (** * MemoTree properties  *)
-
-  Theorem memotree_progress:
-    forall stk ts,
-    exists ms, memotree_step (MTree stk ts) ms.
-  Proof.
-    intros stk ts. destruct stk as [|[[t gm] i] stk].
-    { eexists. econstructor. }
-    destruct (exec_tree (t,gm,i)) eqn:EXEC.
-    - eexists. eapply mtree_match. eauto.
-    - eexists. eapply mtree_explore. eauto.
-  Qed.
+    forall ts t gm i nextconfs nexttrimmed stk
+      (EXPLORE: exec_tree (t,gm,i) = TExplore nextconfs)
+      (TRIM: trim nextconfs nexttrimmed),
+      memotree_step (MTree ((t,gm,i)::stk) ts) (MTree (nexttrimmed++stk) (add_seentrees ts t)).
 
   (** * Seentrees without results  *)
 
@@ -247,6 +250,68 @@ Section MemoTree.
   Qed.
 
 
+  (** * Trimming Correctness *)
+
+  Lemma trim_refl: forall l, trim l l.
+  Proof. intros l. induction l; constructor. auto. Qed.
+
+  Lemma trim_pike_list:
+    forall l1 l2 tail,
+      trim l1 l2 ->
+      pike_list (l1 ++ tail) ->
+      pike_list (l2 ++ tail).
+  Proof.
+    intros l1 l2 tail TRIM. induction TRIM; intros PIKE; auto.
+    - destruct tgmi as [[t gm] i]. simpl in *.
+      apply pike_list_cons in PIKE as [HT HL]. apply pike_list_cons. auto.
+    - simpl in PIKE. apply pike_list_cons in PIKE as [HT HL]. auto.
+  Qed.
+
+  Lemma trim_noleaf_stack:
+    forall l1 l2 tail,
+      trim l1 l2 ->
+      noleaf_stack (l1 ++ tail) ->
+      noleaf_stack (l2 ++ tail).
+  Proof.
+    intros l1 l2 tail TRIM. induction TRIM; intros NLS; auto.
+    - simpl in *. inversion NLS; subst. constructor; auto.
+    - simpl in NLS. inversion NLS; subst. auto.
+  Qed.
+
+  (* trimming does not remove (non-deterministic) results *)
+  Lemma trim_list_nd:
+    forall l1 l2 tail seen res,
+      trim l1 l2 ->
+      pike_list (l1 ++ tail) ->
+      list_nd (l2 ++ tail) seen res ->
+      list_nd (l1 ++ tail) seen res.
+  Proof.
+    intros l1 l2 tail seen res TRIM. generalize dependent res.
+    induction TRIM; intros res PIKE ND; auto.
+    - destruct tgmi as [[t gm] i]. simpl in *.
+      apply pike_list_cons in PIKE as [HT HL].
+      inversion ND; subst. econstructor; eauto.
+    - simpl in PIKE. apply pike_list_cons in PIKE as [HT HL].
+      eapply tlr_cons with (l1:=None) (l2:=res); auto.
+      rewrite <- EMPTY. apply tree_res_nd. auto.
+  Qed.
+
+  (* trimming can be seen as an intermediate step in mtree_explore,
+     where both semi-steps preserve the invariant. *)
+  Lemma trim_inv:
+    forall nextconfs nexttrimmed stk seen res,
+      trim nextconfs nexttrimmed ->
+      memotree_inv (MTree (nextconfs ++ stk) seen) res ->
+      memotree_inv (MTree (nexttrimmed ++ stk) seen) res.
+  Proof.
+    intros nextconfs nexttrimmed stk seen res TRIM INV.
+    inversion INV; subst. constructor.
+    - intros r ND. apply SAMERES. eapply trim_list_nd; eauto.
+    - eapply trim_pike_list; eauto.
+    - intros N. apply NOLEAF in N as [N1 N2]. split; auto.
+      eapply trim_noleaf_stack; eauto.
+  Qed.
+
   (** * Invariant Preservation  *)
 
   Theorem memotree_preservation:
@@ -258,7 +323,7 @@ Section MemoTree.
     intros ms1 ms2 res MSTEP INVARIANT.
     destruct INVARIANT.
     2: { inversion MSTEP. }
-    inversion MSTEP; subst; [| | |destruct t; inversion EXPLORE; subst];
+    inversion MSTEP; subst; [| | |eapply trim_inv; [exact TRIM|]; destruct t; inversion EXPLORE; subst];
       try solve[pike_subset].
     (* no match *)
     - assert (None = result).
@@ -379,6 +444,19 @@ Section MemoTree.
       (* when the tree did not contribute, adding it to seen does not change the results *)
       + econstructor; eauto.
         eapply list_add_seen_nd with (gm:=gm) in TLR; eauto.
+  Qed.
+
+  (** * MemoTree properties  *)
+
+  Theorem memotree_progress:
+    forall stk ts,
+    exists ms, memotree_step (MTree stk ts) ms.
+  Proof.
+    intros stk ts. destruct stk as [|[[t gm] i] stk].
+    { eexists. econstructor. }
+    destruct (exec_tree (t,gm,i)) eqn:EXEC.
+    - eexists. eapply mtree_match. eauto.
+    - eexists. eapply mtree_explore; eauto. apply trim_refl.
   Qed.
 
 End MemoTree.

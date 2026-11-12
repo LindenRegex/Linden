@@ -4,6 +4,7 @@ Import ListNotations.
 From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree Semantics BooleanSemantics.
 From Linden Require Import NFA.
+From Linden Require Import PeekingAnalysis.
 From Linden Require Import PikeSubset.
 From Linden Require Import Parameters.
 From Warblre Require Import Base RegExpRecord.
@@ -12,6 +13,7 @@ From Warblre Require Import Base RegExpRecord.
 Section TreeRep.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
 (** * Tree Rep Predicate  *)
 (* A predicate showing that a tree is represented at a given point in the code *)
 (* For a given input and boolean *)
@@ -34,10 +36,16 @@ Inductive tree_rep: tree -> code -> label -> input -> LoopBool -> Prop :=
     tree_rep t code pc inp b
 | tr_choice:
   forall code pc pc1 pc2 inp b t1 t2
-    (FORK: get_pc code pc = Some (Fork pc1 pc2))
+    (FORK: get_pc code pc = Some (Fork NoPeek pc1 pc2))
     (TR1: tree_rep t1 code pc1 inp b)
     (TR2: tree_rep t2 code pc2 inp b),
     tree_rep (Choice t1 t2) code pc inp b
+| tr_branch:
+  forall code pc pc1 pc2 inp b t1 t2 cd g
+    (FORK: get_pc code pc = Some (Fork (Branch cd g) pc1 pc2))
+    (TR1: tree_rep t1 code pc1 inp b)
+    (TR2: tree_rep t2 code pc2 inp b),
+    tree_rep (greedy_choice g t1 t2) code pc inp b
 | tr_read:
   forall code pc inp nextinp b cd c t
     (CONSUME: get_pc code pc = Some (Consume cd))
@@ -115,6 +123,10 @@ Proof.
     specialize (IHtree_rep1 _ TR1) as EQT1.
     specialize (IHtree_rep2 _ TR2) as EQT2.
     subst. split; auto.
+  - inversion H1; subst; auto; same_instr.
+    specialize (IHtree_rep1 _ TR1) as EQT1.
+    specialize (IHtree_rep2 _ TR2) as EQT2.
+    subst. split; auto.
   - inversion H0; subst; auto; same_instr;
       rewrite READ0 in READ; inversion READ; subst.
     specialize (IHtree_rep _ TR) as EQT.
@@ -144,6 +156,20 @@ Qed.
 
 
 (** * Relation to actions_rep  *)
+
+(* representations of greedy_choice *)
+Lemma tr_greedy_fork:
+  forall code pc g o1 o2 pc1 pc2 inp b t1 t2
+    (FORK: get_pc code pc = Some (greedy_fork g (compute_peek g o1 o2) pc1 pc2))
+    (TR1: tree_rep t1 code pc1 inp b)
+    (TR2: tree_rep t2 code pc2 inp b),
+    tree_rep (greedy_choice g t1 t2) code pc inp b.
+Proof.
+  intros. destruct (compute_peek_cases g o1 o2) as [P|[cd1 [cd2 [_ [_ [_ P]]]]]]; rewrite P in FORK.
+  - destruct g; simpl in *; eapply tr_choice; eauto.
+  - assert (F: get_pc code pc = Some (Fork (Branch cd1 g) pc1 pc2)) by (destruct g; auto).
+    eapply tr_branch; eauto.
+Qed.
 
 (* Actions rep to tree rep *)
 
@@ -208,12 +234,16 @@ Proof.
       try solve[eapply tr_jmp; eauto]; clear IHACT.
     invert_rep. inversion NFA; subst.
     2: { in_subset. }
-    eapply tr_choice; eauto.
-    + eapply IHTREE1. pike_subset.
-      eapply cons_bc with (pcmid:=end1); try constructor; eauto.
-      eapply jump_bc; eauto.
-    + eapply IHTREE2; eauto. pike_subset.
-      repeat (econstructor; eauto).
+    assert (TR1: tree_rep t1 c (S pcstart) inp b).
+    { eapply IHTREE1. pike_subset.
+      eapply cons_bc with (pcmid:=end1); [eapply areg_bc; eauto|assumption|].
+      eapply jump_bc; eauto. }
+    assert (TR2: tree_rep t2 c (S end1) inp b).
+    { eapply IHTREE2; eauto. pike_subset. prove_actions_rep. }
+    destruct (compute_peek_cases true (begins r1 after) (begins r2 after)) as [P|[cd1 [cd2 [_ [_ [_ P]]]]]];
+      rewrite P in FORK.
+    + eapply tr_choice; eauto.
+    + change (Choice t1 t2) with (greedy_choice true t1 t2). eapply tr_branch; eauto.
   (* sequence *)
   - remember (Areg (Sequence r1 r2) :: cont) as seqcont.
     induction ACT; inversion Heqseqcont; subst;
@@ -221,9 +251,16 @@ Proof.
     invert_rep. inversion NFA; subst.
     2: { in_subset. }
     eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto).
+    prove_actions_rep.
   (* quantified, forced *)
-  - pike_subset.
+  - remember (Areg (Quantified greedy (S min) plus r1) :: cont) as onecont.
+    induction ACT; inversion Heqonecont; subst;
+      try solve[econstructor; eauto]; clear IHACT.
+    invert_rep. inversion NFA; subst.
+    2: { in_subset. }
+    eapply tr_reset; eauto.
+    eapply IHTREE; eauto. pike_subset.
+    prove_actions_rep.
   (* quantified, done *)
   - remember (Areg (Quantified greedy 0 (NoI.N 0) r1) :: cont) as zerocont.
     induction ACT; inversion Heqzerocont; subst;
@@ -243,19 +280,12 @@ Proof.
         try solve[eapply tr_jmp; eauto]; clear IHACT.
       invert_rep. inversion NFA; subst.
       2: { in_subset. }
-      destruct greedy; simpl.
-      * eapply tr_choice; eauto.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
-        ** eapply IHTREE2; eauto. pike_subset.
-      * eapply tr_choice; eauto.
-        ** eapply IHTREE2; eauto. pike_subset.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+      eapply tr_greedy_fork; eauto.
+      * eapply tr_begin; eauto.
+        eapply tr_reset; eauto.
+        eapply IHTREE1; eauto. pike_subset.
+        prove_actions_rep.
+      * eapply IHTREE2; eauto. pike_subset.
     (* Star *)
     + destruct plus; inversion DINF. clear DINF.
       simpl in ACT.
@@ -264,19 +294,12 @@ Proof.
         try solve[eapply tr_jmp; eauto]; clear IHACT.
       invert_rep. inversion NFA; subst.
       2: { in_subset. }
-      destruct greedy; simpl.
-      * eapply tr_choice; eauto.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
-        ** eapply IHTREE2; eauto. pike_subset.
-      * eapply tr_choice; eauto.
-        ** eapply IHTREE2; eauto. pike_subset.
-        ** eapply tr_begin; eauto.
-           eapply tr_reset; eauto.
-           eapply IHTREE1; eauto. pike_subset.
-           repeat (econstructor; eauto).
+      eapply tr_greedy_fork; eauto.
+      * eapply tr_begin; eauto.
+        eapply tr_reset; eauto.
+        eapply IHTREE1; eauto. pike_subset.
+        prove_actions_rep.
+      * eapply IHTREE2; eauto. pike_subset.
     (* Unsupported *)
     + rewrite DUN in SUBSET. inversion SUBSET; subst.
       inversion H1; subst. inversion H0; subst; lia.
@@ -288,7 +311,7 @@ Proof.
     2: { in_subset. }
     eapply tr_open; eauto.
     eapply IHTREE; eauto. pike_subset.
-    repeat (econstructor; eauto).
+    prove_actions_rep.
   (* anchor *)
   - remember (Areg (Anchor a) :: cont) as anchorcont.
     induction ACT; inversion Heqanchorcont; subst;
