@@ -5,6 +5,7 @@ Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree Semantics NFA.
+From Linden Require Import PeekingAnalysis.
 From Linden Require Import BooleanSemantics PikeSubset.
 From Linden Require Import PikeVM Correctness SeenSets Semantics.Examples.
 From Linden Require Import Complexity.
@@ -16,6 +17,7 @@ Section FunctionalPikeVM.
   Context {params: LindenParameters}.
   Context {VMS: VMSeen}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
 (** * Functional Definition  *)
 
 (* a functional version of the small step *)
@@ -195,7 +197,7 @@ Theorem pike_vm_match_terminates:
     exists result, pike_vm_match r inp = Finished result.
 Proof.
   intros r inp SUBSET. unfold pike_vm_match, vm_fuel.
-  apply pikevm_complexity with (VMS:=VMS) (rer:=rer) (inp:=inp) in SUBSET as [result TERM].
+  apply pikevm_complexity with (VMS:=VMS) (rer:=rer) (disj:=disj) (inp:=inp) in SUBSET as [result TERM].
   exists result. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
@@ -206,7 +208,7 @@ Theorem pike_vm_match_terminates_unanchored {strs:StrSearch}:
     exists result, pike_vm_match_unanchored r inp = Finished result.
 Proof.
   intros r inp SUBSET. unfold pike_vm_match_unanchored, vm_fuel.
-  apply pikevm_complexity_unanchored with (strs:=strs) (VMS:=VMS) (rer:=rer) (inp:=inp) in SUBSET as [result TERM]; auto.
+  apply pikevm_complexity_unanchored with (strs:=strs) (VMS:=VMS) (rer:=rer) (disj:=disj) (inp:=inp) in SUBSET as [result TERM]; auto.
   exists result. apply steps_loop in TERM. rewrite TERM. auto.
 Qed.
 
@@ -234,9 +236,9 @@ Section Example.
                   (Disjunction(a_char)(Epsilon))
                   (Disjunction(Epsilon)(b_char))).
 
-  Example nq_bytecode := [Fork 1 10; BeginLoop; ResetRegs []; Fork 4 6; Consume (CdSingle a); Jmp 6; Fork 7 8; Jmp 9; Consume (CdSingle b); EndLoop 0; Accept].
+  Example nq_bytecode := [Fork NoPeek 1 10; BeginLoop; ResetRegs []; Fork NoPeek 4 6; Consume (CdSingle a); Jmp 6; Fork NoPeek 7 8; Jmp 9; Consume (CdSingle b); EndLoop 0; Accept].
 
-  Lemma compile_nq: compilation nq_regex = nq_bytecode.
+  Lemma compile_nq: @compilation _ (rer_of nq_regex) (nopeeking _) nq_regex = nq_bytecode.
   Proof. auto. Qed.
 
   Example nq_inp: input := Input [a;b] [].
@@ -250,10 +252,10 @@ Section Example.
 
 Example paper_regex : regex := Sequence (Group 1 (Disjunction (greedy_star a_char) a_char)) b_char.
 
-Example paper_bytecode := [SetRegOpen 1; Fork 2 8; Fork 3 7; BeginLoop; ResetRegs []; Consume (CdSingle a);
+Example paper_bytecode := [SetRegOpen 1; Fork NoPeek 2 8; Fork NoPeek 3 7; BeginLoop; ResetRegs []; Consume (CdSingle a);
                            EndLoop 2; Jmp 9; Consume (CdSingle a); SetRegClose 1; Consume (CdSingle b); Accept].
 
-Lemma compile_paper: compilation paper_regex = paper_bytecode.
+Lemma compile_paper: @compilation _ (rer_of paper_regex) (nopeeking _) paper_regex = paper_bytecode.
 Proof. auto. Qed.
 
 Example paper_input := Input [a;b] [].

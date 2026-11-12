@@ -6,6 +6,7 @@ Import ListNotations.
 From Linden Require Import Regex Chars Groups.
 From Linden Require Import Tree Semantics BooleanSemantics.
 From Linden Require Import NFA PikeTree PikeVM.
+From Linden Require Import PeekingAnalysis.
 From Linden Require Import PikeEquiv PikeSubset.
 From Linden Require Import EquivMain RegexpTranslation GroupMapMS.
 From Linden Require Import ResultTranslation FunctionalUtils SeenSets.
@@ -41,6 +42,7 @@ Section Correctness.
   Context {params: LindenParameters}.
   Context {VMS: VMSeen}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
 
 Definition trc_pike_tree := @trc pike_tree_state pike_tree_step.
 Definition trc_pike_vm (c:code) := @trc pike_vm_state (pike_vm_step rer c).
@@ -227,6 +229,7 @@ Section MemoBTCorrectness.
   Context {params: LindenParameters}.
   Context {MS: MemoSet params}.
   Context (rer: RegExpRecord).
+  Context {disj: Disjoint rer}.
 
 Definition trc_memo_tree := @trc mtree_state memotree_step.
 Definition trc_memo_bt (c:code) := @trc mbt_state (memobt_step rer c).

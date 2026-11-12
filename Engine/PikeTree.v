@@ -70,6 +70,25 @@ Section PikeTree.
     intros i1 i2 H. unfold next_inp, advance_input'. rewrite H. auto.
   Qed.
 
+  (** * Empty Tree Trimming *)
+  (* Optimizations like Peeking at a Fork may remove threads when some condition isn't met.
+     This only happens when we know the removed threads WILL fail.
+     We model this in PikeTree by allowing to remove, during the active step, subtrees that
+     do not contain any leaves. Because this is constrained to the active step, this is only
+     allowing to trim trees that have JUST been generated (not existing active ones).
+     This is enough for the peeking branches *)
+
+  (* when trim i l1 l2, l2 is a trimmed list of trees, where empty trees MAY have been removed  *)
+  Inductive trim : input -> list (tree * group_map) -> list (tree * group_map) -> Prop :=
+  | trim_nil: forall inp, trim inp [] []
+  | trim_keep: forall inp tgm l1 l2 (TRIM: trim inp l1 l2),
+      trim inp (tgm::l1) (tgm::l2)
+  | trim_drop:
+    forall inp t gm l1 l2
+      (TRIM: trim inp l1 l2)
+      (EMPTY: tree_res t gm inp forward = None),
+      trim inp ((t,gm)::l1) l2.
+
 
   (** * Pike Tree Seen Small Step Semantics  *)
 
@@ -172,10 +191,12 @@ Section PikeTree.
       pike_tree_step (PTS inp [] best (tgm::blocked) future seen) (PTS (Input next (c::pref)) (tgm::blocked) best [] (Some t2) initial_seentrees)
   | pts_active:
     (* generated new active trees: add them in front of the low-priority ones *)
-    forall inp t gm active best blocked future nextactive seen1 seen2
+    (* the generated new active trees may be trimmed *)
+    forall inp t gm active best blocked future nextactive nexttrimmed seen1 seen2
       (STEP: tree_bfs_step t gm (idx inp) = StepActive nextactive)
+      (TRIM: trim inp nextactive nexttrimmed)
       (ADD_SEEN: add_seentrees seen1 t = seen2),
-      pike_tree_step (PTS inp ((t,gm)::active) best blocked future seen1) (PTS inp (nextactive++active) best blocked future seen2)
+      pike_tree_step (PTS inp ((t,gm)::active) best blocked future seen1) (PTS inp (nexttrimmed++active) best blocked future seen2)
   | pts_match:
     (* a match is found, discard remaining low-priority active trees *)
     forall inp t gm active best blocked future seen1 seen2
@@ -614,6 +635,56 @@ Section PikeTree.
       unfold first_leaf in LEAF. rewrite LEAF. reflexivity.
   Qed.
 
+  (** * Trimming Correctness*)
+
+  Lemma trim_refl:
+    forall inp l, trim inp l l.
+  Proof. intros inp l. induction l; constructor. auto. Qed.
+
+  Lemma trim_pike_list:
+    forall inp l1 l2 tail,
+      trim inp l1 l2 ->
+      pike_list (suppl (l1 ++ tail) inp) ->
+      pike_list (suppl (l2 ++ tail) inp).
+  Proof.
+    intros inp l1 l2 tail TRIM. induction TRIM; intros PIKE; auto.
+    - destruct tgm. simpl in *.
+      apply pike_list_cons in PIKE as [HT HL]. apply pike_list_cons. auto.
+    - simpl in PIKE. apply pike_list_cons in PIKE as [HT HL]. auto.
+  Qed.
+
+  (* trimming does not remove (non-deterministic) results *)
+  Lemma trim_list_nd:
+    forall inp l1 l2 tail seen res,
+      trim inp l1 l2 ->
+      pike_list (suppl (l1 ++ tail) inp) ->
+      list_nd (suppl (l2 ++ tail) inp) seen res ->
+      list_nd (suppl (l1 ++ tail) inp) seen res.
+  Proof.
+    intros inp l1 l2 tail seen res TRIM. generalize dependent res.
+    induction TRIM; intros res PIKE ND; auto.
+    - destruct tgm as [t gm]. simpl suppl in *. pike_subset.
+      inversion ND; subst. econstructor; eauto.
+    - simpl in PIKE. apply pike_list_cons in PIKE as [HT HL].
+      eapply tlr_cons with (l1:=None) (l2:=res); auto.
+      rewrite <- EMPTY. apply tree_res_nd. auto.
+  Qed.
+
+  (* trimming can be seen as an intermediate step in pts_active,
+     where both semi-steps preserve the invariant. *)
+  Lemma trim_inv:
+    forall inp nextactive nexttrimmed active best blocked future seen res,
+      trim inp nextactive nexttrimmed ->
+      piketreeinv (PTS inp (nextactive ++ active) best blocked future seen) res ->
+      piketreeinv (PTS inp (nexttrimmed ++ active) best blocked future seen) res.
+  Proof.
+    intros inp nextactive nexttrimmed active best blocked future seen res TRIM INV.
+    inversion INV; subst. constructor; auto.
+    - intros r STATEND. apply SAMERES. inversion STATEND; subst.
+      econstructor; eauto. eapply trim_list_nd; eauto.
+    - eapply trim_pike_list; eauto.
+  Qed.
+
   (** * Invariant Preservation  *)
 
   Theorem pts_preservation:
@@ -625,7 +696,7 @@ Section PikeTree.
     intros pts1 pts2 res PSTEP INVARIANT.
     destruct INVARIANT.
     2: { inversion PSTEP. }
-    inversion PSTEP; subst; [| | | | | |destruct t; inversion STEP; subst| |].
+    inversion PSTEP; subst; [| | | | | |eapply trim_inv; [exact TRIM|]; destruct t; inversion STEP; subst| |].
     (* skipping *)
     - constructor; pike_subset; auto. intros res STATEND.
       apply SAMERES. inversion STATEND; subst.
