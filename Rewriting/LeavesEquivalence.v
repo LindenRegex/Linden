@@ -275,15 +275,14 @@ Section Lemmas.
 
   (* One can append equivalent prefixes and suffixes and get equivalent lists. *)
   Lemma leaves_equiv_app_seen:
-    forall (p1 p2 l1 l2 : list leaf) seen,
+    forall p1 p2 l1 l2 seen,
       leaves_equiv seen p1 p2 ->
       leaves_equiv seen l1 l2 ->
-      leaves_equiv seen (p1 ++ l1) (p2 ++ l2).
+      leaves_equiv seen (p1++l1) (p2++l2).
   Proof.
     intros p1 p2 l1 l2 seen PE LE.
     induction PE; try solve[simpl; auto; constructor; auto].
-    simpl. apply equiv_cons. auto.
-    apply IHPE.
+    simpl. apply equiv_cons. auto. apply IHPE.
     eapply leaves_equiv_monotony with (seen1:=seen); eauto.
     intros. simpl. rewrite H. rewrite Bool.orb_true_r. auto.
   Qed.
@@ -367,69 +366,69 @@ Section Lemmas.
     - apply IHsubseen; auto.
       intros x H. apply SUB. simpl. rewrite H.
       rewrite Bool.orb_true_r. auto.
-  Qed.   
-  
-  (* A leaf is equal to itself concatenated to itself *)
+  Qed.
+
+  (* A repeated list of leafs is equal to the original list *)
   Lemma leaves_equiv_repet:
     forall t2 seen,
       leaves_equiv seen t2 (t2 ++ t2).
   Proof.
     intros t2 seen. 
-    assert (t2 = t2 ++ []). rewrite app_nil_r; auto.
-    rewrite H at 1. eapply leaves_equiv_app2. apply leaves_equiv_refl.
-    rewrite <- app_nil_r.
+    assert (t2 = t2 ++ []) as t2Apps by (rewrite app_nil_r; auto).
+    rewrite t2Apps at 1. eapply leaves_equiv_app2.
+    apply leaves_equiv_refl. rewrite <- app_nil_r.
     apply leaves_equiv_comm. eapply leaves_equiv_subseen; auto.
-    2: apply leaves_equiv_refl. intros. Search leaves_equiv.
-    rewrite is_seen_spec in *. Search In. apply in_or_app.
+    2: apply leaves_equiv_refl. intros.
+    rewrite is_seen_spec in *. apply in_or_app.
     left. assumption. 
   Qed.
- 
+
   Lemma leaves_equiv_app3:
-      forall a b c seen,
-        leaves_equiv seen a c ->
-        leaves_equiv seen b c ->
-        leaves_equiv seen (a ++ b) c.
-    Proof.
-      intros a b c seen eq1 eq2.
-      pose proof (leaves_equiv_repet c seen).
-      apply leaves_equiv_comm. eapply leaves_equiv_trans. exact H.
-      eapply leaves_equiv_app_seen; apply leaves_equiv_comm; auto.
-    Qed.
+    forall a b c seen,
+      leaves_equiv seen a c ->
+      leaves_equiv seen b c ->
+      leaves_equiv seen (a ++ b) c.
+  Proof.
+    intros a b c seen eq1 eq2.
+    pose proof (leaves_equiv_repet c seen).
+    apply leaves_equiv_comm. eapply leaves_equiv_trans. exact H.
+    eapply leaves_equiv_app_seen; apply leaves_equiv_comm; auto.
+  Qed.
 
-    Lemma leaves_equiv_append_head:
-      forall a b seen,
-        leaves_equiv seen (a ++ b) (a ++ b ++ a).
-    Proof.
-      intros. apply leaves_equiv_app2; auto.
-      apply leaves_equiv_refl. 
-      assert (b = b ++ []) by (rewrite app_nil_r; reflexivity).
-      rewrite H at 1. eapply leaves_equiv_app_seen. apply leaves_equiv_refl.
-      rewrite <- app_nil_r. apply leaves_equiv_comm.
-      rewrite <- app_nil_r. eapply leaves_equiv_subseen.
-      2: simpl; apply leaves_equiv_refl.
-      intros. rewrite is_seen_spec in *. apply in_or_app. left.
-      assumption.
-    Qed.
+  Lemma leaves_equiv_append_head:
+    forall a b seen,
+      leaves_equiv seen (a ++ b) (a ++ b ++ a).
+  Proof.
+    intros. apply leaves_equiv_app2; auto.
+    apply leaves_equiv_refl.
+    assert (b = b ++ []) by (rewrite app_nil_r; reflexivity).
+    rewrite H at 1. eapply leaves_equiv_app_seen. apply leaves_equiv_refl.
+    rewrite <- app_nil_r. apply leaves_equiv_comm.
+    rewrite <- app_nil_r. eapply leaves_equiv_subseen.
+    2: simpl; apply leaves_equiv_refl.
+    intros. rewrite is_seen_spec in *. apply in_or_app. left.
+    assumption.
+  Qed.
 
-    Lemma leaves_equiv_append_tail:
-      forall a b seen,
-        leaves_equiv seen (a ++ b) (a ++ b ++ b).
-    Proof.
-      intros. apply leaves_equiv_app2; auto.
-      apply leaves_equiv_refl. apply leaves_equiv_repet.
-    Qed.
-    
-    Lemma leaves_equiv_app5:
-      forall a b c d seen,
-        leaves_equiv seen a (c ++ d) ->
-        leaves_equiv seen b c ->
-        leaves_equiv seen (a ++ b) (c ++ d).
-    Proof.
-      intros. apply leaves_equiv_comm.
-      eapply leaves_equiv_trans. 
-      apply leaves_equiv_append_head. apply leaves_equiv_comm.
-      rewrite app_assoc. apply leaves_equiv_app_seen; auto.
-    Qed.
+  Lemma leaves_equiv_append_tail:
+    forall a b seen,
+      leaves_equiv seen (a ++ b) (a ++ b ++ b).
+  Proof.
+    intros. apply leaves_equiv_app2; auto.
+    apply leaves_equiv_refl. apply leaves_equiv_repet.
+  Qed.
+
+  Lemma leaves_equiv_app4:
+    forall a b c d seen,
+      leaves_equiv seen a (c ++ d) ->
+      leaves_equiv seen b c ->
+      leaves_equiv seen (a ++ b) (c ++ d).
+  Proof.
+    intros. apply leaves_equiv_comm.
+    eapply leaves_equiv_trans.
+    apply leaves_equiv_append_head. apply leaves_equiv_comm.
+    rewrite app_assoc. apply leaves_equiv_app_seen; auto.
+  Qed.
 End Lemmas.
 
 (* Leaves equivalence is an equivalence relation *)
@@ -438,8 +437,8 @@ Section Relation.
   Context (seen: list (input * group_map)).
 
   #[global] Add Relation (list leaf) (leaves_equiv seen)
-      reflexivity proved by (fun l => leaves_equiv_refl l seen)
-      symmetry proved by (fun l1 l2 => leaves_equiv_comm l1 l2 seen)
-      transitivity proved by (fun l1 l2 l3 => leaves_equiv_trans l1 l2 l3 seen)
-      as leaves_equiv_rel.
+  reflexivity proved by (fun l => leaves_equiv_refl l seen)
+  symmetry proved by (fun l1 l2 => leaves_equiv_comm l1 l2 seen)
+  transitivity proved by (fun l1 l2 l3 => leaves_equiv_trans l1 l2 l3 seen)
+  as leaves_equiv_rel.
 End Relation.

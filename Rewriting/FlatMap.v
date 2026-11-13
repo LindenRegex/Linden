@@ -208,6 +208,3 @@ Proof.
   intros X Y x f y H. inversion H; inversion FM; subst.
   rewrite app_nil_r. auto.
 Qed.
-
-
-

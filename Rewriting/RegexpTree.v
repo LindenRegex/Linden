@@ -11,7 +11,7 @@ Section RegexpTree.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
 
-  (*|
+(*|
 ## Bounded repetitions
 |*)
 
@@ -223,7 +223,7 @@ Section RegexpTree.
                         /       \
                       /          \
                 r{0,n-1}        Match
-     *)
+    *)
     (* By induction hypothesis, the leaves of the subtrees r{0,m}r{0,n}
     and r{0,m+n} are equivalent. *)
     (* On the left, however, we have an extra branch, r{0,n-1}. We then argue
@@ -262,7 +262,7 @@ Section RegexpTree.
 
     (* The inclusion lemma: for all m and d, the leaves of r{0,m} are
     included in those of r{0,m+d}. *)
-    Lemma atmost_leaves_incl' (m: nat) (d: non_neg_integer_or_inf) (g: bool)r:
+    Lemma atmost_leaves_incl' (m: nat) (d: non_neg_integer_or_inf) (g: bool) r:
       forall inp gm dir tm tn,
         is_tree rer [Areg (Quantified g 0 m r)] inp gm dir tm ->
         is_tree rer [Areg (Quantified g 0 (m+d)%NoI r)] inp gm dir tn ->
@@ -270,8 +270,9 @@ Section RegexpTree.
     Proof.
       induction m as [|m IHm].
       - intros inp gm dir tm tn TREE_m TREE_n.
-        inversion TREE_m; subst. 2: { destruct plus; discriminate. }
-                               inversion SKIP; subst.
+        inversion TREE_m; subst.
+        2: { destruct plus; discriminate. }
+        inversion SKIP; subst.
         inversion TREE_n; subst.
         + inversion SKIP0; subst. unfold incl. auto.
         + inversion SKIP0; subst. simpl.
@@ -356,13 +357,14 @@ Section RegexpTree.
 
     Lemma atmost_atmost_equiv_actions_mnat (m: nat) (n: non_neg_integer_or_inf) r:
       forall dir, actions_equiv_dir rer dir [Areg (Quantified true 0 m r); Areg (Quantified true 0 n r)]
-                    [Areg (Quantified true 0 (NoI.add m n) r)].
+               [Areg (Quantified true 0 (NoI.add m n) r)].
     Proof.
       induction m as [|m IHm].
       - simpl. replace (match n with | NoI.N r' => NoI.N r' | +∞ => +∞ end) with n by now destruct n.
         unfold actions_equiv_dir. intros dir inp gm t1 t2 TREE1 TREE2.
-        inversion TREE1; subst. 2: { destruct plus; discriminate. }
-                              replace t2 with t1 by eauto using is_tree_determ. reflexivity.
+        inversion TREE1; subst.
+        2: { destruct plus; discriminate. }
+        replace t2 with t1 by eauto using is_tree_determ. reflexivity.
       - intros dir i gm tr1 tr2 TREE1 TREE2.
         inversion TREE1; subst. inversion TREE2; subst. 1: destruct n; discriminate. inversion SKIP0; subst.
         simpl. clear TREE1 TREE2 SKIP0.
@@ -380,12 +382,10 @@ Section RegexpTree.
         + inversion SKIP0; subst. simpl.
           clear SKIP SKIP0.
           change (match plus with
-                  | NoI.N r' => NoI.N (S r')
-                  | +∞ => +∞
-                  end) with (1 + plus)%NoI in *. rename plus into n.
-          assert (INCL: incl (tree_leaves titer1 (GroupMap.reset (def_groups r) gm) i
-                                dir) (tree_leaves titer0 (GroupMap.reset (def_groups r) gm) i
-                                        dir)). {
+                   | NoI.N r' => NoI.N (S r')
+                   | +∞ => +∞
+                   end) with (1 + plus)%NoI in *. rename plus into n.
+          assert (INCL: incl (tree_leaves titer1 (GroupMap.reset (def_groups r) gm) i dir) (tree_leaves titer0 (GroupMap.reset (def_groups r) gm) i dir)). {
             assert (TREErcheck: exists trcheck, is_tree rer [Areg r; Acheck i] i (GroupMap.reset (def_groups r) gm) dir trcheck)
               by (eexists; eapply compute_tr_is_tree).
             destruct TREErcheck as [trcheck TREErcheck].
@@ -398,8 +398,7 @@ Section RegexpTree.
             - simpl in TREE0. apply atmost_leaves_incl_nat with (m := n) (n := m + S n) (r := r) (g := true); eauto. lia.
             - simpl in TREE0. replace t0 with t by eauto using is_tree_determ. unfold incl. auto.
           }
-          assert (EQUIV: leaves_equiv [] (tree_leaves titer (GroupMap.reset (def_groups r) gm) i
-                                            dir) (tree_leaves titer0 (GroupMap.reset (def_groups r) gm) i dir)). {
+          assert (EQUIV: leaves_equiv [] (tree_leaves titer (GroupMap.reset (def_groups r) gm) i dir) (tree_leaves titer0 (GroupMap.reset (def_groups r) gm) i dir)). {
             clear INCL ISTREE2 titer1.
             remember (GroupMap.reset (def_groups r) gm) as gm'. clear gm Heqgm'.
             remember i as i' in ISTREE1 at 1, ISTREE0 at 1. clear Heqi'.
@@ -411,7 +410,7 @@ Section RegexpTree.
 
     Lemma atmost_atmost_equiv_actions_minf (n: non_neg_integer_or_inf) r:
       forall dir, actions_equiv_dir rer dir [Areg (Quantified true 0 +∞ r); Areg (Quantified true 0 n r)]
-                    [Areg (Quantified true 0 +∞ r)].
+               [Areg (Quantified true 0 +∞ r)].
     Proof.
       unfold actions_equiv_dir.
       intros dir inp.
@@ -424,15 +423,12 @@ Section RegexpTree.
         intros inp Hend gm t1 t2 TREE1 TREE2.
         inversion TREE1; subst. inversion TREE2; subst.
         inversion SKIP0; subst. unfold tree_equiv_tr_dir. simpl.
-        assert (NO_LEAVES: actions_no_leaves rer [Areg r; Acheck inp; Areg (Quantified true 0 plus r);
-                                                  Areg (Quantified true 0 n r)] dir). {
+        assert (NO_LEAVES: actions_no_leaves rer [Areg r; Acheck inp; Areg (Quantified true 0 plus r); Areg (Quantified true 0 n r)] dir). {
           apply actions_no_leaves_add_left with (a := [Areg r]).
-          apply actions_no_leaves_add_right with (a := [Acheck inp]) (b := [Areg (Quantified true 0 plus r);
-                                                                            Areg (Quantified true 0 n r)]).
+          apply actions_no_leaves_add_right with (a := [Acheck inp]) (b := [Areg (Quantified true 0 plus r); Areg (Quantified true 0 n r)]).
           apply check_end_no_leaves. lia.
         }
-        assert (NO_LEAVES0: actions_no_leaves rer [Areg r; Acheck inp;
-                                                   Areg (Quantified true 0 plus0 r)] dir). {
+        assert (NO_LEAVES0: actions_no_leaves rer [Areg r; Acheck inp; Areg (Quantified true 0 plus0 r)] dir). {
           apply actions_no_leaves_add_left with (a := [Areg r]).
           apply actions_no_leaves_add_right with (a := [Acheck inp]) (b := [Areg (Quantified true 0 plus0 r)]).
           apply check_end_no_leaves. lia.
@@ -443,8 +439,7 @@ Section RegexpTree.
         inversion SKIP; subst.
         + inversion SKIP0; subst. simpl. reflexivity.
         + inversion SKIP0; subst. simpl.
-          assert (NO_LEAVES1: actions_no_leaves rer [Areg r; Acheck inp;
-                                                     Areg (Quantified true 0 plus1 r)] dir). {
+          assert (NO_LEAVES1: actions_no_leaves rer [Areg r; Acheck inp; Areg (Quantified true 0 plus1 r)] dir). {
             apply actions_no_leaves_add_left with (a := [Areg r]).
             apply actions_no_leaves_add_right with (a := [Acheck inp]) (b := [Areg (Quantified true 0 plus1 r)]).
             apply check_end_no_leaves. lia.
@@ -759,8 +754,8 @@ Section RegexpTree.
       assert (Hlength_le: remaining_length inp dir <= l) by lia. clear Heql. generalize dependent inp. revert tm tn d1 d2 gm.
       induction l; intros.
       - specialize (is_tree_productivity rer [Areg (Quantified g 0 d1 r)] inp gm dir) as [t5 T5].
-        eapply quantifier_null_length_skip with (acts := [Areg (Quantified g 0 d1 r)])in H; eauto; eauto.
-        eapply quantifier_null_length in T5, H0; auto. rewrite H, T5, H0. intros x xIn; assumption.
+        eapply quantified_null_length_skip with (acts := [Areg (Quantified g 0 d1 r)])in H; eauto; eauto.
+        eapply quantified_null_length in T5, H0; auto. rewrite H, T5, H0. intros x xIn; assumption.
       - inversion H0.
         + inversion SKIP. subst. simpl. eapply atmost_leaves_incl_self_double; eauto.
         + subst. simpl. intros x xIn. apply in_app_or in xIn as [cx | cy]. revert x cx.
@@ -786,18 +781,18 @@ Section RegexpTree.
       remember (remaining_length i dir) as l.
       assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql. generalize dependent i.
       induction l; intros i HeqL gm t1 t2 T1 T2.
-      - eapply quantifier_null_length in T2; auto.
+      - eapply quantified_null_length in T2; auto.
         specialize (is_tree_productivity rer [Areg (Quantified false 0 n r)] i gm dir) as [t3 T3].
-        eapply quantifier_null_length_skip with (acts := [Areg (Quantified false 0 n r)])in T1; eauto.
-        eapply quantifier_null_length in T3; subst; auto. rewrite T2, T1, T3. reflexivity.
+        eapply quantified_null_length_skip with (acts := [Areg (Quantified false 0 n r)])in T1; eauto.
+        eapply quantified_null_length in T3; subst; auto. rewrite T2, T1, T3. reflexivity.
       - inversion T1; inversion T2; inversion SKIP; subst. simpl.
         +  apply leaves_equiv_app.
-           eapply quantifier_inf_step_advances with (r := r) (acts2 := [Areg (Quantified true 0 plus0 r)]) (acts1 := [Areg (Quantified true 0 plus r); Areg (Quantified false 0 (NoI.N 0) r)]); eauto.
+           eapply step_advances_eqs with (r := r) (acts2 := [Areg (Quantified true 0 plus0 r)]) (acts1 := [Areg (Quantified true 0 plus r); Areg (Quantified false 0 (NoI.N 0) r)]); eauto.
            destruct plus0, plus; try discriminate.
            intros; eapply IHl; eauto. lia.
            inversion SKIP0; inversion SKIP1; subst; reflexivity.
         + simpl in *. apply leaves_equiv_incl4.
-          eapply quantifier_inf_step_advances; eauto.
+          eapply step_advances_eqs; eauto.
           exact ISTREE1. exact ISTREE0. intros.
           destruct plus, plus0; try discriminate.
           eapply IHl; eauto. lia.
@@ -828,20 +823,20 @@ Section RegexpTree.
       remember (remaining_length i dir) as l. 
       assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql. generalize dependent i. revert n.
       induction l; intros n i HeqL gm t1 t2 T1 T2.
-      - eapply quantifier_null_length in T2.
+      - eapply quantified_null_length in T2.
         specialize (is_tree_productivity rer [Areg (Quantified true 0 +∞ r)] i gm dir) as [t3 T3].
-        eapply quantifier_null_length_skip with (acts := [Areg (Quantified true 0 +∞ r)])in T1; eauto. 2: lia.
-        eapply quantifier_null_length in T3; eauto. rewrite T2, T1, T3. reflexivity.
+        eapply quantified_null_length_skip with (acts := [Areg (Quantified true 0 +∞ r)])in T1; eauto. 2: lia.
+        eapply quantified_null_length in T3; eauto. rewrite T2, T1, T3. reflexivity.
       - apply Nat.lt_eq_cases in HeqL as [cx | cy].
         eapply IHl; eauto. lia.
         inversion T1; inversion T2;  subst. simpl.
         eapply is_tree_determ in T2; eauto. subst; reflexivity.
-        simpl. eapply leaves_equiv_app5. inversion SKIP; subst. simpl.
+        simpl. eapply leaves_equiv_app4. inversion SKIP; subst. simpl.
         destruct plus1, plus0; try discriminate.
         eapply leaves_equiv_app. eapply is_tree_determ  with (t1 := titer1) in ISTREE0; eauto.
         subst. reflexivity.
         inversion SKIP0; inversion SKIP1; subst. reflexivity.
-        eapply quantifier_inf_step_advances with (acts2 := [Areg (Quantified true 0 plus0 r)]) (acts1 := [Areg (Quantified false 0 plus r); Areg (Quantified true 0 +∞ r)]); eauto.
+        eapply step_advances_eqs with (acts2 := [Areg (Quantified true 0 plus0 r)]) (acts1 := [Areg (Quantified false 0 plus r); Areg (Quantified true 0 +∞ r)]); eauto.
         destruct plus0. discriminate.
         intros. eapply IHl; eauto. lia.
     Qed.
@@ -887,7 +882,7 @@ Section RegexpTree.
 
   End BoundedRepetitions.
 
-  (*|
+(*|
 ## Character classes
 
 Illustrative examples taken from https://github.com/DmitrySoshnikov/regexp-tree/tree/master/src/optimizer (not complete).
@@ -945,4 +940,3 @@ Illustrative examples taken from https://github.com/DmitrySoshnikov/regexp-tree/
     Qed.
   End CharacterClasses.
 End RegexpTree.
-
