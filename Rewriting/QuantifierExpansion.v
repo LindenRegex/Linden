@@ -1,5 +1,6 @@
 From Linden Require Import ProofSetup.
 From Linden.Rewriting Require Import FlatMap RegexpTree Examples.
+From Linden Require Import StrictSuffix.
 
 (** * Expanding quantifiers *)
 
@@ -100,23 +101,144 @@ Section QuantifierExpansion.
     apply regex_equiv_ctx_samedir with (ctx := CDisjunctionL Epsilon (CSequenceL (Quantified true 0 (NoI.N 1) r) CHole)); auto.
   Qed.
 
-  (** * Greedy Optional Quantifier  *)
+  (** * Greedy Optional Quantifier -- Deprecated *)
   (* this simply recursively applies an existing quantifier rewrite *)
 
-  Fixpoint expand_greedy_atmost (k: nat) (r: regex) : regex :=
+  Fixpoint expand_greedy_atmost_depr (k: nat) (r: regex) : regex :=
     match k with
     | 0 => Quantified true 0 (NoI.N 0) r
     | 1 => Quantified true 0 (NoI.N 1) r
-    | S k' => Sequence (Quantified true 0 (NoI.N 1) r) (expand_greedy_atmost k' r)
+    | S k' => Sequence (Quantified true 0 (NoI.N 1) r) (expand_greedy_atmost_depr k' r)
     end.
 
-  Theorem expand_greedy_atmost_equiv k r:
-    Quantified true 0 (NoI.N k) r ≅[rer] expand_greedy_atmost k r.
+  Theorem expand_greedy_atmost_equiv_depr k r:
+    Quantified true 0 (NoI.N k) r ≅[rer] expand_greedy_atmost_depr k r.
   Proof.
     induction k as [|[|k] IHk]; simpl; intro dir; try reflexivity.
     etransitivity. 1: { symmetry. apply (atmost_atmost_equiv rer (NoI.N 1) (NoI.N (S k)) r). }
     apply regex_equiv_ctx_samedir with (ctx := CSequenceL (Quantified true 0 (NoI.N 1) r) CHole); auto.
   Qed.
+
+  (** * Greedy Optional Quantifier *)
+  (* this new version nests the quantifiers inside the same ?,
+     so that chosing not to iterate once shortcuts the next choices *)
+  (* r{0,3} becomes (r?(r?(r)?)?)? instead of r?r?r? *)
+
+  Fixpoint expand_greedy_atmost (k: nat) (r: regex) : regex :=
+    match k with
+    | 0 => Quantified true 0 (NoI.N 0) r
+    | 1 => Quantified true 0 (NoI.N 1) r
+    | S k' => Quantified true 0 (NoI.N 1) (Sequence (Quantified true 0 (NoI.N 1) r) (expand_greedy_atmost k' r))
+    end.
+
+  (* Inputs of leaves only make (non-strictly positive) progress in the direction of matching *)
+  Lemma input_only_forward:
+    forall l t gm gm1 gm2 inp1 inp2 dir,
+      is_tree rer l inp1 gm dir t ->
+      In (inp2, gm2) (tree_leaves t gm1 inp1 dir) ->
+      inp1 = inp2 \/ StrictSuffix.strict_suffix inp2 inp1 dir.
+  Proof.
+    intros l t gm gm1 gm2 inp1 inp2 dir TREE IN.
+    generalize dependent gm2. generalize dependent gm1.
+    induction TREE; intros; simpl in IN; eauto; try contradiction.
+    - inversion IN; try contradiction. inversion H. auto.
+    - apply read_char_success_advance in READ.
+      unfold advance_input' in IN. rewrite READ in IN.
+      eapply StrictSuffix.ss_advance in READ.
+      apply IHTREE in IN. destruct IN; subst; auto.
+      right. eapply StrictSuffix.strict_suffix_trans; eauto.
+    - apply in_app_or in IN as [IN1 | IN2]; eauto.
+    - subst tquant. destruct greedy; simpl in IN;
+        apply in_app_or in IN as [IN1 | IN2]; eauto.
+    - destruct positivity eqn:POS;
+        destruct tree_leaves as [|[i gm']]; eauto; inversion IN.
+    - apply read_backref_success_advance in READ_BACKREF. rewrite <- READ_BACKREF in IN.
+      apply IHTREE in IN.
+      apply advance_input_n_suffix in READ_BACKREF as [p1 | p2]; subst; auto.
+      right. destruct IN; subst; eauto.
+      eapply StrictSuffix.strict_suffix_trans; eauto.
+  Qed.
+
+  Lemma reset_idem l gm:
+    GroupMap.reset l (GroupMap.reset l gm) = GroupMap.reset l gm.
+  Proof.
+    unfold GroupMap.reset at 1 2. rewrite <- fold_left_app.
+    apply reset_groups_equiv_same. solve_groups_equiv.
+  Qed.
+
+  (* all leaves after a check have progressed *)
+  Lemma check_then_progress r b inp:
+    forall i gm dir t,
+      is_tree rer (Areg r :: Acheck inp :: b) i gm dir t ->
+      Forall (fun lf: leaf => strict_suffix (fst lf) inp dir) (tree_leaves t gm i dir).
+  Proof.
+    intros i gm dir t TREE.
+    pose proof (compute_tr_is_tree rer (actions := [Areg r; Acheck inp]) (i := i) (gm := gm) (dir := dir)) as TPRE.
+    pose proof (leaves_concat rer _ _ _ [Areg r; Acheck inp] b _ _ TREE TPRE) as CONCAT.
+    pose proof (actions_respect_prop_add_left rer [Areg r] [Acheck inp] _ dir (check_actions_prop rer inp dir) _ _ _ TPRE) as PRE.
+    remember (act_from_leaf rer b dir) as f eqn:Hf.
+    induction CONCAT. 1: constructor.
+    inversion PRE; subst. apply Forall_app. split; auto.
+    inversion HEAD; subst. apply Forall_forall. intros [i' g'] IN. simpl.
+    destruct (input_only_forward _ _ _ _ _ _ _ _ TREE0 IN) as [<- | SS]; auto.
+    eauto using strict_suffix_trans.
+  Qed.
+
+  (* appending a check and a r{0,0} to leaves that made progress, except the last one *)
+  Lemma flatmap_check_last inp g dir r' l1 l':
+    Forall (fun lf: leaf => strict_suffix (fst lf) inp dir) l1 ->
+    FlatMap (l1 ++ [(inp, g)]) (act_from_leaf rer [Acheck inp; Areg (Quantified true 0 (NoI.N 0) r')] dir) l' ->
+    l' = l1.
+  Proof.
+    revert l'. induction l1 as [|x l1 IH]; intros l' FA FM; simpl in FM.
+    - inversion FM; subst. inversion FM0; subst. inversion HEAD; subst.
+      inversion TREE; subst; auto. exfalso. eapply ss_irreflexive. eauto. 
+    - inversion FA; subst. inversion FM; subst. inversion HEAD; subst.
+      inversion TREE; subst. 2: contradiction.
+      inversion TREECONT; subst. 2: { destruct plus; discriminate. }
+      inversion SKIP; subst. simpl. destruct x. simpl. f_equal. auto.
+  Qed.
+
+  (* (r{0,Delta})? ≅ r{0,Delta} *)
+  Lemma opt_atmost_equiv delta r:
+    Quantified true 0 (NoI.N 1) (Quantified true 0 delta r) ≅[rer] Quantified true 0 delta r.
+  Proof.
+    intros dir. split. 1: { simpl. solve_groups_equiv. }
+    intros inp gm t1 t2 TREE1 TREE2.
+    inversion TREE1; subst.
+    assert (plus = NoI.N 0) as -> by (destruct plus; try discriminate; injection H1 as ->; reflexivity).
+    clear H1. inversion SKIP; subst. clear SKIP.
+    rename ISTREE1 into TITER. simpl in TITER.
+    set (gm1 := GroupMap.reset (def_groups r) gm) in *.
+    assert (exists tn, is_tree rer [Areg (Quantified true 0 delta r)] inp gm1 dir tn) as [tn TN]
+      by (eexists; apply compute_tr_is_tree).
+    pose proof (leaves_concat rer _ _ _ [Areg (Quantified true 0 delta r)] _ _ _ TITER TN) as CONCAT.
+    unfold tree_equiv_tr_dir. simpl. fold gm1.
+    inversion TREE2; subst.
+    - inversion SKIP; subst. inversion TN; subst. 2: { destruct plus; discriminate. }
+      inversion SKIP0; subst. simpl in CONCAT.
+      rewrite (flatmap_check_last _ _ _ _ [] _ (Forall_nil _) CONCAT). simpl. reflexivity.
+    - inversion SKIP; subst. clear SKIP.
+      inversion TN; subst. 1: { destruct plus; discriminate. }
+      assert (plus0 = plus) as -> by (destruct plus, plus0; try discriminate; try injection H1 as ->; reflexivity).
+      clear H1. inversion SKIP; subst. clear SKIP.
+      fold gm1 in ISTREE1. unfold gm1 in ISTREE0. rewrite reset_idem in ISTREE0. fold gm1 in ISTREE0.
+      assert (titer1 = titer0) as -> by eauto using is_tree_determ.
+      simpl in CONCAT. unfold gm1 in CONCAT. rewrite reset_idem in CONCAT. fold gm1 in CONCAT.
+      rewrite (flatmap_check_last _ _ _ _ _ _ (check_then_progress _ _ _ _ _ _ _ ISTREE0) CONCAT).
+      simpl. reflexivity.
+  Qed.
+
+  Theorem expand_greedy_atmost_equiv k r:
+    Quantified true 0 (NoI.N k) r ≅[rer] expand_greedy_atmost k r.
+  Proof.
+    induction k as [|[|k] IHk]; simpl; intro dir; try reflexivity.
+    etransitivity. 1: { symmetry. apply opt_atmost_equiv. }
+    apply regex_equiv_ctx_samedir with (ctx := CQuantified true 0 (NoI.N 1) CHole); auto.
+    etransitivity. 1: { symmetry. apply (atmost_atmost_equiv rer (NoI.N 1) (NoI.N (S k)) r). }
+    apply regex_equiv_ctx_samedir with (ctx := CSequenceL (Quantified true 0 (NoI.N 1) r) CHole); auto.
+  Qed.
+
 
   (** * Forced iterations *)
   (* similarly, we use existing rewrites to peel off forced iterations *)
