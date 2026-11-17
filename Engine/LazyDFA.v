@@ -1,5 +1,5 @@
 From Stdlib Require Import List Lia Bool.
-From Stdlib Require Import Relation_Definitions Relation_Operators.
+From Stdlib Require Import Relation_Definitions Relation_Operators Operators_Properties.
 Import ListNotations.
 
 From Linden Require Import Regex Chars Groups.
@@ -9,12 +9,14 @@ From Linden Require Import Parameters (* SeenSets Prefix *).
 From Linden Require Import Complexity.
 From Warblre Require Import Base RegExpRecord.
 From Linden Require Import PikeSubset.
-
+From Linden Require Import PeekingAnalysis.
 
 Section LazyDFA.
   Context {params: LindenParameters}.
   (* Context {VMS: VMSeen}. *)
   Context (rer: RegExpRecord).  
+  Context {disj: Disjoint rer}.
+  Local Notation compilation' := (@compilation params rer).
 
 (* todo this should probs be in chars *)
 Definition next_char (i: input) : option Character :=
@@ -29,7 +31,7 @@ Definition internal_state_eq_dec : forall x y : internal_state, {x = y} + {x <> 
 Proof. repeat (decide equality). Defined.
 Definition is_epsilon (c: code) (i: internal_state) : bool :=
   match get_pc c (fst i) with
-  | Some (Fork _ _) | Some (EndLoop _) | Some (Jmp _) | Some (CheckAnchor _) | Some (BeginLoop) => true 
+  | Some (Fork _ _ _) | Some (EndLoop _) | Some (Jmp _) | Some (CheckAnchor _) | Some (BeginLoop) => true 
   | _ => false
   end. 
 
@@ -117,9 +119,9 @@ Inductive epsilon_loop_rel (c: code): ldfa_epsilon_state -> ldfa_epsilon_state -
   (BREAK_PCS: is_epsilon_break c curr = true),
     epsilon_loop_rel c (LDFA_Eps_Running inp out (curr :: tail)) (LDFA_Eps_Running inp (out ++ [curr]) (tail))
 | elr_fork : (* we insert current in out, and head of workqueue is direct followup, but we also add the future explo at the tail *)
-  forall inp out curr tail out1 out2 
+  forall inp out curr tail out1 out2 p
   (NOTSEEN: dfa_state_contains out curr = false) 
-  (FORK_PC: get_pc c (fst curr) = Some (Fork out1 out2)),
+  (FORK_PC: get_pc c (fst curr) = Some (Fork p out1 out2)),
     epsilon_loop_rel c 	(LDFA_Eps_Running inp out (curr :: tail)) 
                         (LDFA_Eps_Running inp (out ++ [curr]) ((out1, snd curr) :: [(out2, snd curr)] ++ tail))
 | elr_jmp : (* jump : we go to the indicated label *)
@@ -189,7 +191,7 @@ Inductive next_loop_rel (c:code) (i:input) : ldfa_nextloop_state -> ldfa_nextloo
   (CAN_READ_CHAR: check_read rer cd i forward = CanRead)
   (* have to pass current n as the "out" since it's shared between current threads *)
   (EPSI: clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running i n ([next_step pc])) (LDFA_Eps_Done out)),
-    next_loop_rel c i (LDFA_Next_Running n (pc :: pcs)) (LDFA_Next_Running (n ++ out) pcs)
+    next_loop_rel c i (LDFA_Next_Running n (pc :: pcs)) (LDFA_Next_Running (out) pcs)
 | nlr_noconsume : forall n pc pcs cd (* if we can't read, we skip *)
   (CONSUME_PC: get_pc c (fst pc) = Some (Consume cd))
   (CANT_READ_CHAR: check_read rer cd i forward = CannotRead),
@@ -205,7 +207,7 @@ Inductive next_loop_rel (c:code) (i:input) : ldfa_nextloop_state -> ldfa_nextloo
 (********** main loop **********)
 
 (* 
-| LDFA (curr: dfa_state) (inp: input) (ttab: transition_table) (best: option input) (next: dfa_state)
+| LDFA (curr: dfa_state) (inp: input) (ttab: transition_table) (best: option input)
 | LDFA_final (res:option input). 
 assuming init_state : LDFA (curr = (epsilon_closure c i [] code@0)) (i) (ttab = []) (best = None)
 assuming infinite cache for now : could late add non deterministic step that clears the cache
@@ -484,6 +486,42 @@ Qed.
 
 (********** progress of the relations **********)
 
+Lemma steps_crt:
+  forall A (R:A->A->Prop) (x y:A) n,
+    steps R x n y -> clos_refl_trans _ R x y.
+Proof.
+  intros A R x y n H.
+  induction H as [a n | x y z n STEP TRC IH].
+  - apply rt_refl.
+  - eapply rt_trans.
+    + apply rt_step. exact STEP.
+    + exact IH.
+Qed.
+
+Lemma steps_app:
+  forall A (R:A->A->Prop) (x y z:A) n1 n2,
+    steps R x n1 y -> steps R y n2 z -> exists n, steps R x n z.
+Proof.
+  intros A R x y z n1 n2 H1.
+  induction H1 as [a n | x' y' z' n STEP TRC IH]; intros H2.
+  - eexists. exact H2.
+  - destruct (IH H2) as [m Hm].
+    exists (S m). eapply steps_cons; eauto.
+Qed.
+
+Lemma crt_steps:
+  forall A (R:A->A->Prop) (x y:A),
+    clos_refl_trans _ R x y -> exists n, steps R x n y.
+Proof.
+  intros A R x y H.
+  induction H as [x y Hxy | x | x y z H1 IH1 H2 IH2].
+  - exists 1. eapply steps_cons; [exact Hxy | apply steps_refl].
+  - exists 0. apply steps_refl.
+  - destruct IH1 as [n1 S1], IH2 as [n2 S2].
+    destruct (steps_app _ _ _ _ _ _ _ S1 S2) as [n S].
+    exists n. exact S.
+Qed.
+
 Theorem ldfa_eps_progress:
   forall c inp out wq,
   exists eps_next,
@@ -500,7 +538,7 @@ Proof.
       try solve [eexists; eapply elr_reg_skip; eauto; unfold is_epsilon_skip; rewrite CURR_PC; reflexivity]. 
       -- destruct (anchor_satisfied rer a inp) eqn:SAT_ANC; eexists; [eapply elr_anc_sat | eapply elr_anc_unsat]; eauto.
       -- eexists; apply elr_jmp; eauto.
-      -- eexists; apply elr_fork; eauto.
+      -- eexists; eapply elr_fork; eauto.
       -- eexists; apply elr_bgnloop; eauto.
       -- destruct (snd curr) eqn:EXIT; eexists; [apply elr_endloop_sat | eapply elr_endloop_unsat]; eauto.			
       * eexists. apply elr_break. eauto. unfold is_epsilon_break. rewrite CURR_PC. reflexivity.
@@ -508,42 +546,13 @@ Qed.
 
 (** Well Formedness Invariant and Measure of LazyDFA states *)
 
-(* Definition eps_measure (c:code) (out workqueue: dfa_state) :=
-  1 + length workqueue + 2 * (2 * length c - length out).
-
-(* The invariant that is preserved through epsilon steps, with a measure that strictly decreases *)
-Inductive ldfa_eps_inv (c:code): ldfa_epsilon_state -> nat -> Prop :=
-| eps_inv_done:
-  forall out, ldfa_eps_inv c (LDFA_Eps_Done out) 0
-| eps_inv_running:
-  forall inp out wq
-    (OUT_BOUND: length out <= 2 * length c),
-    ldfa_eps_inv c (LDFA_Eps_Running inp out wq) (eps_measure c out wq). *)
-
 Definition eps_measure (c:code) (st: ldfa_epsilon_state): nat :=
   match st with
   | LDFA_Eps_Done out => 0
   | LDFA_Eps_Running inp out wq => 1 + length wq + 2 * (2 * length c - length out)
   end.
 
-(* 
-From Complexity.c :
-
-  (* Some bytecode is well-formed if every target label belongs in some range *)
-  Definition code_wf (c:code) (size:nat) :=
-    forall pc i next,
-      get_pc c pc = Some i ->
-      In next (next_pcs pc i) ->
-      next < size.
-
-  Theorem compiled_wf:
-    forall r, code_wf (compilation r) (size (compilation r)).
-
-  possible_elements & possible_all
-
-*)
-
-(* every label is in the code *)
+(* every label is in the code, "valid" *)
 Definition in_range (c:code) (st: dfa_state) : Prop :=
   List.Forall (fun '(l, b) => l < length c) st.
 
@@ -605,6 +614,8 @@ Ltac solver :=
     get_pc ?c pc = Some i -> In next (next_pcs pc i) -> next < size ?code |- _ < length ?code 
     => eapply WFCODE
   | H: _ |- S (fst ?curr) = fst ?curr + 1 \/ _ => left; lia
+  | H: _ |- NoDup [] => constructor
+  | H: NoDup (?pc :: ?pcs) |- NoDup ?pcs => pose proof (NoDup_cons_iff pc pcs) as [H1 H2]; apply H1; auto
   | _ => unfold not; intros; subst; simpl in *; eauto
   end.
 
@@ -664,7 +675,7 @@ Proof.
   subst; inversion H.
   - assert (new_wq = [(out0, snd curr); (out3, snd curr)]) by 
   (apply (app_inv_tail tail); auto). 
-  assert (i = (Fork out0 out3)) by congruence.
+  assert (i = (Fork p out0 out3)) by congruence.
   subst; inversion H ; [| inversion H0]; subst; simpl; auto.
   - assert (new_wq = [(l, snd curr)]) by 
   (apply (app_inv_tail tail); auto). 
@@ -746,7 +757,7 @@ Proof.
     congruence.
 Qed.
 
-Lemma ldfa_bound:
+Lemma ldfa_eps_bound:
   forall s code n,
     code_wf code (size code) ->
     ldfa_eps_inv code s n ->
@@ -763,6 +774,162 @@ Proof.
 Qed.
 
 Definition eps_complexity (r:regex) : nat :=
+  2 + 4 * (codesize r).
+(* 1 + length wq + 2 * (2 * length c - length out) *)
+
+Theorem ldfa_eps_initial_measure:
+  forall inp r,
+    pike_regex r ->
+    ldfa_eps_inv (compilation' r) (initial_epsilon_state inp) (eps_complexity r).
+Proof.
+  intros inp r SUBSET.
+  replace (eps_complexity r) with (eps_measure (compilation' r) (initial_epsilon_state inp)); unfold initial_epsilon_state, compilation'.
+  - constructor; auto; unfold get_out, get_wq, in_range, initial_int_state; constructor; auto. apply (compilation_nonempty rer r).
+  - unfold eps_complexity, eps_measure, initial_int_state. rewrite <- compilation_size; auto. unfold size, compilation'. simpl. lia. 
+Qed.
+
+Theorem ldfa_eps_complexity:
+  forall (r:regex) (inp:input),
+    (* for any supported regex r and input inp *)
+    pike_regex r ->
+    (* The initial state reaches a final state in at most (complexity r) steps. *)
+    exists result, steps (epsilon_loop_rel (compilation' r))
+                (initial_epsilon_state inp) (eps_complexity r) (LDFA_Eps_Done result).
+Proof.
+  intros r inp SUBSET.
+  apply ldfa_eps_bound.
+  - apply compiled_wf.
+  - apply ldfa_eps_initial_measure; auto.
+Qed.
+
+Theorem ldfa_eps_init_terminates:
+  forall r inp,
+    pike_regex r ->
+    exists result, clos_refl_trans _ (epsilon_loop_rel (compilation' r)) (initial_epsilon_state inp) (LDFA_Eps_Done result).
+Proof.
+  intros. eapply ldfa_eps_complexity in H as [result STEPS]; eauto.
+  exists result. eapply steps_crt; eauto.
+Qed.
+
+(* todo recheck, jsp si c'est utile ? on dirait pas?
+Theorem ldfa_eps_out_res:
+  forall c s1 res,
+  epsilon_loop_rel c s1 (LDFA_Eps_Done res) ->
+  (get_out s1) = res.
+Proof.
+  intros c s1 res STEP.
+  inversion STEP; subst.
+  auto.
+Qed. *)
+
+Lemma eps_inv_measure:
+  forall c s m,
+    ldfa_eps_inv c s m -> ldfa_eps_inv c s (eps_measure c s).
+Proof. intros. replace m with (eps_measure c s) in * by (inversion H; auto); auto. Qed.
+
+Theorem eps_result_inv:
+  forall c s1 s2 m,
+  code_wf c (size c) ->
+  clos_refl_trans _ (epsilon_loop_rel c) s1 s2 ->
+  ldfa_eps_inv c s1 m -> 
+  ldfa_eps_inv c s2 (eps_measure c s2).
+Proof.
+  intros c s1 s2 m WF STAR INV.
+  apply eps_inv_measure in INV; clear m.
+  revert INV.
+  induction STAR as [x y STEP | x | x y z H1 IH1 H2 IH2]; intros INV.
+  - destruct (ldfa_eps_decreases c x y _ WF STEP INV) as [m2 [INV2 _]].
+    apply eps_inv_measure in INV2. exact INV2.
+  - exact INV.
+  - apply IH2. apply IH1. exact INV.
+Qed.
+
+
+(* what we need to prove for next progress *)
+Theorem ldfa_eps_terminates:
+  forall r inp c n pc,
+    pike_regex r ->
+    (* need assumption valid curr ? *)
+
+    exists out, clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp n ([next_step pc]) (* = out workqueue *)) (LDFA_Eps_Done out).
+Proof.
+  intros. 
+  admit.
+Admitted.
+
+(******* next termination ********)
+
+Definition next_measure (st: ldfa_nextloop_state) : nat := 
+  match st with
+  | LDFA_Next_Running next current_pcs => 1 + length current_pcs
+  | LDFA_Next_Done next found_match => 0
+  end.
+
+Definition get_next (st: ldfa_nextloop_state) : dfa_state := 
+  match st with
+  | LDFA_Next_Running next current_pcs => next
+  | LDFA_Next_Done next found_match => next
+  end.
+
+Definition get_currpcs (st: ldfa_nextloop_state) : dfa_state := 
+  match st with
+  | LDFA_Next_Running next current_pcs => current_pcs
+  | LDFA_Next_Done next found_match => []
+  end.
+
+Inductive ldfa_next_inv (c:code): ldfa_nextloop_state -> nat -> Prop :=
+| nxt_inv: forall st
+  (NODUPNEXT: NoDup (get_next st))
+  (WFNEXT: in_range c (get_next st))
+  (NODUPCURR: NoDup (get_currpcs st))
+  (WFCURR: in_range c (get_currpcs st))
+  ,
+  ldfa_next_inv c st (next_measure st).
+
+Theorem ldfa_next_decreases:
+  forall code inp s1 s2 m1,
+    code_wf code (size code) ->
+    next_loop_rel code inp s1 s2 ->
+    ldfa_next_inv code s1 m1 ->
+    exists m2, ldfa_next_inv code s2 m2 /\ m2 < m1.
+Proof.
+  intros code inp s1 s2 m1 WFCODE STEP INV1.
+  inversion STEP; inversion INV1; 
+  exists (next_measure s2); subst;
+  unfold get_next, get_currpcs, in_range, next_measure in *.
+  all: split; [constructor | ]; repeat simpl_length; repeat solver.
+  all: remember (LDFA_Eps_Running inp n [next_step pc]) as s1.
+  all: assert (EPS_INV1: ldfa_eps_inv code s1 (eps_measure code s1)) by
+  (
+    constructor; subst; unfold get_out, get_wq, in_range, next_step; auto;
+    assert (In (fst pc + 1) (next_pcs (fst pc) (Consume cd)))
+      by (unfold next_pcs; constructor; lia);
+    constructor; auto;
+    unfold code_wf, size in *;
+    eapply WFCODE with (next:= (fst pc + 1)); eauto
+  ).
+  all: pose proof (eps_result_inv _ _ _ (eps_measure code s1) WFCODE EPSI EPS_INV1) as EPS_INV_OUT;
+  inversion EPS_INV_OUT; subst; auto.
+Qed.
+
+(* 
+Lemma ldfa_next_bound:
+  forall s code inp n,
+    code_wf code (size code) ->
+    ldfa_next_inv code s n ->
+    exists result found, steps (next_loop_rel code inp) s n (LDFA_Next_Done result found).
+Proof.
+  intros s code inp n WF INV. generalize dependent s. induction n using (strong_ind); intros.
+  destruct s.
+  2: { exists next, found_match. constructor. }
+  specialize (ldfa_next_progress code inp out workqueue) as [next STEP].
+  specialize (ldfa_next_decreases code _ next n WF STEP INV) as [newm [INV2 DECR]].
+  specialize (H newm DECR next INV2) as [result STEPS].
+  exists result. apply more_steps with (n:=S newm); try lia.
+  econstructor; eauto.
+Qed.
+
+Definition next_complexity (r:regex) : nat :=
   2 + 4 * (codesize r).
 (* 1 + length wq + 2 * (2 * length c - length out) *)
 
@@ -786,69 +953,101 @@ Theorem ldfa_eps_complexity:
                 (initial_epsilon_state inp) (eps_complexity r) (LDFA_Eps_Done result).
 Proof.
   intros r inp SUBSET.
-  apply ldfa_bound.
+  apply ldfa_next_bound.
   - apply compiled_wf.
   - apply ldfa_eps_initial_measure; auto.
 Qed.
 
-Lemma steps_crt:
-  forall A (R:A->A->Prop) (x y:A) n,
-    steps R x n y -> clos_refl_trans _ R x y.
-Proof.
-  intros A R x y n H.
-  induction H as [a n | x y z n STEP TRC IH].
-  - apply rt_refl.
-  - eapply rt_trans.
-    + apply rt_step. exact STEP.
-    + exact IH.
-Qed.
-
-Lemma steps_app:
-  forall A (R:A->A->Prop) (x y z:A) n1 n2,
-    steps R x n1 y -> steps R y n2 z -> exists n, steps R x n z.
-Proof.
-  intros A R x y z n1 n2 H1.
-  induction H1 as [a n | x' y' z' n STEP TRC IH]; intros H2.
-  - eexists. exact H2.
-  - destruct (IH H2) as [m Hm].
-    exists (S m). eapply steps_cons; eauto.
-Qed.
-
-Lemma crt_steps:
-  forall A (R:A->A->Prop) (x y:A),
-    clos_refl_trans _ R x y -> exists n, steps R x n y.
-Proof.
-  intros A R x y H.
-  induction H as [x y Hxy | x | x y z H1 IH1 H2 IH2].
-  - exists 1. eapply steps_cons; [exact Hxy | apply steps_refl].
-  - exists 0. apply steps_refl.
-  - destruct IH1 as [n1 S1], IH2 as [n2 S2].
-    destruct (steps_app _ _ _ _ _ _ _ S1 S2) as [n S].
-    exists n. exact S.
-Qed.
-
 Theorem ldfa_eps_init_terminates:
-    forall r inp,
-      pike_regex r ->
-      exists result, clos_refl_trans _ (epsilon_loop_rel (compilation r)) (initial_epsilon_state inp) (LDFA_Eps_Done result).
-  Proof.
-    intros. eapply ldfa_eps_complexity in H as [result STEPS]; eauto.
-    exists result. eapply steps_crt; eauto.
-  Qed.
-
-(* what we need to prove for progress *)
-(* Theorem ldfa_eps_terminates:
   forall r inp,
     pike_regex r ->
-    (* need assumption valid curr *)
-    exists out, clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp n ([next_step pc])) (LDFA_Eps_Done out).
+    exists result, clos_refl_trans _ (epsilon_loop_rel (compilation r)) (initial_epsilon_state inp) (LDFA_Eps_Done result).
 Proof.
-  intros r inp H. eapply memobt_complexity_empty_memoset in H as [result [finalms [STEPS VALID]]]; eauto.
-  exists result. exists finalms. eapply steps_trc; eauto.
+  intros. eapply ldfa_eps_complexity in H as [result STEPS]; eauto.
+  exists result. eapply steps_crt; eauto.
 Qed. *)
 
+Lemma next_inv_measure:
+  forall c s m,
+    ldfa_next_inv c s m -> ldfa_next_inv c s (next_measure s).
+Proof. intros. replace m with (next_measure s) in * by (inversion H; auto); auto. Qed.
 
-Theorem ldfa_next_progress:
+Theorem next_result_inv:
+  forall c inp s1 s2 m,
+  code_wf c (size c) ->
+  clos_refl_trans _ (next_loop_rel c inp) s1 s2 ->
+  ldfa_next_inv c s1 m -> 
+  ldfa_next_inv c s2 (next_measure s2).
+Proof.
+  intros c inp s1 s2 m WF STAR INV.
+  apply next_inv_measure in INV; clear m.
+  revert INV.
+  induction STAR as [x y STEP | x | x y z H1 IH1 H2 IH2]; intros INV.
+  - destruct (ldfa_next_decreases c inp x y _ WF STEP INV) as [m2 [INV2 _]].
+    apply next_inv_measure in INV2. exact INV2.
+  - exact INV.
+  - apply IH2. apply IH1. exact INV.
+Qed.
+
+(******** ldfa termination *********)
+
+Definition ldfa_measure (st: ldfa_state) : nat := 
+  match st with
+  | LDFA curr inp ttab best => inpsize inp
+  | LDFA_final res => 0
+  end.
+
+Inductive ldfa_inv (c:code): ldfa_state -> nat -> Prop :=
+| ldfa_inv_: forall st
+  (* (NODUPNEXT: NoDup (get_next st))
+  (WFNEXT: in_range c (get_next st))
+  (NODUPCURR: NoDup (get_currpcs st))
+  (WFCURR: in_range c (get_currpcs st)) *)
+  ,
+  ldfa_inv c st (ldfa_measure st).
+
+
+(************** PROGRESS ***************)
+
+Theorem ldfa_next_progress_test:
+  forall r inp next current_pcs,
+  pike_regex r ->
+  let c := (compilation' r) in
+  (* valid current state *)
+  (* clos_refl_trans _ (epsilon_loop_rel c) (initial_epsilon_state inp) (LDFA_Next_Running next current_pcs) -> *)
+  exists next_state,
+    next_loop_rel c inp (LDFA_Next_Running next current_pcs) next_state.
+Proof.
+  intros.
+  destruct (current_pcs).
+  - eexists; apply nlr_final; eauto.
+  - destruct (get_pc c (fst i)) eqn:CURR_PC.
+    + destruct b;	simpl in *; 
+      try match goal with
+      | H : get_pc _ _ = Some Accept |- _ => eexists; apply nlr_accept; eauto
+      | H : get_pc _ _ = Some KillThread |- _ => eexists; apply nlr_kill; eauto
+      | H : get_pc _ _ = Some (Consume ?cd) |- _ => destruct (check_read rer cd inp forward) eqn:H_READ
+      | H : _ |- _ => eexists; eapply nlr_skip; eauto; unfold is_nextloop_skip; rewrite CURR_PC; reflexivity
+      end.
+      * assert (exists out, clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp next ([next_step i])) (LDFA_Eps_Done out)). 
+      { pose proof ldfa_eps_bound.
+        pose proof (compiled_wf rer r).
+        assert (ldfa_eps_inv c (LDFA_Eps_Running inp next [next_step i]) (eps_measure c (LDFA_Eps_Running inp next [next_step i]))).
+        { 
+          constructor.
+          admit.
+          admit.
+          admit.
+        }
+        (* eapply steps_crt.
+        eapply ldfa_bound; eauto.  *)
+       admit. } 
+      destruct H0. eexists. eapply nlr_consume; eauto. 	
+      * eexists; eapply nlr_noconsume; eauto.
+    + eexists; eapply nlr_skip; eauto; unfold is_nextloop_skip; rewrite CURR_PC; reflexivity.
+Admitted.
+
+(* Theorem ldfa_next_progress:
   forall c inp next current_pcs,
   exists next_state,
     next_loop_rel c inp (LDFA_Next_Running next current_pcs) next_state.
@@ -869,7 +1068,7 @@ Proof.
       destruct H. eexists. eapply nlr_consume; eauto. 	
       * eexists; eapply nlr_noconsume; eauto.
     + eexists; eapply nlr_skip; eauto; unfold is_nextloop_skip; rewrite CURR_PC; reflexivity.
-Admitted.
+Admitted. *)
 
 (* 	if advance input = some
     then exists next_char 
@@ -905,6 +1104,12 @@ Proof.
 Admitted.
 
 
+(*****  EXAMPLE  *****)
+(* Require Import Stdlib.Strings.Ascii Stdlib.Strings.String.
+Open Scope string_scope.
+
+Definition a : Character.type := $ "a".
+Definition b : Character.type := $ "b". *)
 
 
 (* 
