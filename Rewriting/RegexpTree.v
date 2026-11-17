@@ -879,10 +879,98 @@ Section RegexpTree.
       + inversion T1; subst; clear T1.
         simpl in CONT. eapply atmost_atmost_equiv_actions_false_trueinf; eauto.
   Qed.
+    
+
+  Lemma quantified_open_greedy_right_forward:
+    forall r min delta1 g,
+      def_groups r = [] -> 
+      (Sequence (Quantified true min  +∞ r) (Quantified g 0 delta1 r))
+        ≅[rer][forward] (Quantified true min +∞ r).
+  Proof.
+    intros r min delta1 g GROUPEMPT.
+    etransitivity. {
+      eapply seq_equiv_dir. symmetry. eapply bounded_atmost_forward; auto.
+      reflexivity.
+    } etransitivity. {
+      symmetry. eapply sequence_assoc_equiv.
+    }
+    etransitivity. {
+      eapply seq_equiv_dir. reflexivity.
+      eapply quantified_open_greedy_right; auto.
+    }
+    eapply bounded_atmost_forward; auto.
+  Qed.
+  
+       
+      
+
+  Lemma quantified_open_greedy_right_backward:
+    forall r min delta1 g,
+      def_groups r = [] -> 
+      (Sequence (Quantified true 0  +∞ r) (Quantified g min delta1 r))
+        ≅[rer][backward] (Quantified true min +∞ r).
+  Proof.
+    intros r min delta1 g GROUPEMPT.
+    etransitivity. {
+      eapply seq_equiv_dir. reflexivity.
+      symmetry. eapply atmost_bounded_backward; auto.
+    } etransitivity. {
+      eapply sequence_assoc_equiv.
+    } etransitivity. {
+      eapply seq_equiv_dir. eapply quantified_open_greedy_right; auto.
+      reflexivity.
+    } 
+    destruct g. eapply atmost_bounded_backward; eauto.
+    etransitivity. eapply seq_equiv_dir. reflexivity.
+    symmetry. eapply forced_equiv. eapply atmost_bounded_backward; auto.
+  Qed.
+  
+  Lemma quantified_open_greedy_left_forward:
+    forall r min delta1 g,
+      def_groups r = [] -> 
+      (Sequence (Quantified g min delta1 r) (Quantified true 0 +∞ r))
+        ≅[rer][forward] (Quantified true min +∞ r).
+  Proof.
+    intros r min delta1 g GROUPEMPT.
+    etransitivity. {
+      eapply seq_equiv_dir. 
+      symmetry. eapply bounded_atmost_forward; auto.
+      reflexivity.
+    } etransitivity. {
+      symmetry. eapply sequence_assoc_equiv.
+    } etransitivity. {
+      eapply seq_equiv_dir. reflexivity.
+      eapply quantified_open_greedy_left; auto.
+    }
+    destruct g. eapply bounded_atmost_forward; eauto.
+    etransitivity. eapply seq_equiv_dir. 
+    symmetry. eapply forced_equiv. reflexivity.
+    eapply bounded_atmost_forward; auto.
+  Qed.
+  
+
+  Lemma quantified_open_greedy_left_backward:
+    forall r min delta1 g,
+      def_groups r = [] -> 
+      (Sequence (Quantified g 0 delta1 r) (Quantified true min +∞ r))
+        ≅[rer][backward] (Quantified true min +∞ r).
+  Proof.
+    intros r min delta1 g GROUPEMPT.
+    etransitivity. {
+      eapply seq_equiv_dir. reflexivity.
+      symmetry. eapply atmost_bounded_backward; auto.
+    }
+    etransitivity. {
+      eapply sequence_assoc_equiv.
+    } etransitivity. {
+      eapply seq_equiv_dir. eapply quantified_open_greedy_left; auto.
+      reflexivity.
+    } eapply atmost_bounded_backward; auto.
+  Qed.
 
   End BoundedRepetitions.
 
-(*|
+  (*|
 ## Character classes
 
 Illustrative examples taken from https://github.com/DmitrySoshnikov/regexp-tree/tree/master/src/optimizer (not complete).
