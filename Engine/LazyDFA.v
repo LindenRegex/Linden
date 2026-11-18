@@ -25,7 +25,6 @@ Definition next_char (i: input) : option Character :=
   | _ => None
   end.
 
-
 Definition internal_state: Type := (label * LoopBool). (* "nfa state" *)
 Definition internal_state_eq_dec : forall x y : internal_state, {x = y} + {x <> y}.
 Proof. repeat (decide equality). Defined.
@@ -75,7 +74,7 @@ Definition add_trans (table : transition_table) (curr : dfa_state) (char : Chara
 
 (* states of the LazyDFA algorithm *)
 Inductive ldfa_state : Type :=
-| LDFA (curr:  dfa_state) (inp: input) (ttab: transition_table) (best: option input) (*next: dfa_state*)
+| LDFA (curr: dfa_state) (inp: input) (ttab: transition_table) (best: option input) (*next: dfa_state*)
 | LDFA_final (res:option input). (* seulement à la toute fin de la main loop *)
 (* assuming that we have an anchored search, we just need to report the input, since we have no capture group *)
 
@@ -1103,14 +1102,155 @@ Proof.
   - admit.
 Admitted.
 
+End LazyDFA.
 
 (*****  EXAMPLE  *****)
-(* Require Import Stdlib.Strings.Ascii Stdlib.Strings.String.
+From Linden Require Import Inst Semantics.Examples.
+From Warblre Require Import Inst.
+Require Import Stdlib.Strings.Ascii Stdlib.Strings.String.
 Open Scope string_scope.
 
-Definition a : Character.type := $ "a".
-Definition b : Character.type := $ "b". *)
+Section Example.
+  Definition a : Character.type := $ "a".
+  Definition b : Character.type := $ "b".
+  Example a_char : regex := Regex.Character (CdSingle a).
+  Example b_char : regex := Regex.Character (CdSingle b).
 
+  Example ab_regex: regex :=
+    Sequence
+      (Disjunction(a_char)(a_char))
+      (b_char).
+
+  Example ab_input: input := Input [a;b] [].
+  Example end_input: input := Input [] [b;a].
+
+  Example ab_code: code := @compilation _ (rer_of ab_regex) (nopeeking _) ab_regex.
+
+  Ltac solv :=
+    match goal with
+    | SEEN: dfa_state_contains [] _ = true |- _ => edestruct dfa_contains_in as [h1 h2]; specialize (h1 SEEN); destruct h1
+    | H: context[get_pc _ _] |- _ => simpl in H
+    | _ => unfold is_epsilon_break, is_epsilon_skip in *; subst; try congruence
+    end.
+
+  Theorem ldfa_ab:
+    forall init_st,
+    initial_ldfa_rel (rer_of ab_regex) ab_code ab_input init_st ->
+    clos_refl_trans _ (ldfa_loop_rel (rer_of ab_regex) ab_code) init_st (LDFA_final (Some end_input)).
+  Proof.
+    intros init_st H_INIT.
+    destruct H_INIT as [init_dfa_st [EPS_INIT H_INIT]]; subst.
+    unfold epsilon_closure_rel, initial_int_state in *. 
+    apply clos_rt_rt1n in EPS_INIT.
+    inversion_clear EPS_INIT; subst.
+    inversion H; subst; repeat solv.
+    inversion FORK_PC; subst; clear FORK_PC H NOTSEEN.
+    inversion_clear H0; subst.
+    inversion H; subst; repeat solv.
+    { edestruct dfa_contains_in as [h1 h2]; specialize (h1 SEEN); destruct h1 as [h1 | h1]; [inversion h1 | apply in_nil in h1; contradiction]. }
+    clear NOTSEEN BREAK_PCS H.
+    inversion_clear H1; subst.
+    inversion H; subst; repeat solv.
+    { edestruct dfa_contains_in as [h1 h2]; specialize (h1 SEEN); destruct h1 as [h1 | h1].
+      - inversion h1. 
+      - inversion h1; inversion H1. }
+    clear NOTSEEN BREAK_PCS H.
+    inversion_clear H0; subst.
+    inversion H; subst; repeat solv; clear H.
+    apply clos_rt1n_rt in H1.
+    apply rtc_eps_done in H1.
+    inversion_clear H1; clear init_dfa_st.
+    apply clos_rt1n_rt.
+    eapply Relation_Operators.rt1n_trans.
+    { 
+      eapply ldfalr_new_nomatch with (char := a); simpl; eauto.
+      apply clos_rt1n_rt; eapply Relation_Operators.rt1n_trans.
+      {
+        assert (get_pc ab_code 0 = Some (Fork NoPeek 1 3)) by auto.     
+        apply nlr_skip; auto.
+      }
+      eapply Relation_Operators.rt1n_trans.
+      {
+        assert (get_pc ab_code 1 = Some (Consume (CdSingle 97))) by auto. 
+        eapply nlr_consume ; eauto.
+        unfold next_step; simpl.
+        apply clos_rt1n_rt; eapply Relation_Operators.rt1n_trans.
+        {
+          assert (get_pc ab_code 2 = Some (Jmp 4)) by auto. 
+          apply elr_jmp; simpl; auto.
+        }
+        eapply Relation_Operators.rt1n_trans.
+        {
+          assert (get_pc ab_code 4 = Some (Consume (CdSingle 98))) by auto.
+          eapply elr_break; eauto.
+        }
+        eapply Relation_Operators.rt1n_trans.
+        {
+          eapply elr_final; eauto.
+        }
+        apply rt1n_refl.
+      }
+      simpl.
+      eapply Relation_Operators.rt1n_trans.
+      {
+        assert (get_pc ab_code 3 = Some (Consume (CdSingle 97))) by auto. 
+        eapply nlr_consume; eauto.
+        apply clos_rt1n_rt; eapply Relation_Operators.rt1n_trans.
+        {
+          unfold next_step; simpl.
+          eapply elr_seen; eauto.
+        }
+        eapply Relation_Operators.rt1n_trans.
+        {
+          eapply elr_final; eauto.
+        }
+        apply rt1n_refl.
+      }
+      eapply Relation_Operators.rt1n_trans.
+      {
+        eapply nlr_final; eauto.
+      }
+      apply rt1n_refl.
+    }
+    unfold add_trans.
+    eapply Relation_Operators.rt1n_trans.
+    {
+      eapply ldfalr_new_nomatch with (char:=b); simpl; eauto.
+      apply clos_rt1n_rt; eapply Relation_Operators.rt1n_trans.
+      {
+        assert (get_pc ab_code 2 = Some (Jmp 4)) by auto. 
+        eapply nlr_skip; eauto.
+      }
+      eapply Relation_Operators.rt1n_trans.
+      {
+        assert (get_pc ab_code 4 = Some (Consume (CdSingle 98))) by auto. 
+        assert (get_pc ab_code 5 = Some (Accept)) by auto.
+        eapply nlr_consume; eauto.
+        apply clos_rt1n_rt; eapply Relation_Operators.rt1n_trans.
+        {
+          unfold next_step; simpl.
+          eapply elr_break; eauto.
+        }
+        eapply Relation_Operators.rt1n_trans.
+        {
+          eapply elr_final; eauto.
+        }
+        apply rt1n_refl.
+      }
+      eapply Relation_Operators.rt1n_trans.
+      {
+        eapply nlr_final; eauto.
+      }
+      apply rt1n_refl.
+    }
+    simpl.
+    eapply Relation_Operators.rt1n_trans.
+    {
+      eapply ldfalr_final_match; eauto.
+    }
+    apply rt1n_refl.
+Qed.
+  
 
 (* 
 (* input juste pour check les anchors 
