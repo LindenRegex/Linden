@@ -351,6 +351,27 @@ Section StrictSuffix.
     - auto.
   Qed.
 
+
+
+  Lemma advance_end_suffix:
+    forall inp dir, 
+    exists inp', advance_input inp' dir = None /\ (strict_suffix inp' inp dir \/ inp' = inp).
+  Proof.
+  intros [next prev] [|].
+  - exists (Input [] ((List.rev next) ++prev)). split;auto.
+    destruct next.
+    + simpl. eauto.
+    + left. apply ss_fwd_diff. exists (t::next).
+      split;try congruence. split;auto. now rewrite app_nil_r.
+  - exists (Input ((List.rev prev) ++ next) []). split;auto. 
+    destruct prev.
+    + simpl. eauto.
+    + left. apply ss_bwd_diff. exists (rev (t::prev)). 
+      split.
+      * simpl. intro H. apply length_zero_iff_nil in H. rewrite length_app in H. simpl in H. lia. 
+      * split;auto. now rewrite app_nil_r,rev_involutive. 
+  Qed.
+
   Lemma advance_suffix:
     forall inp inpnext inpsuf dir,
       strict_suffix inpsuf inp dir ->
@@ -502,6 +523,15 @@ Section StrictSuffix.
     - destruct H; [subst; auto using ip_eq|].
       induction H; subst; eauto using ip_eq, ip_prev, ip_prev'.
   Qed.
+
+  Lemma advance_end_prefix:
+    forall inp dir, 
+    exists inp', advance_input inp' dir = None /\ (input_prefix inp inp' dir).
+  Proof.
+    intros inp dir. pose (advance_end_suffix inp dir) as H. destruct H as [inp' [Hend Hssf]].
+    exists inp'. split;auto. apply input_prefix_strict_suffix. destruct Hssf;eauto.
+  Qed.
+
 
 End StrictSuffix.
 

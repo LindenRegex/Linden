@@ -8,15 +8,15 @@ Lemma gm_find_empty:
 Proof.
   intro gid.
   destruct GroupMap.find eqn:Hfind; try reflexivity.
-  exfalso. apply GroupMap.MapS.find_2 in Hfind.
-  exact (GroupMap.MapS.empty_1 Hfind).
+  exfalso. apply MapS.find_2 in Hfind.
+  exact (MapS.empty_1 Hfind).
 Qed.
 
 Lemma gm_find_add:
   forall gid r gm,
-    GroupMap.find gid (GroupMap.MapS.add gid r gm) = Some r.
+    GroupMap.find gid (MapS.add gid r gm) = Some r.
 Proof.
-  intros gid r gm. apply GroupMap.MapS.find_1, GroupMap.MapS.add_1. reflexivity.
+  intros gid r gm. apply MapS.find_1, MapS.add_1. reflexivity.
 Qed.
 
 Lemma group_map_open_find_other:
@@ -27,10 +27,10 @@ Proof.
   intros gm idx gid gid' Hneq.
   unfold GroupMap.open.
   destruct (GroupMap.find gid' gm) as [r|] eqn:Hfindgm.
-  - apply GroupMap.MapS.find_2 in Hfindgm. now apply GroupMap.MapS.find_1, GroupMap.MapS.add_2.
+  - apply MapS.find_2 in Hfindgm. now apply MapS.find_1, MapS.add_2.
   - unfold GroupMap.find.
-    destruct GroupMap.MapS.find as [r|] eqn:Hfindgmadd; try reflexivity.
-    apply GroupMap.MapS.find_2, GroupMap.MapS.add_3, GroupMap.MapS.find_1 in Hfindgmadd. 2: assumption.
+    destruct MapS.find as [r|] eqn:Hfindgmadd; try reflexivity.
+    apply MapS.find_2, MapS.add_3, MapS.find_1 in Hfindgmadd. 2: assumption.
     unfold GroupMap.find in Hfindgm. congruence.
 Qed.
 
@@ -39,7 +39,7 @@ Lemma group_map_open_find:
     GroupMap.find gid (GroupMap.open idx gid gm) = Some (GroupMap.Range idx None).
 Proof.
   intros gm idx gid. unfold GroupMap.open.
-  apply GroupMap.MapS.find_1, GroupMap.MapS.add_1. reflexivity.
+  apply MapS.find_1, MapS.add_1. reflexivity.
 Qed.
 
 Lemma group_map_close_find_other:
@@ -52,13 +52,13 @@ Proof.
   destruct (GroupMap.find gid gm); simpl. 2: reflexivity.
   destruct r as [startIdx endIdxOpt].
   destruct (GroupMap.find gid' gm) as [r|] eqn:Hfindgm.
-  - apply GroupMap.MapS.find_2 in Hfindgm. destruct Nat.leb.
-    + apply GroupMap.MapS.find_1, GroupMap.MapS.add_2; assumption.
-    + apply GroupMap.MapS.find_1, GroupMap.MapS.add_2; assumption.
+  - apply MapS.find_2 in Hfindgm. destruct Nat.leb.
+    + apply MapS.find_1, MapS.add_2; assumption.
+    + apply MapS.find_1, MapS.add_2; assumption.
   - destruct (GroupMap.find gid' (if Nat.leb _ _ then _ else _)) as [r|] eqn:Hfindgmadd; try reflexivity.
     destruct Nat.leb.
-    + apply GroupMap.MapS.find_2, GroupMap.MapS.add_3, GroupMap.MapS.find_1 in Hfindgmadd. 2: assumption. unfold GroupMap.find in Hfindgm. congruence.
-    + apply GroupMap.MapS.find_2, GroupMap.MapS.add_3, GroupMap.MapS.find_1 in Hfindgmadd. 2: assumption. unfold GroupMap.find in Hfindgm. congruence.
+    + apply MapS.find_2, MapS.add_3, MapS.find_1 in Hfindgmadd. 2: assumption. unfold GroupMap.find in Hfindgm. congruence.
+    + apply MapS.find_2, MapS.add_3, MapS.find_1 in Hfindgmadd. 2: assumption. unfold GroupMap.find in Hfindgm. congruence.
 Qed.
 
 Lemma group_map_close_find_success_le:
@@ -70,7 +70,7 @@ Proof.
   intros gm startIdx origEndOpt endIdx gid Hfind Hle.
   unfold GroupMap.close. rewrite Hfind. replace (startIdx <=? endIdx) with true.
   2: { symmetry. now apply <- Nat.leb_le. }
-  apply GroupMap.MapS.find_1, GroupMap.MapS.add_1. reflexivity.
+  apply MapS.find_1, MapS.add_1. reflexivity.
 Qed.
 
 Lemma group_map_close_find_success_gt:
@@ -83,7 +83,7 @@ Proof.
   assert (Hnle: ~(startIdx <= endIdx)) by lia.
   rewrite <- Nat.leb_le in Hnle. rewrite Bool.not_true_iff_false in Hnle.
   unfold GroupMap.close. rewrite Hfind, Hnle.
-  apply GroupMap.MapS.find_1, GroupMap.MapS.add_1. reflexivity.
+  apply MapS.find_1, MapS.add_1. reflexivity.
 Qed.
 
 Lemma group_map_close_find_success_exists:
@@ -123,25 +123,25 @@ Qed.
 Lemma gm_remove_find_other:
   forall gm gid gid',
     gid' <> gid ->
-    GroupMap.find gid' (GroupMap.MapS.remove gid gm) = GroupMap.find gid' gm.
+    GroupMap.find gid' (MapS.remove gid gm) = GroupMap.find gid' gm.
 Proof.
   intros gm gid gid' Hdiff.
   destruct (GroupMap.find gid' gm) as [r|] eqn:Hfindorig.
-  - apply GroupMap.MapS.find_1, GroupMap.MapS.remove_2.
-    1: congruence. apply GroupMap.MapS.find_2. exact Hfindorig.
-  - destruct (GroupMap.find gid' (GroupMap.MapS.remove _ _)) as [r|] eqn:Hfindremoved; try reflexivity.
-    apply GroupMap.MapS.find_2, GroupMap.MapS.remove_3, GroupMap.MapS.find_1 in Hfindremoved. unfold GroupMap.find in Hfindorig. congruence.
+  - apply MapS.find_1, MapS.remove_2.
+    1: congruence. apply MapS.find_2. exact Hfindorig.
+  - destruct (GroupMap.find gid' (MapS.remove _ _)) as [r|] eqn:Hfindremoved; try reflexivity.
+    apply MapS.find_2, MapS.remove_3, MapS.find_1 in Hfindremoved. unfold GroupMap.find in Hfindorig. congruence.
 Qed.
 
 Lemma gm_remove_find:
   forall gm gid,
-    GroupMap.find gid (GroupMap.MapS.remove gid gm) = None.
+    GroupMap.find gid (MapS.remove gid gm) = None.
 Proof.
   intros gm gid.
   destruct GroupMap.find as [r|] eqn:Hfind; try reflexivity.
-  exfalso. pose proof GroupMap.MapS.remove_1. unfold not in H. apply H with (x := gid) (y := gid) (m := gm) (elt := GroupMap.range).
-  1: reflexivity. unfold GroupMap.MapS.In, GroupMap.MapS.Raw.PX.In.
-  exists r. apply GroupMap.MapS.find_2. exact Hfind.
+  exfalso. pose proof MapS.remove_1. unfold not in H. apply H with (x := gid) (y := gid) (m := gm) (elt := GroupMap.range).
+  1: reflexivity. unfold MapS.In, MapS.Raw.PX.In.
+  exists r. apply MapS.find_2. exact Hfind.
 Qed.
 
 Lemma gm_reset_find_other:

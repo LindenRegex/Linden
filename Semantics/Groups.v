@@ -33,16 +33,7 @@ Inductive groupaction : Type :=
 
 From Linden Require CanonicalMaps.
 
-(* Partial maps from group ids to capture ranges *)
-Module GroupMap.
-
-  (* Capture groups are represented by their range in the matched string. *)
-  (* The start and end indices are inclusive and exclusive respectively. *)
-  (* A group is considered open when it has no end index, and closed o.w. *)
-  Record range : Type := Range { startIdx : nat; endIdx : option nat }.
-  Instance range_EqDec : EqDec.type range := { eq_dec := ltac:(repeat decide equality) }.
-
-  Module MapS <: CanonicalMaps.S.
+Module MapS <: CanonicalMaps.S.
     Module GroupId' <: CanonicalMaps.OrderedTypeWithIrrelevance.
       Module OT := OrdersAlt.Backport_OT GroupId.
       Include OT.
@@ -54,7 +45,18 @@ Module GroupMap.
     Include CanonicalMaps.Make GroupId'.
   End MapS.
 
-  Module Facts := FMapFacts.Facts MapS.
+Module Facts := FMapFacts.Facts MapS.
+
+
+(* Partial maps from group ids to capture ranges *)
+Module GroupMap.
+
+  (* Capture groups are represented by their range in the matched string. *)
+  (* The start and end indices are inclusive and exclusive respectively. *)
+  (* A group is considered open when it has no end index, and closed o.w. *)
+  Record range : Type := Range { startIdx : nat; endIdx : option nat }.
+  Instance range_EqDec : EqDec.type range := { eq_dec := ltac:(repeat decide equality) }.
+
 
   Definition t := MapS.t range.
 
@@ -114,3 +116,92 @@ Module GroupMap.
 End GroupMap.
 
 Definition group_map : Type := GroupMap.t.
+
+(** ** Group Maps with history *)
+
+Module GroupHistory.
+
+  Inductive simpleacts := _Open (idx: nat) | _Close (idx: nat) | _Reset (idx: nat).
+
+  Definition hst := list simpleacts.
+
+  Instance hst_EqDec : EqDec.type hst := {eq_dec := ltac:(repeat decide equality)}.
+
+  Definition t := MapS.t hst.
+
+  Definition empty : t := MapS.empty hst.
+
+  Definition find : group_id -> t -> option hst := MapS.find (elt := hst).
+
+  Definition add: group_id -> hst -> t -> t := MapS.add (elt := hst).
+
+  Definition add_opt (x: simpleacts) (gid: group_id) (gm : t) := 
+    match find gid gm with 
+      | Some l => add gid (x::l) gm 
+      | None => add gid [x] gm 
+    end.
+  Section ops.
+    Variable currIdx : nat. (* The current index in the string being matched *)
+
+    Definition open : group_id -> t -> t :=
+      add_opt (_Open currIdx).
+
+    Definition close (gid : group_id) (gm : t) : t :=
+      match find gid gm with
+      | Some l => MapS.add gid ((_Close currIdx)::l) gm
+      | None => gm
+      end.
+
+    Definition reset : group_set -> t -> t :=
+      List.fold_left (fun s gid => add_opt (_Reset currIdx) gid s).
+
+    Definition update (op : groupaction) : t -> t :=
+      match op with
+      | Open g => open g
+      | Close g => close g
+      | Reset gs => reset gs
+      end.
+  End ops.
+
+  Definition eqb: t -> t -> bool :=
+    MapS.equal EqDec.eqb.
+
+  Lemma eqb_eq t0 t1: eqb t0 t1 = true <-> t0 = t1.
+  Proof. apply MapS.equal_eq, EqDec.inversion_true. Qed.
+
+  #[refine] Instance EqDec_t: EqDec t :=
+    { eq_dec t1 t2 := match eqb t1 t2 as b return eqb t1 t2 = b -> _ with
+                     | true => fun Heq => left _
+                     | false => fun Hneq => right _
+                     end eq_refl }.
+  Proof.
+    - apply eqb_eq; assumption.
+    - rewrite <- eqb_eq. congruence.
+  Qed.
+
+  (* MapsTo, In *)
+  Definition MapsTo := MapS.MapsTo (elt := hst).
+  Definition In := MapS.In (elt := hst).
+
+  (** Translation functions. *)
+
+  (** From history to ranges:  *)
+  Fixpoint flatten (l: hst) : option GroupMap.range := 
+    match l with 
+    | [] => None 
+    | (_Open i)::q => Some (GroupMap.Range i None)
+    | (_Close j)::q => match flatten q with 
+                        | None => None 
+                        | Some (GroupMap.Range i _) => Some (GroupMap.Range i (Some j))end 
+    | (_Reset _)::q => None 
+    end.
+
+  Definition map_op (f: option hst -> option GroupMap.range) gm := MapS.map2 (elt := hst) (elt'' := GroupMap.range) (fun _ => f) gm gm.
+
+End GroupHistory.
+
+Definition group_hst : Type := GroupHistory.t.
+
+Definition hst_erase (gm:group_hst) : group_map := 
+  GroupHistory.map_op (fun x => match x with None => None | Some x => GroupHistory.flatten x end) gm.
+
