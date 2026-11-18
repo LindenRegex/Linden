@@ -924,7 +924,7 @@ Section RegexpTree.
     etransitivity. eapply seq_equiv_dir. reflexivity.
     symmetry. eapply forced_equiv. eapply atmost_bounded_backward; auto.
   Qed.
-  
+
   Lemma quantified_open_greedy_left_forward:
     forall r min delta1 g,
       def_groups r = [] -> 
@@ -947,7 +947,6 @@ Section RegexpTree.
     symmetry. eapply forced_equiv. reflexivity.
     eapply bounded_atmost_forward; auto.
   Qed.
-  
 
   Lemma quantified_open_greedy_left_backward:
     forall r min delta1 g,
@@ -967,8 +966,7 @@ Section RegexpTree.
       reflexivity.
     } eapply atmost_bounded_backward; auto.
   Qed.
-
-  End BoundedRepetitions.
+End BoundedRepetitions.
 
   (*|
 ## Character classes

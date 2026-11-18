@@ -448,7 +448,7 @@ Section UnAmbiguity.
     apply leaves_equiv_refl.
   Qed.
 
-  (* If a regex is unambigous, then it's open greedy quantified can expand into a disjunction*)
+  (* If a regex is unambigous, then it's open greedy quantified can expand into a disjunction *)
   Theorem non_greedy_quantifier_steps_opt:
     forall r n,
       def_groups r = [] ->
@@ -471,7 +471,7 @@ Section UnAmbiguity.
   Qed.
 
   
-  (* If a regex is unambigous, then it's open lazy quantified can expand into a disjunction*)
+  (* If a regex is unambigous, then it's open lazy quantified can expand into a disjunction *)
   Theorem greedy_quantifier_steps_opt:
     forall r n ,
       def_groups r = [] ->
@@ -493,7 +493,44 @@ Section UnAmbiguity.
     inversion H1. subst. eapply check_not_stops_quantifier_tail; eauto.
     inversion H1. subst. eapply check_not_stops_quantifier_tail; eauto.
   Qed.
-
+  
+  Theorem unamb_inf_cut (n: nat):
+    forall r i gm dir t1 t2 t3 acts1 acts2 acts3,
+      unamb [Areg r] ->
+      remaining_length i dir = n ->
+      is_tree rer ([Areg r] ++ acts1) i gm dir t1 ->
+      is_tree rer ([Areg r] ++ acts2) i gm dir t2 ->
+      is_tree rer ([Areg r] ++ acts3) i gm dir t3 ->
+      ( forall t4 t5 t6 t7 i0 gm0,
+          remaining_length i0 dir <= n ->
+          is_tree rer acts1 i0 gm0 dir t4 ->
+          is_tree rer acts2 i0 gm0 dir t5 ->
+          is_tree rer acts3 i0 gm0 dir t6 ->
+          is_tree rer [Areg r] i gm dir t7 ->
+          tree_leaves t7 gm i dir = [(i0, gm0)] ->
+          leaves_equiv [] (tree_leaves t4 gm0 i0 dir)
+            (tree_leaves t5 gm0 i0 dir ++ tree_leaves t6 gm0 i0 dir)
+      ) ->
+      leaves_equiv [] (tree_leaves t1 gm i dir)
+        (tree_leaves t2 gm i dir ++ tree_leaves t3 gm i dir).
+  Proof.
+    intros.
+    pose proof (is_tree_productivity rer [Areg r] i gm dir) as [t7 T7].
+    eapply leaves_concat with (act1 := [Areg r] )in H1, H2, H3; eauto.
+    eapply unamb_list in H as [c1 | [el c2]]; eauto.
+    - rewrite c1 in H3, H1, H2.
+      inversion H3; inversion H1; inversion H2; subst. reflexivity.
+    - rewrite c2 in H3, H1, H2. eapply FlatMap_one_leaf in H3, H1, H2.
+      inversion H3; inversion H1; inversion H2; subst.
+      eapply H4; eauto.
+      assert (In el (tree_leaves t7 gm i dir)) by (rewrite c2; simpl; auto).
+      destruct el; eapply input_only_forward in H as [d1 | d2]; eauto.
+      + subst. simpl. lia.
+      + eapply strict_suffix_remaining_length in d2.
+        simpl. lia.
+      + destruct el; auto.
+  Qed.
+  
   Theorem unamb_quantifier_pops_left:
     forall r m n g,
       def_groups r = [] ->
@@ -502,7 +539,7 @@ Section UnAmbiguity.
         ≅[rer] Sequence (Quantified g 1 (NoI.N 0) r) (Quantified g m n r).
   Proof.
     intros r m n greedy GROUPEMPT UNAMBR dir.
-    destruct dir. {apply quantified_S_equiv_forward. }
+    destruct dir. { apply quantified_S_equiv_forward. }
     (* Forward case has already been proven*)
     induction m as [| i IH].
     (* Starting with the induction of the min case*)
@@ -519,12 +556,139 @@ Section UnAmbiguity.
         rewrite <- quantified_S_equiv_backward. reflexivity. }
       reflexivity. 
     }
-    split. simpl. solve_groups_equiv.
-    intros i g t1 t2 T1 T2. unfold tree_equiv_tr_dir.
-    inversion T1; inversion T2; subst. clear T1 T2.
-    simpl in CONT. rewrite app_cons in CONT.
-    Admitted.
-    
+    (*Three cases: 0, (S n) and infinity*)
+    destruct n. induction n.
+    - (* Base case: n = 0*)
+      symmetry.
+      (*r{1, 0} r{0, 0}*)
+      etransitivity. {
+        apply seq_equiv. reflexivity. apply quantified_zero_equiv. assumption.
+      }
+      (*r{1, 0} Epsilon*)
+      apply (sequence_epsilon_right_equiv rer ).
+    - (* Inductive case: (S n)*)
+      (* r{1, delta1 + 1}*)
+      rewrite quantified_S_equiv_backward; auto.
+      (* r{0, delta1 + 1}r{1, 0}*)
+      destruct greedy; simpl.
+      (* Greedy case *)
+      + etransitivity. { eapply seq_equiv. apply greedy_quantifier_steps_opt. 3: apply quantified_one_equiv. all: auto. }
+        (* (r{1, delta1} | ) r *)
+        rewrite (unamb_distribute_right _ _ _ UNAMBR backward).
+        (* (r{1, delta1} r | r *)
+        etransitivity. {
+          apply disj_equiv_dir. apply seq_equiv_dir. apply IHn. 
+          rewrite <-  (quantified_one_equiv _ _ GROUPEMPT true backward). reflexivity.
+          apply sequence_epsilon_left_equiv.
+        }
+        (* ((r{1, 0} r{0, delta1}) r{1, 0} | r *)
+        etransitivity. {
+          apply disj_equiv_dir. rewrite <- sequence_assoc_equiv_dir. apply seq_equiv_dir.
+          apply quantified_one_equiv; auto. rewrite <- quantified_S_equiv_backward; auto.
+          reflexivity. rewrite <- (sequence_epsilon_right_equiv _ _ backward). reflexivity.
+        }
+        (* (r r{1, delta1}) | r *)
+        rewrite <- (unamb_distribute_left _ _ _  UNAMBR backward).
+        (* r (r{1, delta1} | )  *)
+        etransitivity. { eapply seq_equiv. rewrite <- quantified_one_equiv. 3: rewrite <- greedy_quantifier_steps_opt. all: auto. all: reflexivity. }
+        (* r{1, 0} r{0, delta1 + 1}  *)
+        reflexivity.
+      + (* Nongreedy case *)
+        etransitivity. { eapply seq_equiv. rewrite <- Nat.add_1_r.  apply non_greedy_quantifier_steps_opt. 3: apply quantified_one_equiv. all: auto. }
+        (* (| r{1, delta1}) r *)
+        rewrite (unamb_distribute_right _ _ _  UNAMBR backward).
+        (* r | r{1, delta1} r *)
+        etransitivity. {
+          apply disj_equiv_dir. apply sequence_epsilon_left_equiv.
+          apply seq_equiv_dir. apply IHn. 
+          rewrite <-  (quantified_one_equiv _ _ GROUPEMPT false backward). reflexivity.        
+        }
+        (* r | (r{1, 0} r{0, delta1}) r{1, 0} *)
+        etransitivity. {
+          apply disj_equiv_dir. rewrite <- (sequence_epsilon_right_equiv _ _ backward). reflexivity.
+          rewrite <- sequence_assoc_equiv_dir. apply seq_equiv_dir.
+          apply quantified_one_equiv; auto. rewrite <- quantified_S_equiv_backward; auto.
+          reflexivity. 
+        }
+        (* r | r r{1, delta1} *)
+        rewrite <- (unamb_distribute_left _ _ _  UNAMBR backward).
+        (* r (r{1, delta1} | )  *)
+        etransitivity. { eapply seq_equiv. rewrite <- quantified_one_equiv. 3: rewrite <- non_greedy_quantifier_steps_opt. all: auto. all: reflexivity. }
+        rewrite Nat.add_1_r.
+        (* r{1, 0} r{0, delta1 + 1}  *)
+        reflexivity.
+    - etransitivity.
+      2: {
+        apply seq_equiv.  rewrite quantified_one_equiv. reflexivity. assumption. reflexivity.
+      }
+      etransitivity. {
+        rewrite  quantified_S_equiv_backward. apply seq_equiv_dir. reflexivity. apply quantified_one_equiv. all: assumption.
+      }
+      split. simpl. rewrite GROUPEMPT. reflexivity.
+      intros i gm t1 t2 T1 T2.
+      unfold tree_equiv_tr_dir.
+      remember (remaining_length i backward) as l.
+      assert (Hlength_le: remaining_length i backward <= l) by lia. clear Heql.
+      inversion T1; inversion T2; subst; simpl in CONT, CONT0. clear T1 T2.
+      generalize dependent i. revert greedy t1 t2 gm.
+      induction l; intros g t1 t2 gm i Hlength_le TREE1 TREE2.
+      + pose proof (is_tree_productivity rer [Areg r] i gm backward) as [t3 T3].
+        etransitivity.
+        eapply quantified_null_length_head_skip with (acts := []) (t2 := t3); eauto.
+        simpl. exact TREE1.
+        eapply quantified_null_length_skip with (t2 := t3) in TREE2; eauto.
+        rewrite TREE2; reflexivity.
+      + unfold tree_equiv_tr_dir.
+        destruct g.
+        (*Case 1: greedy*)
+        inversion TREE2; subst. destruct plus. discriminate.
+        rewrite GROUPEMPT. simpl. rewrite GROUPEMPT in ISTREE1; simpl in ISTREE1.
+        eapply unamb_inf_cut; eauto.
+        exact TREE1. exact ISTREE1. exact SKIP.
+        clear t1 TREE1 TREE2 ISTREE1. intros t1 t2 t3 t4 i0 gm0 iBound T1 T2 T3 T4 Tlength.
+        inversion T1; subst. destruct plus. discriminate. rewrite GROUPEMPT. simpl.
+        inversion T3; inversion SKIP0; subst.
+        clear SKIP0 H2 T3 T1. simpl. rewrite GROUPEMPT in ISTREE1. simpl in ISTREE1.
+        pose proof (is_tree_productivity rer [Areg r; Areg (Quantified true 0 +∞ r)] i0 gm0 backward) as [t5 T5]. etransitivity.
+        eapply check_not_stops_quantifier_tail; eauto.
+        clear ISTREE1 titer0. inversion T2; subst.
+        eapply strict_suffix_remaining_length in PROGRESS. simpl.
+        apply leaves_equiv_app. eapply IHl; eauto. lia. reflexivity.
+        assert (In (i0, gm0) (tree_leaves t4 gm i backward)) by (rewrite Tlength;  simpl; auto).
+        pose proof (is_tree_productivity rer [Areg r; Acheck i0; Areg (Quantified true 0 +∞ r)] i0 gm0 backward) as [t6 T6].
+        pose proof (emptygroups_const_groups _ _ _ _ _ _ _ _ GROUPEMPT T4 H); subst.
+        eapply input_does_not_back in H; eauto. subst. etransitivity.
+        symmetry. eapply check_not_stops_quantifier_tail; eauto.
+        rewrite app_cons in T6. eapply leaves_concat with (act1 := [Areg r]) (t1 := t4)in T6; eauto.
+        rewrite Tlength in T6. eapply FlatMap_one_leaf in T6.
+        inversion T6; subst. inversion TREE; subst. simpl in PROGRESS.
+        eapply StrictSuffix.ss_irreflexive in PROGRESS. contradiction. reflexivity.
+        (*Case 2: lazy*)
+        inversion TREE2; subst. destruct plus. discriminate.
+        rewrite GROUPEMPT. simpl. rewrite GROUPEMPT in ISTREE1; simpl in ISTREE1.
+        eapply unamb_inf_cut; eauto.
+        exact TREE1. exact SKIP. exact ISTREE1.
+        clear t1 TREE1 TREE2 ISTREE1. intros t1 t2 t3 t4 i0 gm0 iBound T1 T2 T3 T4 Tlength.
+        inversion T1; subst. destruct plus. discriminate. rewrite GROUPEMPT. simpl.
+        inversion T2; inversion SKIP0; subst.
+        clear SKIP0 H2 T2 T1. simpl. rewrite GROUPEMPT in ISTREE1. simpl in ISTREE1.
+        pose proof (is_tree_productivity rer [Areg r; Areg (Quantified false 0 +∞ r)] i0 gm0 backward) as [t5 T5]. etransitivity.
+        eapply check_not_stops_quantifier; eauto.
+        clear ISTREE1 titer0. inversion T3; subst. 
+        eapply strict_suffix_remaining_length in PROGRESS. simpl.
+        etransitivity; rewrite app_cons. reflexivity.
+        apply leaves_equiv_app. reflexivity. eapply IHl; eauto. lia. 
+        assert (In (i0, gm0) (tree_leaves t4 gm i backward)) by (rewrite Tlength;  simpl; auto).
+        pose proof (is_tree_productivity rer [Areg r; Acheck i0; Areg (Quantified false 0 +∞ r)] i0 gm0 backward) as [t6 T6]. simpl.
+        pose proof (emptygroups_const_groups _ _ _ _ _ _ _ _ GROUPEMPT T4 H); subst.
+        eapply input_does_not_back in H; eauto. subst. simpl. etransitivity.
+        symmetry. eapply check_not_stops_quantifier; eauto.
+        rewrite app_cons in T6. eapply leaves_concat with (act1 := [Areg r]) (t1 := t4)in T6; eauto.
+        rewrite Tlength in T6. eapply FlatMap_one_leaf in T6.
+        inversion T6; subst. inversion TREE; subst. simpl in PROGRESS.
+        eapply StrictSuffix.ss_irreflexive in PROGRESS. contradiction. reflexivity.
+  Qed.
+      
   Theorem unamb_quantifier_pops_right:
     forall r m n g,
       def_groups r = [] ->
@@ -549,7 +713,145 @@ Section UnAmbiguity.
       etransitivity. {apply seq_equiv_dir. rewrite <- quantified_S_equiv_forward. 2: auto. all: reflexivity. }
       reflexivity. 
     }
-    Admitted.
+    (*Three cases: 0, (S n) and infinity*)
+    destruct n. induction n.
+    - (* Base case: n = 0*)
+      symmetry.
+      (*r{0, 0} r{1, 0}*)
+      etransitivity. {
+        apply seq_equiv.  apply quantified_zero_equiv. assumption. reflexivity.
+      }
+      (* Epsilon r{1, 0} *)
+      apply (sequence_epsilon_left_equiv rer ).
+    - (* Inductive case: (S n)*)
+      (* r{1, delta1 + 1}*)
+      rewrite quantified_S_equiv_forward; auto.
+      (* r{1, 0} r{0, delta1 + 1}*)
+      destruct g; simpl.
+    + (* Greedy case *)
+
+      etransitivity. { eapply seq_equiv. apply quantified_one_equiv. 2: apply greedy_quantifier_steps_opt. all: auto. }
+      (* r (r{1, delta1} | )  *)
+      rewrite (unamb_distribute_left _ _ _  UNAMBR forward).
+      (* (r{1, delta1} r | r *)
+      etransitivity. {
+        apply disj_equiv_dir. apply seq_equiv_dir.
+        rewrite <-  (quantified_one_equiv _ _ GROUPEMPT true forward). reflexivity.
+        apply IHn. apply sequence_epsilon_right_equiv.
+      }
+      (* r{1, 0} (r{0, delta1} r{1, 0}) | r *)
+      etransitivity. {
+        apply disj_equiv_dir. rewrite sequence_assoc_equiv_dir. apply seq_equiv_dir.
+        rewrite <- quantified_S_equiv_forward; auto. reflexivity.
+        apply quantified_one_equiv; auto. 
+        rewrite <- (sequence_epsilon_left_equiv _ _ forward). reflexivity.
+      }
+      (* ( r{1, delta1}) r | r *)
+      rewrite <- (unamb_distribute_right _ _ _ UNAMBR forward).
+      (* (r{1, delta1} | ) r *)
+      etransitivity. { eapply seq_equiv. 2: rewrite <- quantified_one_equiv. rewrite <- greedy_quantifier_steps_opt. all: auto. all: reflexivity. }
+      (* r{0, delta1 + 1} r{1, 0} *)
+      reflexivity.
+    +  (* Nongreedy case *)
+      etransitivity. { eapply seq_equiv. 2:rewrite <- Nat.add_1_r; apply non_greedy_quantifier_steps_opt. apply quantified_one_equiv. all: auto. }
+      (* r (| r{1, delta1}) *)
+      rewrite (unamb_distribute_left _ _ _ UNAMBR forward).
+      (* r | r r{1, delta1} *)
+      etransitivity. {
+        apply disj_equiv_dir. apply sequence_epsilon_right_equiv.
+        apply seq_equiv_dir.
+        rewrite <-  (quantified_one_equiv _ _ GROUPEMPT false forward). reflexivity.
+        apply IHn. 
+      }
+      (* r | r{1, 0} (r{0, delta1} r{1, 0}) *)
+      etransitivity. {
+        apply disj_equiv_dir. rewrite <- (sequence_epsilon_left_equiv _ _ forward). reflexivity.
+        rewrite  sequence_assoc_equiv_dir. apply seq_equiv_dir.
+        rewrite <- quantified_S_equiv_forward; auto. reflexivity.
+        apply quantified_one_equiv; auto. 
+      }
+      (* r | r{1, delta1} r *)
+      rewrite <- (unamb_distribute_right _ _ _  UNAMBR forward).
+      (* ( | r{1, delta1}) r  *)
+      etransitivity. {
+        eapply seq_equiv. rewrite <- non_greedy_quantifier_steps_opt. rewrite  Nat.add_1_r.
+        reflexivity. auto. 
+        2: rewrite <- quantified_one_equiv. all: auto.  all: reflexivity. }
+      (* r{0, delta1 + 1} r{1, 0} *)
+      reflexivity.
+    -  (* Infinity case*)
+        etransitivity.
+        2: {
+          apply seq_equiv. reflexivity. rewrite quantified_one_equiv. reflexivity. assumption.
+        }
+        etransitivity. {
+          rewrite  quantified_S_equiv_forward. apply seq_equiv_dir. apply quantified_one_equiv. 2: reflexivity. all: assumption.
+        }
+        split. simpl. rewrite GROUPEMPT. reflexivity.
+        intros i gm t1 t2 T1 T2.
+        unfold tree_equiv_tr_dir.
+        remember (remaining_length i forward) as l.
+        assert (Hlength_le: remaining_length i forward <= l) by lia. clear Heql.
+        inversion T1; inversion T2; subst; simpl in CONT, CONT0. clear T1 T2.
+        generalize dependent i. revert g t1 t2 gm.
+        induction l; intros g t1 t2 gm i Hlength_le TREE1 TREE2. 
+      + pose proof (is_tree_productivity rer [Areg r] i gm forward) as [t3 T3].
+        etransitivity.
+        eapply quantified_null_length_head_skip with (acts := []) (t2 := t3); eauto.
+        simpl. exact TREE1.
+        eapply quantified_null_length_skip with (t2 := t3) in TREE2; eauto.
+        rewrite TREE2; reflexivity.
+      + unfold tree_equiv_tr_dir. 
+        destruct g.
+        (*Case 1: greedy*)
+        inversion TREE2; subst. destruct plus. discriminate.
+        rewrite GROUPEMPT. simpl. rewrite GROUPEMPT in ISTREE1; simpl in ISTREE1.
+        eapply unamb_inf_cut; eauto.
+        exact TREE1. exact ISTREE1. exact SKIP.
+        clear t1 TREE1 TREE2 ISTREE1. intros t1 t2 t3 t4 i0 gm0 iBound T1 T2 T3 T4 Tlength.
+        inversion T1; subst. destruct plus. discriminate. rewrite GROUPEMPT. simpl.
+        inversion T3; inversion SKIP0; subst.
+        clear SKIP0 H2 T3 T1. simpl. rewrite GROUPEMPT in ISTREE1. simpl in ISTREE1.
+        pose proof (is_tree_productivity rer [Areg r; Areg (Quantified true 0 +∞ r)] i0 gm0 forward) as [t5 T5]. etransitivity.
+        eapply check_not_stops_quantifier_tail; eauto.
+        clear ISTREE1 titer0. inversion T2; subst.
+        eapply strict_suffix_remaining_length in PROGRESS. simpl.
+        apply leaves_equiv_app. eapply IHl; eauto. lia. reflexivity.
+        assert (In (i0, gm0) (tree_leaves t4 gm i forward)) by (rewrite Tlength;  simpl; auto).
+        pose proof (is_tree_productivity rer [Areg r; Acheck i0; Areg (Quantified true 0 +∞ r)] i0 gm0 forward) as [t6 T6].
+        pose proof (emptygroups_const_groups _ _ _ _ _ _ _ _ GROUPEMPT T4 H); subst.
+        eapply input_does_not_back in H; eauto. subst. etransitivity.
+        symmetry. eapply check_not_stops_quantifier_tail; eauto.
+        rewrite app_cons in T6. eapply leaves_concat with (act1 := [Areg r]) (t1 := t4)in T6; eauto.
+        rewrite Tlength in T6. eapply FlatMap_one_leaf in T6.
+        inversion T6; subst. inversion TREE; subst. simpl in PROGRESS.
+        eapply StrictSuffix.ss_irreflexive in PROGRESS. contradiction. reflexivity.
+        (*Case 2: lazy*)
+        inversion TREE2; subst. destruct plus. discriminate.
+        rewrite GROUPEMPT. simpl. rewrite GROUPEMPT in ISTREE1; simpl in ISTREE1.
+        eapply unamb_inf_cut; eauto.
+        exact TREE1. exact SKIP. exact ISTREE1.
+        clear t1 TREE1 TREE2 ISTREE1. intros t1 t2 t3 t4 i0 gm0 iBound T1 T2 T3 T4 Tlength.
+        inversion T1; subst. destruct plus. discriminate. rewrite GROUPEMPT. simpl.
+        inversion T2; inversion SKIP0; subst.
+        clear SKIP0 H2 T2 T1. simpl. rewrite GROUPEMPT in ISTREE1. simpl in ISTREE1.
+        pose proof (is_tree_productivity rer [Areg r; Areg (Quantified false 0 +∞ r)] i0 gm0 forward) as [t5 T5]. etransitivity.
+        eapply check_not_stops_quantifier; eauto.
+        clear ISTREE1 titer0. inversion T3; subst. 
+        eapply strict_suffix_remaining_length in PROGRESS. simpl.
+        etransitivity; rewrite app_cons. reflexivity.
+        apply leaves_equiv_app. reflexivity. eapply IHl; eauto. lia. 
+        assert (In (i0, gm0) (tree_leaves t4 gm i forward)) by (rewrite Tlength;  simpl; auto).
+        pose proof (is_tree_productivity rer [Areg r; Acheck i0; Areg (Quantified false 0 +∞ r)] i0 gm0 forward) as [t6 T6]. simpl.
+        pose proof (emptygroups_const_groups _ _ _ _ _ _ _ _ GROUPEMPT T4 H); subst.
+        eapply input_does_not_back in H; eauto. subst. simpl. etransitivity.
+        symmetry. eapply check_not_stops_quantifier; eauto.
+        rewrite app_cons in T6. eapply leaves_concat with (act1 := [Areg r]) (t1 := t4)in T6; eauto.
+        rewrite Tlength in T6. eapply FlatMap_one_leaf in T6.
+        inversion T6; subst. inversion TREE; subst. simpl in PROGRESS.
+        eapply StrictSuffix.ss_irreflexive in PROGRESS. contradiction. reflexivity.
+  Qed.
+   
 
   Lemma unamb_quantifier_invertible:
     forall r m n g,
@@ -767,10 +1069,35 @@ Section UnAmbiguity.
     eapply unamb_equivalence_chain_ind; auto. eapply unamb_equivalence_base_case; auto.
   Qed.
 
+
+  Lemma unamb_quantified_open_greedy_right (min1 min2: nat):
+    forall r delta1 g,
+      def_groups r = [] ->
+      unamb [Areg r] ->
+      (Sequence (Quantified true min1 +∞ r) (Quantified g min2 delta1 r))
+        ≅[rer] (Quantified true (min1 + min2) +∞ r).
+    Proof.
+      intros. eapply unamb_equivalence_chain_ind; eauto.
+      eapply quantified_open_greedy_right.
+    Qed.
+
+
+    Lemma unamb_quantified_open_greedy_left (min1 min2: nat):
+    forall r delta1 g,
+      def_groups r = [] ->
+      unamb [Areg r] ->
+      (Sequence (Quantified g min1 delta1 r) (Quantified true min2 +∞ r))
+        ≅[rer] (Quantified true (min1 + min2) +∞ r).
+    Proof.
+      intros. 
+      epose proof (unamb_equivalence_chain_ind _ _ _ _ min1 min2 delta1 +∞).
+      destruct delta1; eapply H1; eauto; eapply quantified_open_greedy_left.
+    Qed.
+    
   (* Same as above only this time in respect to the function *)
   Corollary unamb_fun_equivalence_chain:
     forall r g min1 min2 delta1 delta2,
-      def_groups r = [] -> 
+      def_groups r = [] ->
       (* if the tree corresponding to the regex is unambigous *)
       na r = true ->
       (* r{min1, Delta1, g } *)
