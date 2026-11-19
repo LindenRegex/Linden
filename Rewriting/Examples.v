@@ -361,7 +361,7 @@ Section Examples.
   (* The next section presents some helper lemmas for induction on the input
      length string.
      They are useful to easily advance on the input on certain regexes or
-     proving failure of certain regexes in the case of a null input *)<<<dxs
+     proving failure of certain regexes in the case of a null input *)
 
   (* If the remaining length is 0, and we have a regex followed by a check,
    then the corresponding tree has no leaves*)

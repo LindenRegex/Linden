@@ -304,8 +304,6 @@ Section RegexpTree.
           inversion ACT2; subst. apply IHm; auto.
     Qed.
 
-
-
     (* Specialization to d = n-m *)
     Corollary atmost_leaves_incl_nat (m n: nat) (g: bool) r:
       m <= n ->
@@ -398,7 +396,8 @@ Section RegexpTree.
             - simpl in TREE0. apply atmost_leaves_incl_nat with (m := n) (n := m + S n) (r := r) (g := true); eauto. lia.
             - simpl in TREE0. replace t0 with t by eauto using is_tree_determ. unfold incl. auto.
           }
-          assert (EQUIV: leaves_equiv [] (tree_leaves titer (GroupMap.reset (def_groups r) gm) i dir) (tree_leaves titer0 (GroupMap.reset (def_groups r) gm) i dir)). {
+          assert (EQUIV: leaves_equiv [] (tree_leaves titer (GroupMap.reset (def_groups r) gm) i
+            dir) (tree_leaves titer0 (GroupMap.reset (def_groups r) gm) i dir)). {
             clear INCL ISTREE2 titer1.
             remember (GroupMap.reset (def_groups r) gm) as gm'. clear gm Heqgm'.
             remember i as i' in ISTREE1 at 1, ISTREE0 at 1. clear Heqi'.
@@ -423,9 +422,11 @@ Section RegexpTree.
         intros inp Hend gm t1 t2 TREE1 TREE2.
         inversion TREE1; subst. inversion TREE2; subst.
         inversion SKIP0; subst. unfold tree_equiv_tr_dir. simpl.
-        assert (NO_LEAVES: actions_no_leaves rer [Areg r; Acheck inp; Areg (Quantified true 0 plus r); Areg (Quantified true 0 n r)] dir). {
+        assert (NO_LEAVES: actions_no_leaves rer [Areg r; Acheck inp; Areg (Quantified true 0 plus r);
+          Areg (Quantified true 0 n r)] dir). {
           apply actions_no_leaves_add_left with (a := [Areg r]).
-          apply actions_no_leaves_add_right with (a := [Acheck inp]) (b := [Areg (Quantified true 0 plus r); Areg (Quantified true 0 n r)]).
+          apply actions_no_leaves_add_right with (a := [Acheck inp]) (b := [Areg (Quantified true 0 plus r);
+            Areg (Quantified true 0 n r)]).
           apply check_end_no_leaves. lia.
         }
         assert (NO_LEAVES0: actions_no_leaves rer [Areg r; Acheck inp;
@@ -640,7 +641,7 @@ Section RegexpTree.
 
     (** * Proving open  greedy on both sides **)
 
-    (** Helpers to prove tree equality by other equalities and inclusions**)
+    (** Helpers to prove tree equality by other equalities and inclusions **)
     Lemma leaves_equiv_incl2:
       forall a b c,
         incl b a ->
@@ -843,8 +844,7 @@ Section RegexpTree.
     (* The two first rewrites presented are r{0,}r{0, d}? ~ r{0,} and
     r{0, d}?r{0,} ~ r{0,} with the other rewrites only being
     an explicit form of the bounded_atmost_forward and atmost_bounded_backward rules
-    applyed to the two first rewrites.
-     *)
+    applyed to the two first rewrites. *)
     
     (* r{0, d1} r{0,} ~ r{0,} *)
     Lemma quantified_open_greedy_left:
@@ -970,7 +970,7 @@ Section RegexpTree.
     Qed.
   End BoundedRepetitions.
 
-  (*|
+(*|
 ## Character classes
 
 Illustrative examples taken from https://github.com/DmitrySoshnikov/regexp-tree/tree/master/src/optimizer (not complete).

@@ -77,7 +77,7 @@ Section UnAmbiguity.
     simpl in H. lia.
   Qed.
 
-  (* you can distribute an unambiguous regex on the left *)
+  (* You can distribute an unambiguous regex on the left *)
   Theorem unamb_distribute_left:
     forall r1 r2 r3,
       unamb [Areg r1] ->
@@ -115,7 +115,7 @@ Section UnAmbiguity.
     apply leaves_equiv_refl.
   Qed.
 
-  (* you can distribute an unambiguous regex on the right *)
+  (* You can distribute an unambiguous regex on the right *)
   Theorem unamb_distribute_right:
     forall r1 r2 r3,
       unamb [Areg r3] ->
@@ -151,7 +151,7 @@ Section UnAmbiguity.
   Definition prefix {A} (a b: list A) :=
     exists acts, b = a ++ acts.
 
-  (** Base case of prefix **)
+  (* Base case of prefix *)
   Lemma prefix_base {A}:
     forall (a: list A),
       prefix [] a.
@@ -159,7 +159,7 @@ Section UnAmbiguity.
     intros a. exists a. auto.
   Qed.
 
-  (** Inductive definition of prefix **)
+  (* Inductive definition of prefix *)
   Lemma prefix_head {A}:
     forall (a b c: list A),
       prefix (a ++ b) (a ++ c) ->
@@ -170,7 +170,7 @@ Section UnAmbiguity.
     apply app_inv_head in actsEq. auto.
   Qed.
 
-  (** Inductive definition of prefix but with cons **)
+  (* Inductive definition of prefix but with cons *)
   Lemma prefix_h {A}:
     forall a (b c: list A),
       prefix (a :: b) (a :: c) ->
@@ -181,7 +181,7 @@ Section UnAmbiguity.
     rewrite <- app_cons. exact d.
   Qed.
 
-  (** Reflexivity of prefix **)
+  (* Reflexivity of prefix *)
   Lemma prefix_refl {A}:
     forall (a: list A),
       prefix a a.
@@ -189,7 +189,8 @@ Section UnAmbiguity.
     intros. exists []. rewrite app_nil_r. auto.
   Qed.
 
-  (** If a list has a prefix and is equal to another list then we can append the prefix in the equality **)
+  (* If a list has a prefix and is equal to another list then we can append the
+  prefix in the equality *)
   Theorem leaves_equiv_pref:
     forall l1 l2 l3 ,
       leaves_equiv [] l1 l3 ->
@@ -215,7 +216,7 @@ Section UnAmbiguity.
   r{0, d1} r{0, d2} ~ r{0, d1 + d2} => r{m1, d1} r{m2, d2} ~ r{m1 + m2, d1 + d2} *)
 
   (* If a regex is unambigous and does not define any groups,
-     then we can get rid of a check if (inp, gm) has already been seen *)
+  then we can get rid of a check if (inp, gm) has already been seen *)
   Lemma check_not_stops_quantifier n:
     forall r1 inp gm dir t1 t2 g,
       def_groups r1 = [] ->
@@ -255,7 +256,7 @@ Section UnAmbiguity.
   Qed.
 
   (* If a regex is unambigous and does not define any groups,
-     then we can get rid of a check if (inp, gm) is present at the end *)
+  then we can get rid of a check if (inp, gm) is present at the end *)
   Lemma check_not_stops_quantifier_tail n:
     forall r1 inp gm dir t1 t2 g,
       def_groups r1 = [] ->
@@ -294,7 +295,8 @@ Section UnAmbiguity.
         all: leaves_equiv_t. 
   Qed.
 
-  (* If a regex is unambigous and defines no groups, then it's open greedy quantified can expand into a disjunction if it has no forced iterations *)
+  (* If a regex is unambigous and defines no groups, then it's open greedy quantified
+  can expand into a disjunction if it has no forced iterations *)
   Theorem non_greedy_quantifier_steps_opt:
     forall r n,
       def_groups r = [] ->
@@ -852,8 +854,7 @@ Section UnAmbiguity.
   if r is unambigous r{0, d1}? r{0, d2}? ~ r{0, d1 + d2}?. This can then be merged with previou *)
   
   (* If r is unambigous and a lazy quantifier has a lower number of optional iteration than another one,
-     then the leaves of the first quantified are a prefix of the leaves of the
-     second quantified *)
+  then the leaves of the first quantified are a prefix of the leaves of the second quantified *)
   Theorem atmost_level_prefix (m: nat) (d: non_neg_integer_or_inf) r:
     forall inp gm dir t1 t2,
       is_tree rer [Areg (Quantified false 0 m r)] inp gm dir t1 ->
@@ -896,7 +897,7 @@ Section UnAmbiguity.
   Qed.
 
   (* If a regex r is unambigous and d1 is a natural number,
-     then r{0, d1}?r{0, d2}? ~ r{0, d1 + d2}?*)
+  then r{0, d1}?r{0, d2}? ~ r{0, d1 + d2}?*)
   Theorem unamb_list_nat_eqs:
     forall r i g dir t1 t2 (delta1: nat) delta2,
       unamb [Areg r] ->
@@ -1075,7 +1076,8 @@ Section UnAmbiguity.
   (* Some proofs merging the two properties found to make stronger equalities
   by enforcing that r is unambigous and defines no groups *)
 
-  (* Can merge any two quantifiers if the regex is unambigous and defined no groups and they are both greedy or lazy *)
+  (* Can merge any two quantifiers if the regex is unambigous and defined no groups
+  and they are both greedy or lazy *)
   Theorem unamb_equivalence_chain_uni_g:
     forall r g min1 min2 delta1 delta2,
       def_groups r = [] -> 
