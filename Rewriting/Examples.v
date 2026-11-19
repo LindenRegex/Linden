@@ -63,8 +63,7 @@ Section Utilities.
   Proof.
     intros x x' y y' [] EQUIV_x EQUIV_y.
     - destruct EQUIV_x as [DEF_GROUPS_x EQUIV_x]. destruct EQUIV_y as [DEF_GROUPS_y EQUIV_y].
-      split.
-      1: { simpl. apply groups_equiv_app; auto. }
+      split. 1: { simpl. apply groups_equiv_app; auto. }
       intros i gm tr1 tr2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst. simpl in *. clear TREE1 TREE2.
       revert i gm tr1 tr2 CONT CONT0.
@@ -73,8 +72,7 @@ Section Utilities.
       change (actions_equiv_dir rer forward [Areg y] [Areg y']) in EQUIV_y.
       apply app_eq_both with (a1 := [Areg x]) (a2 := [Areg x']) (b1 := [Areg y]) (b2 := [Areg y']) (dir := forward); auto.
     - destruct EQUIV_x as [DEF_GROUPS_x EQUIV_x]. destruct EQUIV_y as [DEF_GROUPS_y EQUIV_y].
-      split.
-      1: { simpl. apply groups_equiv_app; auto. }
+      split. 1: { simpl. apply groups_equiv_app; auto. }
       intros i gm tr1 tr2 TREE1 TREE2.
       inversion TREE1; subst. inversion TREE2; subst. simpl in *. clear TREE1 TREE2.
       revert i gm tr1 tr2 CONT CONT0.
@@ -150,8 +148,7 @@ Section Examples.
       (Quantified greedy (S n) delta r)
         ≅[rer][forward] (Sequence (Quantified greedy 1 (NoI.N 0) r) (Quantified greedy n delta r)).
   Proof.
-    intros. split.
-    1: { simpl. solve_groups_equiv. }
+    intros. split. 1: { simpl. solve_groups_equiv. }
     intros i gm tr1 tr2 TREE1 TREE2.
     inversion TREE1; subst. inversion TREE2; subst. simpl in CONT. inversion CONT; subst.
     clear TREE1 TREE2 CONT.
@@ -172,8 +169,7 @@ Section Examples.
       (Quantified greedy (S n) delta r)
         ≅[rer][backward] (Sequence (Quantified greedy n delta r) (Quantified greedy 1 (NoI.N 0) r)).
   Proof.
-    intros. split.
-    1: { simpl. solve_groups_equiv. }
+    intros. split. 1: { simpl. solve_groups_equiv. }
     intros i gm tr1 tr2 TREE1 TREE2.
     inversion TREE1; subst. inversion TREE2; subst. simpl in CONT. inversion CONT; subst.
     clear TREE1 TREE2 CONT.
@@ -197,7 +193,7 @@ Section Examples.
     2: { apply (is_tree_skip_quant_zero_r rer [Areg r]). eauto. }
     apply leaves_equiv_refl.
   Qed.
-  
+
   Lemma disj_equiv_dir:
     forall x x' y y' dir,
       x ≅[rer][dir] x' -> y ≅[rer][dir] y' ->
@@ -211,8 +207,6 @@ Section Examples.
     specialize (EQSX _ _ _ _ ISTREE1 ISTREE0). auto.
     specialize (EQSY _ _ _ _ ISTREE2 ISTREE3). auto.
   Qed.
-
-
 
   Lemma disj_elim_copy: forall r1 r2 dir,
       Disjunction (Disjunction r1 r2) r1 ≅[rer][dir] Disjunction r1 r2.
@@ -228,59 +222,14 @@ Section Examples.
     eapply leaves_equiv_append_head.
   Qed.
 
-  (* INFINITY: From here on there are some lemmas made for working with the quantified
-     infinity case *)
+  (** * PROPERTIES ON INPUT AND GROUPS NOT CHANGING *)
+  (* The next section contains lemmas showing that the groups on leaves of r remain
+     the same as the group passed on input for r if no groups are defined in r.
+     They also shows that for all regexes, the inputs on it's leaves
+     can only advance compared to the input it has started from.
+   *)
 
-  (* If the remaining length is 0, and we have a regex followed by a check,
-   then the leaves of the corresponding tree is empty*)
-  Lemma null_length_check_fails:
-    forall i g dir r t acts,
-      remaining_length i dir <= 0 ->
-      is_tree rer ([Areg r; Acheck i] ++ acts) i g dir t ->
-      tree_leaves t g i dir = [].
-  Proof.
-    intros i g d r t acts l.
-    assert (NL1: actions_no_leaves rer ([Areg r; Acheck i] ++ acts) d). {
-      apply actions_no_leaves_add_left with (a:= [Areg r]).
-      apply actions_no_leaves_add_right with (a := [Acheck i]) (b := acts).
-      apply check_end_no_leaves. auto. lia.
-    }
-    unfold actions_no_leaves in NL1. eapply NL1; eauto. 
-  Qed.
-
-  (* If the remaining length is 0, and we have a tree which represents a quantified
-     followed by some other action, then the leaves of the tree are the same than the
-     leaves of the tree of the action *)
-  Lemma quantified_null_length_skip:
-    forall i d g dir acts r t1 t2 greedy,
-      remaining_length i dir <= 0 ->
-      is_tree rer ([Areg (Quantified greedy 0 d r)] ++ acts) i g dir t1 ->
-      is_tree rer acts i g dir t2 ->
-      tree_leaves t1 g i dir = tree_leaves t2 g i dir.
-  Proof.
-    intros i d g dir acts r t1 t2  greedy l T1 T2. 
-    inversion T1; subst. eapply is_tree_determ with (t1 := t1) (t2 := t2) in SKIP; eauto.
-    subst; reflexivity.
-    specialize (null_length_check_fails _ _ _ _ _ _ l ISTREE1) as nlf.
-    pose proof (is_tree_determ _ _ _ _ _ _ _  T2 SKIP). subst.
-    destruct greedy; simpl; rewrite nlf; try rewrite app_nil_r; auto.
-  Qed.
-
-  (* A more specific case of the lemma above where there are no actions made
-     after the quantified*)
-  Lemma quantified_null_length:
-    forall i d g dir r t1 greedy,
-      remaining_length i dir <= 0 ->
-      is_tree rer ([Areg (Quantified greedy 0 d r)]) i g dir t1 ->
-      tree_leaves t1 g i dir = [(i, g)].
-  Proof.
-    intros.
-    pose proof (is_tree_productivity rer [] i g dir) as [t2 T2].
-    pose proof (quantified_null_length_skip _ _ _ _ _ _ _  _ _ H H0 T2).
-    inversion T2; subst. rewrite H1; reflexivity.
-  Qed.
-
-  (* If a property is true for all elements in a list it is true for it's head and it's tail*)
+  (* If a property is true for all elements in a list it is true for it's head and it's tail *)
   Lemma in_concat_prop:
     forall d rest P,
       (forall a : action, In a (d :: rest) -> P a) ->
@@ -395,7 +344,7 @@ Section Examples.
       eapply StrictSuffix.strict_suffix_trans; eauto.
   Qed.
 
-  (* An input cannot go backwards after passing througth a regex*)
+  (* An input cannot go backwards after passing througth a regex *)
   Lemma input_does_not_back:
     forall r t gm gm2 inp1 inp2 dir,
       is_tree rer [Areg r] inp1 gm dir t ->
@@ -406,6 +355,61 @@ Section Examples.
     intros.
     destruct (input_only_forward _ _ _ _ _ _ _ _ H H0).
     assumption. contradiction.
+  Qed.
+
+  (** * INDUCTION ON STRING LENGTH: *)
+  (* The next section presents some helper lemmas for induction on the input
+     length string.
+     They are useful to easily advance on the input on certain regexes or
+     proving failure of certain regexes in the case of a null input *)<<<dxs
+
+  (* If the remaining length is 0, and we have a regex followed by a check,
+   then the corresponding tree has no leaves*)
+  Lemma null_length_check_fails:
+    forall i g dir r t acts,
+      remaining_length i dir <= 0 ->
+      is_tree rer ([Areg r; Acheck i] ++ acts) i g dir t ->
+      tree_leaves t g i dir = [].
+  Proof.
+    intros i g d r t acts l.
+    assert (NL1: actions_no_leaves rer ([Areg r; Acheck i] ++ acts) d). {
+      apply actions_no_leaves_add_left with (a:= [Areg r]).
+      apply actions_no_leaves_add_right with (a := [Acheck i]) (b := acts).
+      apply check_end_no_leaves. auto. lia.
+    }
+    unfold actions_no_leaves in NL1. eapply NL1; eauto. 
+  Qed.
+
+  (* If the remaining length is 0, and we have a tree which represents a quantified
+     followed by some other action, then the leaves of the corresponding tree are the
+     same than the leaves of the tree of the action *)
+  Lemma quantified_null_length_skip:
+    forall i d g dir acts r t1 t2 greedy,
+      remaining_length i dir <= 0 ->
+      is_tree rer ([Areg (Quantified greedy 0 d r)] ++ acts) i g dir t1 ->
+      is_tree rer acts i g dir t2 ->
+      tree_leaves t1 g i dir = tree_leaves t2 g i dir.
+  Proof.
+    intros i d g dir acts r t1 t2  greedy l T1 T2. 
+    inversion T1; subst. eapply is_tree_determ with (t1 := t1) (t2 := t2) in SKIP; eauto.
+    subst; reflexivity.
+    specialize (null_length_check_fails _ _ _ _ _ _ l ISTREE1) as nlf.
+    pose proof (is_tree_determ _ _ _ _ _ _ _  T2 SKIP). subst.
+    destruct greedy; simpl; rewrite nlf; try rewrite app_nil_r; auto.
+  Qed.
+
+   (* A more specific case of the lemma above where there are no actions made
+     after the quantified *)
+  Lemma quantified_null_length:
+    forall i d g dir r t1 greedy,
+      remaining_length i dir <= 0 ->
+      is_tree rer ([Areg (Quantified greedy 0 d r)]) i g dir t1 ->
+      tree_leaves t1 g i dir = [(i, g)].
+  Proof.
+    intros.
+    pose proof (is_tree_productivity rer [] i g dir) as [t2 T2].
+    pose proof (quantified_null_length_skip _ _ _ _ _ _ _  _ _ H H0 T2).
+    inversion T2; subst. rewrite H1; reflexivity.
   Qed.
 
   (* If the remaining length is 0, and we have a tree which represents a regex
@@ -443,7 +447,7 @@ Section Examples.
       + (* The leaves which already follow the property *)
         eapply IHl; eauto.
   Qed.
-  
+
   (* Specific instance of the case above where there are no acts after the quantified,
      the tree just becomes equal to the tree of the prefix *)
   Lemma quantified_null_length_head:
@@ -459,7 +463,7 @@ Section Examples.
 
   (* If for a length n two trees represent a regex r followed by a check followed
      by two different acts, then if the two acts are equal for all length < n,
-     the two trees are equal at length = n*)
+     the two trees are equal at length = n *)
   Lemma step_advances_eqs:
     forall i r  n dir acts1 acts2 g t1 t2,
       remaining_length i dir = n ->

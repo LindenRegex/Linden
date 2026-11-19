@@ -437,8 +437,8 @@ Section Relation.
   Context (seen: list (input * group_map)).
 
   #[global] Add Relation (list leaf) (leaves_equiv seen)
-  reflexivity proved by (fun l => leaves_equiv_refl l seen)
-  symmetry proved by (fun l1 l2 => leaves_equiv_comm l1 l2 seen)
-  transitivity proved by (fun l1 l2 l3 => leaves_equiv_trans l1 l2 l3 seen)
-  as leaves_equiv_rel.
+      reflexivity proved by (fun l => leaves_equiv_refl l seen)
+      symmetry proved by (fun l1 l2 => leaves_equiv_comm l1 l2 seen)
+      transitivity proved by (fun l1 l2 l3 => leaves_equiv_trans l1 l2 l3 seen)
+      as leaves_equiv_rel.
 End Relation.

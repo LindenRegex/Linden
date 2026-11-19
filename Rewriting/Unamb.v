@@ -77,8 +77,75 @@ Section UnAmbiguity.
     simpl in H. lia.
   Qed.
 
-  (* Lemmas to move: these lemmas do not belong here and seem out of place.
-   Need to ask where to store them *)
+  (* you can distribute an unambiguous regex on the left *)
+  Theorem unamb_distribute_left:
+    forall r1 r2 r3,
+      unamb [Areg r1] ->
+      (Sequence r1 (Disjunction r2 r3)) ≅[rer] (Disjunction (Sequence r1 r2) (Sequence r1 r3)).
+  Proof.
+    unfold unamb. intros r1 r2 r3  UA.
+    split. simpl. solve_groups_equiv.
+    destruct dir.
+    (* the backward case is true even without unambiguity *)
+    2: { apply Distributivity.LeftBackward.factored_expanded_left_equiv. }
+    (* forward case *)
+    unfold actions_equiv_dir. intros inp gm t1 t2 TREE1 TREE2.
+    inversion TREE2; inversion TREE1; inversion ISTREE1; inversion ISTREE2; subst.
+    clear TREE1 TREE2 ISTREE1 ISTREE2. simpl in *.
+    rename t0 into t12. rename t3 into t13. rename t1 into t123.
+    rename CONT into T123. rename CONT0 into T12. rename CONT1 into T13.
+    specialize (is_tree_productivity rer [Areg r1] inp gm forward) as [t1 TREER1].
+    rewrite app_cons in T123, T12, T13.
+    (* the leaves of t123, t12 and t13 can be expressed as a FlatMap *)
+    eapply leaves_concat with (act1:=[Areg r1]) in T123, T12, T13; eauto.
+    unfold tree_equiv_tr_dir.  simpl.
+    destruct (tree_leaves t1 gm inp forward) as [|[i1 gm1] l] eqn:LEAVES1.
+    (* no leaf in r1: no leaf everywhere *)
+    { inversion T123; inversion T12; inversion T13; subst. constructor. }
+    destruct l as [|].
+    (* there can't be more than one leaf *)
+    2: { apply UA in TREER1. specialize (TREER1 gm inp forward).
+         rewrite LEAVES1 in TREER1. simpl in TREER1. lia. }
+    (* r1 has exactly one leaf: the FlatMaps are simply trees starting from that leaf *)
+    apply FlatMap_one_leaf in T123, T12, T13.
+    inversion T123; inversion TREE; inversion T12; inversion T13; subst.
+    simpl.
+    specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE1 TREE0) as H.
+    specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE2 TREE1) as H1. subst.
+    apply leaves_equiv_refl.
+  Qed.
+
+  (* you can distribute an unambiguous regex on the right *)
+  Theorem unamb_distribute_right:
+    forall r1 r2 r3,
+      unamb [Areg r3] ->
+      (Sequence (Disjunction r1 r2) r3) ≅[rer] (Disjunction (Sequence r1 r3) (Sequence r2 r3)).
+  Proof. 
+    intros r1 r2 r3 UNAMBR3.
+    split. simpl. solve_groups_equiv.
+    destruct dir.
+    apply Distributivity.Right.factored_expanded_right_equiv. 
+    intros inp gm t1 t2 TREE1 TREE2.
+    inversion TREE1; inversion TREE2; inversion ISTREE1;inversion ISTREE2; subst.
+    clear TREE1 TREE2 ISTREE1 ISTREE2. simpl in *.
+    rename t0 into t2. rename CONT into TREE1. rename CONT0 into TREE2. rename CONT1 into TREE3.
+    specialize (is_tree_productivity rer [Areg r3] inp gm backward) as [t4 TREE4].
+    rewrite app_cons in TREE1, TREE2, TREE3.
+    eapply leaves_concat with (act1:= [Areg r3]) in TREE1, TREE2, TREE3; eauto.
+    unfold tree_equiv_tr_dir. simpl.
+    destruct (tree_leaves t4 gm inp backward) as [|[inp2 gm2] l] eqn:LEAVES1.
+    inversion TREE1; inversion TREE2; inversion TREE3; subst. constructor. 
+    destruct l as [|].
+    2: {
+      specialize (UNAMBR3 inp gm backward t4 TREE4 gm inp backward) as FF.
+      rewrite LEAVES1 in FF. simpl in FF. lia.
+    }
+    apply FlatMap_one_leaf in TREE1, TREE2, TREE3.
+    inversion TREE3; inversion TREE2; inversion TREE1; inversion TREE5; subst. simpl.
+    specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE1 TREE0) as eq1.
+    specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE2 TREE) as eq2. subst.
+    apply leaves_equiv_refl.
+  Qed.
 
   (* Prefix of list (like inclusion but keeping a sense of order) *)
   Definition prefix {A} (a b: list A) :=
@@ -122,7 +189,7 @@ Section UnAmbiguity.
     intros. exists []. rewrite app_nil_r. auto.
   Qed.
 
-  (** If a list has a prefix and is equal to another  list then we can append the prefix in the equality **)
+  (** If a list has a prefix and is equal to another list then we can append the prefix in the equality **)
   Theorem leaves_equiv_pref:
     forall l1 l2 l3 ,
       leaves_equiv [] l1 l3 ->
@@ -139,8 +206,14 @@ Section UnAmbiguity.
     eapply leaves_equiv_repet.
   Qed.
 
-  (* LEMMAS ON LEAVES: here are some lemmas that manage tree representations *)
-  
+
+  (** * CHECK NOT STOPS QUANTIFIED *)
+  (* This section presents the first of the two properties we found for non ambigous regex.
+  The idea being that if a regex in non ambigous and defines no groups, then
+  [r; check i; r{0,d1}] = [r; r{0,d1}]. From this equality we have shown that
+  r r{m, d} ~ r{m, d} r, which finally proves that
+  r{0, d1} r{0, d2} ~ r{0, d1 + d2} => r{m1, d1} r{m2, d2} ~ r{m1 + m2, d1 + d2} *)
+
   (* If a regex is unambigous and does not define any groups,
      then we can get rid of a check if (inp, gm) has already been seen *)
   Lemma check_not_stops_quantifier n:
@@ -221,234 +294,7 @@ Section UnAmbiguity.
         all: leaves_equiv_t. 
   Qed.
 
-  (* If a lazy quantifier has a lower number than another, then it is a prefix of it *)
-  Theorem atmost_level_prefix (m: nat) (d: non_neg_integer_or_inf) r:
-    forall inp gm dir t1 t2,
-      is_tree rer [Areg (Quantified false 0 m r)] inp gm dir t1 ->
-      is_tree rer [Areg (Quantified false 0 (m+d)%NoI r)] inp gm dir t2 ->
-      unamb [Areg r] ->
-      exists acts, ((tree_leaves t1 gm inp dir) ++ acts) = (tree_leaves t2 gm inp dir).
-  Proof.
-    revert d r.
-    induction m; intros.
-    - inversion H; inversion SKIP; subst.
-      inversion H0; inversion SKIP0; subst.
-      + exists []; auto.
-      + inversion SKIP0; subst. eexists. reflexivity.
-      + destruct plus; discriminate.
-    - inversion H; inversion SKIP; subst; simpl; clear H SKIP.
-      inversion H0; inversion SKIP; subst; try (destruct d; discriminate).
-      simpl; clear H0 SKIP. rewrite app_cons in ISTREE1, ISTREE0.
-      specialize (is_tree_productivity rer [Areg r] inp (GroupMap.reset (def_groups r) gm) dir) as [t3 T3].
-      eapply leaves_concat with (act1 := [Areg r]) in ISTREE1, ISTREE0; eauto.
-      pose proof (unamb_list _ _ _ _ _ H1 T3) as [c1 | [el c2]].
-      rewrite c1 in *. inversion ISTREE0; inversion ISTREE1; subst.
-      exists []. reflexivity.
-      rewrite c2 in *. apply FlatMap_one_leaf in ISTREE0, ISTREE1.
-      inversion ISTREE0; inversion ISTREE1; subst. simpl in *.
-      inversion TREE; inversion TREE0; subst.
-      2, 3: contradiction.
-      2: { simpl. exists []. reflexivity. }
-      destruct el; simpl in *. destruct plus. 2: discriminate.
-      inversion H4. subst.
-      destruct plus0, d; try discriminate.
-      inversion H3; subst.
-      specialize (IHm (NoI.N (n0)) _ _ _ _ _ treecont TREECONT0).
-      simpl in IHm. specialize (IHm TREECONT H1) as [acts lEq].
-      exists acts. etransitivity. 1,2: rewrite app_cons. reflexivity. f_equal.
-      apply lEq.
-      specialize (IHm +∞ _ _ _ _ _ treecont TREECONT0). simpl in IHm.
-      specialize (IHm TREECONT H1) as [acts lEq].
-      exists acts. etransitivity. 1,2: rewrite app_cons. reflexivity.
-      f_equal. apply lEq.
-  Qed.
-
-  Theorem unamb_list_nat_eqs:
-    forall r i g dir t1 t2 (delta1: nat) delta2,
-      unamb [Areg r] ->
-      is_tree rer
-        [Areg (Quantified false 0 delta1 r); Areg (Quantified false 0 delta2 r)]
-        i g dir t1 ->
-      is_tree rer [Areg (Quantified false 0 (delta1 + delta2)%NoI r)] i g dir t2 ->
-      leaves_equiv [] (tree_leaves t1 g i dir) (tree_leaves t2 g i dir).
-  Proof.
-    intros r i g d t1 t2 delta1 . revert i g t1 t2. 
-    induction delta1; intros i g t1 t2 delta2 UNAMBR T1 T2.
-    - inversion T1; subst. 2: destruct plus; discriminate. destruct delta2; simpl in T1, T2.
-      all: specialize (is_tree_determ _ _ _ _ _ _ _ T2 SKIP) as cd; rewrite cd; reflexivity.
-    - inversion T1; inversion T2; subst. destruct delta2; discriminate.
-      rewrite app_cons in ISTREE1, ISTREE0. 
-      specialize (is_tree_productivity rer [Areg r] i (GroupMap.reset (def_groups r) g) d) as [t3 T3].
-      eapply leaves_concat with (act1 := [Areg r]) in ISTREE1, ISTREE0; eauto. simpl.
-      specialize (unamb_list _ _ _ _ _ UNAMBR T3) as [e1 | [el e2]].
-      simpl in *. rewrite e1 in ISTREE0, ISTREE1. inversion ISTREE0; inversion ISTREE1; subst.
-      inversion SKIP0; inversion SKIP; subst. inversion SKIP1; reflexivity.
-      inversion SKIP1; subst. simpl.
-      rewrite app_cons in ISTREE2. 
-      eapply leaves_concat with (act1 := [Areg r]) in ISTREE2; eauto. simpl in ISTREE2.
-      rewrite e1 in ISTREE2. inversion ISTREE2; subst. reflexivity.
-      simpl in *. rewrite e2 in ISTREE0, ISTREE1. apply FlatMap_one_leaf in ISTREE0, ISTREE1.
-      inversion ISTREE1; inversion ISTREE0; try discriminate; subst. destruct el; simpl in *.
-      inversion SKIP; inversion SKIP1; inversion SKIP0; subst. simpl.
-      + etransitivity. 1, 2: rewrite app_cons. reflexivity.
-        apply leaves_equiv_app. reflexivity. inversion H1; inversion H0; subst.
-        inversion TREE0; inversion TREE; try contradiction; subst. simpl.
-        destruct plus, plus0; try discriminate. inversion H0; inversion H9. subst.
-        eapply IHdelta1; eauto. simpl. reflexivity.
-      + rewrite app_cons in ISTREE2. 
-        eapply leaves_concat with (act1 := [Areg r]) in ISTREE2; eauto. simpl in ISTREE2.
-        rewrite e2 in ISTREE2. apply FlatMap_one_leaf in ISTREE2.
-        inversion ISTREE2; subst.
-        inversion TREE0; inversion TREE1; inversion TREE; try contradiction; subst.
-        2: simpl;  rewrite <- H5; reflexivity.
-        simpl. etransitivity. 1, 2: rewrite app_cons. reflexivity.
-        apply leaves_equiv_app. reflexivity.
-        destruct plus0, plus1; try discriminate.
-        inversion H9; destruct plus. 2: discriminate. inversion H1; subst.
-        pose proof (atmost_level_prefix _  (S delta1) _ _ _ _ _ treecont TREECONT0).
-        simpl in H. assert (n0 + S delta1 = delta1 + S n0) by lia. rewrite H0 in H.
-        specialize (H TREECONT UNAMBR) as [acts eq]. 
-        symmetry. eapply leaves_equiv_pref; unfold prefix; eauto. symmetry.
-        eapply IHdelta1; eauto. rewrite <- H5. simpl. exists acts. auto.
-        symmetry. eapply leaves_equiv_pref; eauto. destruct plus. 2: discriminate.
-        inversion H1; subst.
-        symmetry. eapply IHdelta1; eauto.
-        exists []. rewrite <- H5. simpl. simpl in TREECONT0.
-        eapply is_tree_determ in TREECONT; eauto. subst. rewrite app_nil_r.
-        reflexivity.
-  Qed.
-
-  Theorem unamb_list_inf_eqs:
-    forall r i g dir t1 t2 delta1,
-      unamb [Areg r] ->
-      is_tree rer [Areg (Quantified false 0 +∞ r)] i g dir t1 ->
-      is_tree rer
-        [Areg (Quantified false 0 +∞ r); Areg (Quantified false 0 delta1 r)]
-        i g dir t2 ->
-      leaves_equiv [] (tree_leaves t1 g i dir)
-        (tree_leaves t2 g i dir).
-  Proof.
-    intros r i g dir t1 t2 delta2 UNAMBR T1 T2.
-    remember (remaining_length i dir) as l.
-    assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql.
-    revert i g t1 t2 T1 T2 Hlength_le.
-    induction l; intros i g t1 t2 T1 T2 Hlength_le; simpl.
-    - specialize (is_tree_productivity rer [Areg (Quantified false 0 delta2 r)] i g dir) as [t3 T3].
-      eapply quantified_null_length_skip with (t2 := t3) in T2; eauto.
-      eapply quantified_null_length in T3, T1; eauto. rewrite T1, T2, T3. reflexivity.
-    - apply GroupId.le_lteq in Hlength_le as [p1 | p2].
-      rewrite  Nat.lt_succ_r in p1.  eapply IHl; eauto.
-      inversion T1; inversion T2; subst. simpl. destruct plus, plus0; try discriminate.
-      simpl in *. specialize (is_tree_productivity rer [Areg r] i (GroupMap.reset (def_groups r) g) dir ) as [t3 T3].
-      inversion SKIP0; subst.
-      + eapply leaves_concat with (act1 := [Areg r]) in ISTREE0, ISTREE1; eauto. inversion SKIP1; inversion SKIP; subst. simpl.
-        specialize (unamb_list _ _ _ _ _ UNAMBR T3) as [lEmpt | [el ld]].
-        rewrite lEmpt in ISTREE1, ISTREE0. inversion ISTREE1; inversion ISTREE0.
-        reflexivity.
-        rewrite ld in ISTREE1, ISTREE0. apply FlatMap_one_leaf in ISTREE1, ISTREE0.
-        inversion ISTREE1; inversion ISTREE0; subst.
-        destruct el; simpl in *.
-        inversion TREE0; inversion TREE; try contradiction; subst.
-        simpl. etransitivity. 1, 2: rewrite app_cons. reflexivity.
-        apply leaves_equiv_app. reflexivity.
-        eapply IHl; eauto. 
-        pose proof (strict_suffix_remaining_length _ _ _ PROGRESS). lia.
-        reflexivity.
-      + eapply leaves_concat with (act1 := [Areg r]) in ISTREE0, ISTREE1, ISTREE2; eauto. inversion SKIP1; inversion SKIP; subst. simpl.
-        specialize (unamb_list _ _ _ _ _ UNAMBR T3) as [lEmpt | [el ld]].
-        rewrite lEmpt in ISTREE1, ISTREE0, ISTREE2. inversion ISTREE1; inversion ISTREE0; inversion ISTREE2.
-        reflexivity.
-        rewrite ld in ISTREE1, ISTREE0, ISTREE2. apply FlatMap_one_leaf in ISTREE1, ISTREE0, ISTREE2.
-        inversion ISTREE1; inversion ISTREE0; inversion ISTREE2; subst.
-        destruct el; simpl in *.
-        inversion TREE0; inversion TREE; inversion TREE1; try contradiction; subst.
-        2: simpl; reflexivity.
-        simpl. etransitivity. 1, 2: rewrite app_cons. reflexivity.
-        apply leaves_equiv_app. reflexivity.
-        destruct plus. 
-        pose proof (atmost_level_prefix _  +∞ _ _ _ _ _ treecont0 TREECONT1).
-        simpl in H. specialize (H TREECONT0 UNAMBR) as [acts eq]. 
-        eapply leaves_equiv_pref; unfold prefix; eauto. eapply IHl; eauto.
-        pose proof (strict_suffix_remaining_length _ _ _ PROGRESS); try lia.
-        pose proof (is_tree_determ _ _ _ _ _ _ _ TREECONT0 TREECONT1); subst.
-        eapply leaves_equiv_pref; unfold prefix;  eauto. eapply IHl; eauto.
-        pose proof (strict_suffix_remaining_length _ _ _ PROGRESS); try lia.
-        exists []. rewrite app_nil_r; reflexivity.
-  Qed.
-
-  (* SYNTAXIC LEMMAS: some syntaxic rules to simplify the overall structure of the proof *)
-  
-  (* you can distribute an unambiguous regex on the left *)
-  Theorem unamb_distribute_left:
-    forall r1 r2 r3,
-      unamb [Areg r1] ->
-      (Sequence r1 (Disjunction r2 r3)) ≅[rer] (Disjunction (Sequence r1 r2) (Sequence r1 r3)).
-  Proof.
-    unfold unamb. intros r1 r2 r3  UA.
-    split. simpl. solve_groups_equiv.
-    destruct dir.
-    (* the backward case is true even without unambiguity *)
-    2: { apply Distributivity.LeftBackward.factored_expanded_left_equiv. }
-    (* forward case *)
-    unfold actions_equiv_dir. intros inp gm t1 t2 TREE1 TREE2.
-    inversion TREE2; inversion TREE1; inversion ISTREE1; inversion ISTREE2; subst.
-    clear TREE1 TREE2 ISTREE1 ISTREE2. simpl in *.
-    rename t0 into t12. rename t3 into t13. rename t1 into t123.
-    rename CONT into T123. rename CONT0 into T12. rename CONT1 into T13.
-    specialize (is_tree_productivity rer [Areg r1] inp gm forward) as [t1 TREER1].
-    rewrite app_cons in T123, T12, T13.
-    (* the leaves of t123, t12 and t13 can be expressed as a FlatMap *)
-    eapply leaves_concat with (act1:=[Areg r1]) in T123, T12, T13; eauto.
-    unfold tree_equiv_tr_dir.  simpl.
-    destruct (tree_leaves t1 gm inp forward) as [|[i1 gm1] l] eqn:LEAVES1.
-    (* no leaf in r1: no leaf everywhere *)
-    { inversion T123; inversion T12; inversion T13; subst. constructor. }
-    destruct l as [|].
-    (* there can't be more than one leaf *)
-    2: { apply UA in TREER1. specialize (TREER1 gm inp forward).
-         rewrite LEAVES1 in TREER1. simpl in TREER1. lia. }
-    (* r1 has exactly one leaf: the FlatMaps are simply trees starting from that leaf *)
-    apply FlatMap_one_leaf in T123, T12, T13.
-    inversion T123; inversion TREE; inversion T12; inversion T13; subst.
-    simpl.
-    specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE1 TREE0) as H.
-    specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE2 TREE1) as H1. subst.
-    apply leaves_equiv_refl.
-  Qed.
-
-  (* you can distribute an unambiguous regex on the right *)
-  Theorem unamb_distribute_right:
-    forall r1 r2 r3,
-      unamb [Areg r3] ->
-      (Sequence (Disjunction r1 r2) r3) ≅[rer] (Disjunction (Sequence r1 r3) (Sequence r2 r3)).
-  Proof. 
-    intros r1 r2 r3 UNAMBR3.
-    split. simpl. solve_groups_equiv.
-    destruct dir.
-    apply Distributivity.Right.factored_expanded_right_equiv. 
-    intros inp gm t1 t2 TREE1 TREE2.
-    inversion TREE1; inversion TREE2; inversion ISTREE1;inversion ISTREE2; subst.
-    clear TREE1 TREE2 ISTREE1 ISTREE2. simpl in *.
-    rename t0 into t2. rename CONT into TREE1. rename CONT0 into TREE2. rename CONT1 into TREE3.
-    specialize (is_tree_productivity rer [Areg r3] inp gm backward) as [t4 TREE4].
-    rewrite app_cons in TREE1, TREE2, TREE3.
-    eapply leaves_concat with (act1:= [Areg r3]) in TREE1, TREE2, TREE3; eauto.
-    unfold tree_equiv_tr_dir. simpl.
-    destruct (tree_leaves t4 gm inp backward) as [|[inp2 gm2] l] eqn:LEAVES1.
-    inversion TREE1; inversion TREE2; inversion TREE3; subst. constructor. 
-    destruct l as [|].
-    2: {
-      specialize (UNAMBR3 inp gm backward t4 TREE4 gm inp backward) as FF.
-      rewrite LEAVES1 in FF. simpl in FF. lia.
-    }
-    apply FlatMap_one_leaf in TREE1, TREE2, TREE3.
-    inversion TREE3; inversion TREE2; inversion TREE1; inversion TREE5; subst. simpl.
-    specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE1 TREE0) as eq1.
-    specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE2 TREE) as eq2. subst.
-    apply leaves_equiv_refl.
-  Qed.
-
-  (* If a regex is unambigous, then it's open greedy quantified can expand into a disjunction *)
+  (* If a regex is unambigous and defines no groups, then it's open greedy quantified can expand into a disjunction if it has no forced iterations *)
   Theorem non_greedy_quantifier_steps_opt:
     forall r n,
       def_groups r = [] ->
@@ -469,9 +315,8 @@ Section UnAmbiguity.
     all: inversion H1; subst; eapply check_not_stops_quantifier; eauto.
     assert (n0 = n) by lia. subst. assumption.
   Qed.
-
   
-  (* If a regex is unambigous, then it's open lazy quantified can expand into a disjunction *)
+  (* If a regex is unambigous, then it's open lazy quantified can expand into a disjunction if it has no forced iterations *)
   Theorem greedy_quantifier_steps_opt:
     forall r n ,
       def_groups r = [] ->
@@ -493,7 +338,10 @@ Section UnAmbiguity.
     inversion H1. subst. eapply check_not_stops_quantifier_tail; eauto.
     inversion H1. subst. eapply check_not_stops_quantifier_tail; eauto.
   Qed.
-  
+
+  (* If for a length n three trees represent an unambigous regex r followed
+  by two different acts, then if the two appended acts are equal to the third
+  for all length < n, the two trees appended tree are equal at to the third for length = n *)
   Theorem unamb_inf_cut (n: nat):
     forall r i gm dir t1 t2 t3 acts1 acts2 acts3,
       unamb [Areg r] ->
@@ -530,7 +378,8 @@ Section UnAmbiguity.
         simpl. lia.
       + destruct el; auto.
   Qed.
-  
+
+  (* If r defines no group and is unambigous r{m + 1,  d}  ~ r r{m, d} *)
   Theorem unamb_quantifier_pops_left:
     forall r m n g,
       def_groups r = [] ->
@@ -688,7 +537,8 @@ Section UnAmbiguity.
         inversion T6; subst. inversion TREE; subst. simpl in PROGRESS.
         eapply StrictSuffix.ss_irreflexive in PROGRESS. contradiction. reflexivity.
   Qed.
-      
+
+  (* If r defines no group and is unambigous r{m + 1,  d}  ~ r{m, d} r *)
   Theorem unamb_quantifier_pops_right:
     forall r m n g,
       def_groups r = [] ->
@@ -851,8 +701,8 @@ Section UnAmbiguity.
         inversion T6; subst. inversion TREE; subst. simpl in PROGRESS.
         eapply StrictSuffix.ss_irreflexive in PROGRESS. contradiction. reflexivity.
   Qed.
-   
-
+  
+  (* If r defines no group and is unambigous r{m, d} r  ~ r r{m, d} *)
   Lemma unamb_quantifier_invertible:
     forall r m n g,
       def_groups r = [] ->
@@ -866,6 +716,8 @@ Section UnAmbiguity.
     all: assumption.
   Qed.
 
+  (* If a regex is unambigous and defines no groups, then it's greedy quantified can
+  expand into a disjunction *)
   Theorem greedy_quantifier_steps_opt_min:
     forall r n min,
       def_groups r = [] ->
@@ -888,7 +740,9 @@ Section UnAmbiguity.
     symmetry. etransitivity. eapply unamb_quantifier_pops_left; auto.
     apply seq_equiv. 2: reflexivity. apply quantified_one_equiv; auto.
   Qed.
-
+  
+  (* If a regex is unambigous and defines no groups, then it's lazy quantified
+  can expand into a disjunction *)
   Theorem non_greedy_quantifier_steps_opt_min:
     forall r n min,
       def_groups r = [] ->
@@ -911,70 +765,6 @@ Section UnAmbiguity.
       symmetry. etransitivity. eapply unamb_quantifier_pops_left; auto.
       apply seq_equiv. 2: reflexivity. apply quantified_one_equiv; auto.
   Qed.
-  
-  Theorem unamb_equivalence_base_case_inf_forward:
-    forall r delta2 ,
-      def_groups r = [] ->
-      unamb [Areg r] ->
-      (Sequence (Quantified false 0 +∞ r)
-         (* r{0, Delta2, g } *)
-         (Quantified false 0 delta2 r))
-        ≅[rer][forward] (Quantified false 0 +∞ r).
-  Proof.
-    intros r delta1 UNDEFGROUPS.
-    split. simpl. rewrite UNDEFGROUPS. reflexivity.
-    intros i g t1 t2 T1 T2.
-    unfold tree_equiv_tr_dir.
-    inversion T1; subst. simpl in *. clear T1.
-    symmetry.
-    eapply unamb_list_inf_eqs; eauto.
-  Qed.
-
-  Theorem unamb_equivalence_base_case_inf_backward:
-    forall r delta1,
-      def_groups r = [] ->
-      unamb [Areg r] ->
-      (Sequence (Quantified false 0 delta1 r)
-         (* r{0, Delta2, g } *)
-         (Quantified false 0  +∞ r))
-        ≅[rer][backward] (Quantified false 0 +∞ r).
-  Proof. 
-    intros r delta1 UNDEFGROUPS.
-    split. simpl. rewrite UNDEFGROUPS. reflexivity.
-    intros i g t1 t2 T1 T2.
-    unfold tree_equiv_tr_dir.
-    inversion T1; subst. simpl in *. clear T1.
-    symmetry.
-    eapply unamb_list_inf_eqs; eauto.
-  Qed.
-
-  (* Base case: r{0, delta1}r{0, delta2} = r{0, delta1 + delta2}*)
-  Theorem unamb_equivalence_base_case:
-    forall r delta1 delta2 g,
-      (* if the tree corresponding to the regex is unambigous *)
-      unamb [Areg r] ->
-      (* r{0, Delta1, g } *)
-      (Sequence (Quantified g 0 delta1 r)
-         (* r{0, Delta2, g } *)
-         (Quantified g 0 delta2 r))
-        ≅[rer] (Quantified g 0 (delta1 + delta2)%NoI r).
-  Proof.
-    intros reg delta1 delta2 g UNAMBR.
-    destruct g. {apply atmost_atmost_equiv. } (* The greedy case has already been proven*)
-    split. simpl. solve_groups_equiv.
-    intros i g t1 t2 T1 T2. inversion T1; subst.
-    destruct dir, delta1, delta2; simpl in *.
-    - eapply unamb_list_nat_eqs; eauto.
-    - eapply unamb_list_nat_eqs; eauto.
-    - symmetry. eapply unamb_list_inf_eqs; eauto.
-    - symmetry. eapply unamb_list_inf_eqs; eauto.
-    - rewrite PeanoNat.Nat.add_comm in T2. eapply unamb_list_nat_eqs; eauto.
-    - symmetry. eapply unamb_list_inf_eqs; eauto.
-    - eapply unamb_list_nat_eqs; eauto.
-    - symmetry. eapply unamb_list_inf_eqs; eauto.
-  Qed.
-
-  (*INDUCTION HELPERS: These proof show that if the base case true is true for the merge of regexes, then the min1 and min2 cases are true *)
   
   (* Intermediate step: r{0, delta1}r{min2, delta2} = r{min2, delta1 + delta2}*)
   Theorem unamb_equivalence_chain_I1:
@@ -1015,7 +805,9 @@ Section UnAmbiguity.
       reflexivity.
   Qed.
 
-  (* Genetal helper statement: if a regex is unambigous and the base case is true for the quantified merge, then the merge is also true for all min1, min2 *)
+  (* General helper statement: if a regex is unambigous and defined no groups and
+  the base case is true for the quantified merge, then the merge is also true for
+  all min1, min2 *)
   Theorem unamb_equivalence_chain_ind:
     forall r g1 g2 g3 min1 min2 delta1 delta2,
       def_groups r = [] -> 
@@ -1054,10 +846,236 @@ Section UnAmbiguity.
       (* r{min1 + min2 + 1, delta1 + delta2} *)
       reflexivity.
   Qed.
+ 
+  (** * LAZY QUANTIFIED MERGE *)
+  (* Here we prove the second statement about unambigous regex which states that
+  if r is unambigous r{0, d1}? r{0, d2}? ~ r{0, d1 + d2}?. This can then be merged with previou *)
+  
+  (* If r is unambigous and a lazy quantifier has a lower number of optional iteration than another one,
+     then the leaves of the first quantified are a prefix of the leaves of the
+     second quantified *)
+  Theorem atmost_level_prefix (m: nat) (d: non_neg_integer_or_inf) r:
+    forall inp gm dir t1 t2,
+      is_tree rer [Areg (Quantified false 0 m r)] inp gm dir t1 ->
+      is_tree rer [Areg (Quantified false 0 (m+d)%NoI r)] inp gm dir t2 ->
+      unamb [Areg r] ->
+      exists acts, ((tree_leaves t1 gm inp dir) ++ acts) = (tree_leaves t2 gm inp dir).
+  Proof.
+    revert d r.
+    induction m; intros.
+    - inversion H; inversion SKIP; subst.
+      inversion H0; inversion SKIP0; subst.
+      + exists []; auto.
+      + inversion SKIP0; subst. eexists. reflexivity.
+      + destruct plus; discriminate.
+    - inversion H; inversion SKIP; subst; simpl; clear H SKIP.
+      inversion H0; inversion SKIP; subst; try (destruct d; discriminate).
+      simpl; clear H0 SKIP. rewrite app_cons in ISTREE1, ISTREE0.
+      specialize (is_tree_productivity rer [Areg r] inp (GroupMap.reset (def_groups r) gm) dir) as [t3 T3].
+      eapply leaves_concat with (act1 := [Areg r]) in ISTREE1, ISTREE0; eauto.
+      pose proof (unamb_list _ _ _ _ _ H1 T3) as [c1 | [el c2]].
+      rewrite c1 in *. inversion ISTREE0; inversion ISTREE1; subst.
+      exists []. reflexivity.
+      rewrite c2 in *. apply FlatMap_one_leaf in ISTREE0, ISTREE1.
+      inversion ISTREE0; inversion ISTREE1; subst. simpl in *.
+      inversion TREE; inversion TREE0; subst.
+      2, 3: contradiction.
+      2: { simpl. exists []. reflexivity. }
+      destruct el; simpl in *. destruct plus. 2: discriminate.
+      inversion H4. subst.
+      destruct plus0, d; try discriminate.
+      inversion H3; subst.
+      specialize (IHm (NoI.N (n0)) _ _ _ _ _ treecont TREECONT0).
+      simpl in IHm. specialize (IHm TREECONT H1) as [acts lEq].
+      exists acts. etransitivity. 1,2: rewrite app_cons. reflexivity. f_equal.
+      apply lEq.
+      specialize (IHm +∞ _ _ _ _ _ treecont TREECONT0). simpl in IHm.
+      specialize (IHm TREECONT H1) as [acts lEq].
+      exists acts. etransitivity. 1,2: rewrite app_cons. reflexivity.
+      f_equal. apply lEq.
+  Qed.
 
-  (** Final proofs: show equalities of quantified merges **)
+  (* If a regex r is unambigous and d1 is a natural number,
+     then r{0, d1}?r{0, d2}? ~ r{0, d1 + d2}?*)
+  Theorem unamb_list_nat_eqs:
+    forall r i g dir t1 t2 (delta1: nat) delta2,
+      unamb [Areg r] ->
+      is_tree rer
+        [Areg (Quantified false 0 delta1 r); Areg (Quantified false 0 delta2 r)]
+        i g dir t1 ->
+      is_tree rer [Areg (Quantified false 0 (delta1 + delta2)%NoI r)] i g dir t2 ->
+      leaves_equiv [] (tree_leaves t1 g i dir) (tree_leaves t2 g i dir).
+  Proof.
+    intros r i g d t1 t2 delta1 . revert i g t1 t2. 
+    induction delta1; intros i g t1 t2 delta2 UNAMBR T1 T2.
+    - inversion T1; subst. 2: destruct plus; discriminate. destruct delta2; simpl in T1, T2.
+      all: specialize (is_tree_determ _ _ _ _ _ _ _ T2 SKIP) as cd; rewrite cd; reflexivity.
+    - inversion T1; inversion T2; subst. destruct delta2; discriminate.
+      rewrite app_cons in ISTREE1, ISTREE0. 
+      specialize (is_tree_productivity rer [Areg r] i (GroupMap.reset (def_groups r) g) d) as [t3 T3].
+      eapply leaves_concat with (act1 := [Areg r]) in ISTREE1, ISTREE0; eauto. simpl.
+      specialize (unamb_list _ _ _ _ _ UNAMBR T3) as [e1 | [el e2]].
+      simpl in *. rewrite e1 in ISTREE0, ISTREE1. inversion ISTREE0; inversion ISTREE1; subst.
+      inversion SKIP0; inversion SKIP; subst. inversion SKIP1; reflexivity.
+      inversion SKIP1; subst. simpl.
+      rewrite app_cons in ISTREE2. 
+      eapply leaves_concat with (act1 := [Areg r]) in ISTREE2; eauto. simpl in ISTREE2.
+      rewrite e1 in ISTREE2. inversion ISTREE2; subst. reflexivity.
+      simpl in *. rewrite e2 in ISTREE0, ISTREE1. apply FlatMap_one_leaf in ISTREE0, ISTREE1.
+      inversion ISTREE1; inversion ISTREE0; try discriminate; subst. destruct el; simpl in *.
+      inversion SKIP; inversion SKIP1; inversion SKIP0; subst. simpl.
+      + etransitivity. 1, 2: rewrite app_cons. reflexivity.
+        apply leaves_equiv_app. reflexivity. inversion H1; inversion H0; subst.
+        inversion TREE0; inversion TREE; try contradiction; subst. simpl.
+        destruct plus, plus0; try discriminate. inversion H0; inversion H9. subst.
+        eapply IHdelta1; eauto. simpl. reflexivity.
+      + rewrite app_cons in ISTREE2. 
+        eapply leaves_concat with (act1 := [Areg r]) in ISTREE2; eauto. simpl in ISTREE2.
+        rewrite e2 in ISTREE2. apply FlatMap_one_leaf in ISTREE2.
+        inversion ISTREE2; subst.
+        inversion TREE0; inversion TREE1; inversion TREE; try contradiction; subst.
+        2: simpl;  rewrite <- H5; reflexivity.
+        simpl. etransitivity. 1, 2: rewrite app_cons. reflexivity.
+        apply leaves_equiv_app. reflexivity.
+        destruct plus0, plus1; try discriminate.
+        inversion H9; destruct plus. 2: discriminate. inversion H1; subst.
+        pose proof (atmost_level_prefix _  (S delta1) _ _ _ _ _ treecont TREECONT0).
+        simpl in H. assert (n0 + S delta1 = delta1 + S n0) by lia. rewrite H0 in H.
+        specialize (H TREECONT UNAMBR) as [acts eq]. 
+        symmetry. eapply leaves_equiv_pref; unfold prefix; eauto. symmetry.
+        eapply IHdelta1; eauto. rewrite <- H5. simpl. exists acts. auto.
+        symmetry. eapply leaves_equiv_pref; eauto. destruct plus. 2: discriminate.
+        inversion H1; subst.
+        symmetry. eapply IHdelta1; eauto.
+        exists []. rewrite <- H5. simpl. simpl in TREECONT0.
+        eapply is_tree_determ in TREECONT; eauto. subst. rewrite app_nil_r.
+        reflexivity.
+  Qed.
 
-  (* Can merge any two quantifiers if the regex is unambigous and they are both greedy or lazy*)
+  (* If a regex r is unambigous and d1 is equal to infinity,
+     then r{0, d1}?r{0, d2}? ~ r{0, d1 + d2}?*)
+  Theorem unamb_list_inf_eqs:
+    forall r i g dir t1 t2 delta1,
+      unamb [Areg r] ->
+      is_tree rer [Areg (Quantified false 0 +∞ r)] i g dir t1 ->
+      is_tree rer
+        [Areg (Quantified false 0 +∞ r); Areg (Quantified false 0 delta1 r)]
+        i g dir t2 ->
+      leaves_equiv [] (tree_leaves t1 g i dir)
+        (tree_leaves t2 g i dir).
+  Proof.
+    intros r i g dir t1 t2 delta2 UNAMBR T1 T2.
+    remember (remaining_length i dir) as l.
+    assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql.
+    revert i g t1 t2 T1 T2 Hlength_le.
+    induction l; intros i g t1 t2 T1 T2 Hlength_le; simpl.
+    - specialize (is_tree_productivity rer [Areg (Quantified false 0 delta2 r)] i g dir) as [t3 T3].
+      eapply quantified_null_length_skip with (t2 := t3) in T2; eauto.
+      eapply quantified_null_length in T3, T1; eauto. rewrite T1, T2, T3. reflexivity.
+    - apply GroupId.le_lteq in Hlength_le as [p1 | p2].
+      rewrite  Nat.lt_succ_r in p1.  eapply IHl; eauto.
+      inversion T1; inversion T2; subst. simpl. destruct plus, plus0; try discriminate.
+      simpl in *. specialize (is_tree_productivity rer [Areg r] i (GroupMap.reset (def_groups r) g) dir ) as [t3 T3].
+      inversion SKIP0; subst.
+      + eapply leaves_concat with (act1 := [Areg r]) in ISTREE0, ISTREE1; eauto. inversion SKIP1; inversion SKIP; subst. simpl.
+        specialize (unamb_list _ _ _ _ _ UNAMBR T3) as [lEmpt | [el ld]].
+        rewrite lEmpt in ISTREE1, ISTREE0. inversion ISTREE1; inversion ISTREE0.
+        reflexivity.
+        rewrite ld in ISTREE1, ISTREE0. apply FlatMap_one_leaf in ISTREE1, ISTREE0.
+        inversion ISTREE1; inversion ISTREE0; subst.
+        destruct el; simpl in *.
+        inversion TREE0; inversion TREE; try contradiction; subst.
+        simpl. etransitivity. 1, 2: rewrite app_cons. reflexivity.
+        apply leaves_equiv_app. reflexivity.
+        eapply IHl; eauto. 
+        pose proof (strict_suffix_remaining_length _ _ _ PROGRESS). lia.
+        reflexivity.
+      + eapply leaves_concat with (act1 := [Areg r]) in ISTREE0, ISTREE1, ISTREE2; eauto. inversion SKIP1; inversion SKIP; subst. simpl.
+        specialize (unamb_list _ _ _ _ _ UNAMBR T3) as [lEmpt | [el ld]].
+        rewrite lEmpt in ISTREE1, ISTREE0, ISTREE2. inversion ISTREE1; inversion ISTREE0; inversion ISTREE2.
+        reflexivity.
+        rewrite ld in ISTREE1, ISTREE0, ISTREE2. apply FlatMap_one_leaf in ISTREE1, ISTREE0, ISTREE2.
+        inversion ISTREE1; inversion ISTREE0; inversion ISTREE2; subst.
+        destruct el; simpl in *.
+        inversion TREE0; inversion TREE; inversion TREE1; try contradiction; subst.
+        2: simpl; reflexivity.
+        simpl. etransitivity. 1, 2: rewrite app_cons. reflexivity.
+        apply leaves_equiv_app. reflexivity.
+        destruct plus. 
+        pose proof (atmost_level_prefix _  +∞ _ _ _ _ _ treecont0 TREECONT1).
+        simpl in H. specialize (H TREECONT0 UNAMBR) as [acts eq]. 
+        eapply leaves_equiv_pref; unfold prefix; eauto. eapply IHl; eauto.
+        pose proof (strict_suffix_remaining_length _ _ _ PROGRESS); try lia.
+        pose proof (is_tree_determ _ _ _ _ _ _ _ TREECONT0 TREECONT1); subst.
+        eapply leaves_equiv_pref; unfold prefix;  eauto. eapply IHl; eauto.
+        pose proof (strict_suffix_remaining_length _ _ _ PROGRESS); try lia.
+        exists []. rewrite app_nil_r; reflexivity.
+  Qed.
+
+  (* Base case: r{0, delta1}r{0, delta2} = r{0, delta1 + delta2}*)
+  Theorem unamb_merge_equivalence_base_case:
+    forall r delta1 delta2 g,
+      (* if the tree corresponding to the regex is unambigous *)
+      unamb [Areg r] ->
+      (* r{0, Delta1, g } *)
+      (Sequence (Quantified g 0 delta1 r)
+         (* r{0, Delta2, g } *)
+         (Quantified g 0 delta2 r))
+        ≅[rer] (Quantified g 0 (delta1 + delta2)%NoI r).
+  Proof.
+    intros reg delta1 delta2 g UNAMBR.
+    destruct g. {apply atmost_atmost_equiv. } (* The greedy case has already been proven*)
+    split. simpl. solve_groups_equiv.
+    intros i g t1 t2 T1 T2. inversion T1; subst.
+    destruct dir, delta1, delta2; simpl in *.
+    - eapply unamb_list_nat_eqs; eauto.
+    - eapply unamb_list_nat_eqs; eauto.
+    - symmetry. eapply unamb_list_inf_eqs; eauto.
+    - symmetry. eapply unamb_list_inf_eqs; eauto.
+    - rewrite PeanoNat.Nat.add_comm in T2. eapply unamb_list_nat_eqs; eauto.
+    - symmetry. eapply unamb_list_inf_eqs; eauto.
+    - eapply unamb_list_nat_eqs; eauto.
+    - symmetry. eapply unamb_list_inf_eqs; eauto.
+  Qed.
+
+  Theorem unamb_merge_equivalence_base_case_inf_forward:
+    forall r delta2 ,
+      unamb [Areg r] ->
+      (Sequence (Quantified false 0 +∞ r)
+         (* r{0, Delta2, g } *)
+         (Quantified false 0 delta2 r))
+        ≅[rer][forward] (Quantified false 0 +∞ r).
+  Proof.
+    intros r delta1 UNDEFGROUPS.
+    split. simpl. solve_groups_equiv.
+    intros i g t1 t2 T1 T2.
+    unfold tree_equiv_tr_dir.
+    inversion T1; subst. simpl in *. clear T1.
+    symmetry. eapply unamb_list_inf_eqs; eauto.
+  Qed.
+
+  Theorem unamb_equivalence_base_case_inf_backward:
+    forall r delta1,
+      unamb [Areg r] ->
+      (Sequence (Quantified false 0 delta1 r)
+         (* r{0, Delta2, g } *)
+         (Quantified false 0  +∞ r))
+        ≅[rer][backward] (Quantified false 0 +∞ r).
+  Proof. 
+    intros r delta1 UNDEFGROUPS.
+    split. simpl. solve_groups_equiv.
+    intros i g t1 t2 T1 T2.
+    unfold tree_equiv_tr_dir.
+    inversion T1; subst. simpl in *. clear T1.
+    symmetry.
+    eapply unamb_list_inf_eqs; eauto.
+  Qed.
+
+  (** * Final rewrites *)
+  (* Some proofs merging the two properties found to make stronger equalities
+  by enforcing that r is unambigous and defines no groups *)
+
+  (* Can merge any two quantifiers if the regex is unambigous and defined no groups and they are both greedy or lazy *)
   Theorem unamb_equivalence_chain_uni_g:
     forall r g min1 min2 delta1 delta2,
       def_groups r = [] -> 
@@ -1066,23 +1084,25 @@ Section UnAmbiguity.
       (Sequence (Quantified g min1 delta1 r) (Quantified g min2 delta2 r))
         ≅[rer] (Quantified g (min1 + min2) (delta1 + delta2)%NoI r).
     intros.
-    eapply unamb_equivalence_chain_ind; auto. eapply unamb_equivalence_base_case; auto.
+    eapply unamb_equivalence_chain_ind; auto. eapply unamb_merge_equivalence_base_case; auto.
   Qed.
 
-
+  (* If r is unambigous and defines no groups
+  r{m1, } r{m2, d1} ~ r{m1 + m2,} *)
   Lemma unamb_quantified_open_greedy_right (min1 min2: nat):
     forall r delta1 g,
       def_groups r = [] ->
       unamb [Areg r] ->
       (Sequence (Quantified true min1 +∞ r) (Quantified g min2 delta1 r))
         ≅[rer] (Quantified true (min1 + min2) +∞ r).
-    Proof.
-      intros. eapply unamb_equivalence_chain_ind; eauto.
-      eapply quantified_open_greedy_right.
-    Qed.
+  Proof.
+    intros. eapply unamb_equivalence_chain_ind; eauto.
+    eapply quantified_open_greedy_right.
+  Qed.
 
-
-    Lemma unamb_quantified_open_greedy_left (min1 min2: nat):
+  (* If r is unambigous and defines no groups
+  r{m1, d1} r{m2,} ~ r{m1 + m2,} *)
+  Lemma unamb_quantified_open_greedy_left (min1 min2: nat):
     forall r delta1 g,
       def_groups r = [] ->
       unamb [Areg r] ->
@@ -1094,7 +1114,8 @@ Section UnAmbiguity.
       destruct delta1; eapply H1; eauto; eapply quantified_open_greedy_left.
     Qed.
     
-  (* Same as above only this time in respect to the function *)
+  (* Generalization of r{m1, d1} r{m2, d2} ~ r{m1 + m2, d1 + d2}
+  with respect to the function *)
   Corollary unamb_fun_equivalence_chain:
     forall r g min1 min2 delta1 delta2,
       def_groups r = [] ->
