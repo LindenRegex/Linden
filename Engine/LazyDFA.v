@@ -1005,6 +1005,18 @@ Inductive ldfa_inv (c:code): ldfa_state -> nat -> Prop :=
   ,
   ldfa_inv c st (ldfa_measure st).
 
+Theorem ldfa_decreases:
+  forall code s1 s2 m1,
+    code_wf code (size code) ->
+    ldfa_loop_rel code s1 s2 ->
+    ldfa_inv code s1 m1 ->
+    exists m2, ldfa_inv code s2 m2 /\ m2 < m1.
+Proof.
+  intros code s1 s2 m1 WF STEP INV1.
+  inversion STEP; inversion INV1; 
+  exists (ldfa_measure s2); subst.
+  all: split; [constructor | ]; repeat simpl_length; try apply inpsize_strict; subst; try apply advance_input_decreases; auto.
+Qed.
 
 (************** PROGRESS ***************)
 
@@ -1013,9 +1025,11 @@ Theorem ldfa_next_progress_test:
   pike_regex r ->
   let c := (compilation' r) in
   (* valid current state *)
+  let curr_st := (LDFA_Next_Running next current_pcs) in
   (* clos_refl_trans _ (epsilon_loop_rel c) (initial_epsilon_state inp) (LDFA_Next_Running next current_pcs) -> *)
+  ldfa_next_inv c curr_st (next_measure curr_st) ->
   exists next_state,
-    next_loop_rel c inp (LDFA_Next_Running next current_pcs) next_state.
+    next_loop_rel c inp curr_st next_state.
 Proof.
   intros.
   destruct (current_pcs).
@@ -1041,7 +1055,7 @@ Proof.
         (* eapply steps_crt.
         eapply ldfa_bound; eauto.  *)
        admit. } 
-      destruct H0. eexists. eapply nlr_consume; eauto. 	
+      destruct H0. eexists. (*  eapply nlr_consume; eauto. 	 *) admit.
       * eexists; eapply nlr_noconsume; eauto.
     + eexists; eapply nlr_skip; eauto; unfold is_nextloop_skip; rewrite CURR_PC; reflexivity.
 Admitted.
@@ -1250,7 +1264,8 @@ Section Example.
     }
     apply rt1n_refl.
 Qed.
-  
+
+End Example.
 
 (* 
 (* input juste pour check les anchors 
