@@ -843,19 +843,6 @@ Proof.
   - apply IH2. apply IH1. exact INV.
 Qed.
 
-
-(* what we need to prove for next progress *)
-Theorem ldfa_eps_terminates:
-  forall r inp c n pc,
-    pike_regex r ->
-    (* need assumption valid curr ? *)
-
-    exists out, clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp n ([next_step pc]) (* = out workqueue *)) (LDFA_Eps_Done out).
-Proof.
-  intros. 
-  admit.
-Admitted.
-
 (******* next termination ********)
 
 Definition next_measure (st: ldfa_nextloop_state) : nat := 
@@ -1019,69 +1006,65 @@ Proof.
 Qed.
 
 (************** PROGRESS ***************)
+(* 
+Theorem ldfa_nextToEps_inv:
+  forall c inp next i d,
+  let curr_st := LDFA_Next_Running next (i :: d) in
+  let eps_st := (LDFA_Eps_Running inp next [next_step i]) in
+  code_wf c (size c) ->
+  ldfa_next_inv c curr_st (next_measure curr_st) ->
+    ldfa_eps_inv c eps_st (eps_measure c eps_st).
+Proof.
+  intros.
+  inversion H0; subst. 
+  unfold get_next, get_currpcs, code_wf in *; simpl in *.
 
-Theorem ldfa_next_progress_test:
+  constructor; unfold get_out, get_wq; simpl in *; unfold next_step; auto.
+  all: auto.
+Admitted. *)
+
+
+Theorem ldfa_next_progress:
   forall r inp next current_pcs,
   pike_regex r ->
   let c := (compilation' r) in
   (* valid current state *)
   let curr_st := (LDFA_Next_Running next current_pcs) in
-  (* clos_refl_trans _ (epsilon_loop_rel c) (initial_epsilon_state inp) (LDFA_Next_Running next current_pcs) -> *)
   ldfa_next_inv c curr_st (next_measure curr_st) ->
   exists next_state,
     next_loop_rel c inp curr_st next_state.
 Proof.
-  intros.
+  intros r inp next current_pcs REG c curr_st NEXT_INV.
   destruct (current_pcs).
   - eexists; apply nlr_final; eauto.
   - destruct (get_pc c (fst i)) eqn:CURR_PC.
-    + destruct b;	simpl in *; 
-      try match goal with
-      | H : get_pc _ _ = Some Accept |- _ => eexists; apply nlr_accept; eauto
-      | H : get_pc _ _ = Some KillThread |- _ => eexists; apply nlr_kill; eauto
-      | H : get_pc _ _ = Some (Consume ?cd) |- _ => destruct (check_read rer cd inp forward) eqn:H_READ
-      | H : _ |- _ => eexists; eapply nlr_skip; eauto; unfold is_nextloop_skip; rewrite CURR_PC; reflexivity
-      end.
-      * assert (exists out, clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp next ([next_step i])) (LDFA_Eps_Done out)). 
-      { pose proof ldfa_eps_bound.
-        pose proof (compiled_wf rer r).
-        assert (ldfa_eps_inv c (LDFA_Eps_Running inp next [next_step i]) (eps_measure c (LDFA_Eps_Running inp next [next_step i]))).
-        { 
-          constructor.
-          admit.
-          admit.
-          admit.
-        }
-        (* eapply steps_crt.
-        eapply ldfa_bound; eauto.  *)
-       admit. } 
-      destruct H0. eexists. (*  eapply nlr_consume; eauto. 	 *) admit.
-      * eexists; eapply nlr_noconsume; eauto.
-    + eexists; eapply nlr_skip; eauto; unfold is_nextloop_skip; rewrite CURR_PC; reflexivity.
-Admitted.
+    2: { eexists; eapply nlr_skip; eauto; unfold is_nextloop_skip; rewrite CURR_PC; reflexivity. }
+    destruct b;	simpl in *; 
+    try match goal with
+    | H : get_pc _ _ = Some Accept |- _ => eexists; apply nlr_accept; eauto
+    | H : get_pc _ _ = Some KillThread |- _ => eexists; apply nlr_kill; eauto
+    | H : get_pc _ _ = Some (Consume ?cd) |- _ => destruct (check_read rer cd inp forward) eqn:H_READ
+    | H : _ |- _ => eexists; eapply nlr_skip; eauto; unfold is_nextloop_skip; rewrite CURR_PC; reflexivity
+    end.
+    2: { eexists; eapply nlr_noconsume; eauto. }
+    assert (EPSI: exists out, clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp next ([next_step i])) (LDFA_Eps_Done out)). 
+    { 
+      pose proof (compiled_wf rer r) as H_WF.
+      inversion NEXT_INV; subst.
+      assert (EPS_INV: ldfa_eps_inv c (LDFA_Eps_Running inp next [next_step i]) (eps_measure c (LDFA_Eps_Running inp next [next_step i]))).
+      { 
+        constructor; unfold get_out, in_range, get_next, get_currpcs, get_wq, code_wf in *; simpl in *; auto.
+        constructor; auto.
+        apply H_WF with (pc:= (fst i)) (i:= Consume c0) (next:= fst (next_step i)); unfold next_step; simpl; [auto | left; lia].
+      }
+      destruct (ldfa_eps_bound _ _ _ H_WF EPS_INV) as [res H_STEPS].
+      exists res; eapply steps_crt; eauto.
+    } 
+    destruct EPSI as [out EPSI].
+    eexists; eapply nlr_consume; eauto.
+Qed.
 
-(* Theorem ldfa_next_progress:
-  forall c inp next current_pcs,
-  exists next_state,
-    next_loop_rel c inp (LDFA_Next_Running next current_pcs) next_state.
-Proof.
-  intros.
-  destruct (current_pcs).
-  - eexists; apply nlr_final; eauto.
-  - destruct (get_pc c (fst i)) eqn:CURR_PC.
-    + destruct b;	simpl in *; 
-      try match goal with
-      | H : get_pc _ _ = Some Accept |- _ => eexists; apply nlr_accept; eauto
-      | H : get_pc _ _ = Some KillThread |- _ => eexists; apply nlr_kill; eauto
-      | H : get_pc _ _ = Some (Consume ?cd) |- _ => destruct (check_read rer cd inp forward) eqn:H_READ
-      | H : _ |- _ => eexists; eapply nlr_skip; eauto; unfold is_nextloop_skip; rewrite CURR_PC; reflexivity
-      end.
-      * assert (exists out, clos_refl_trans _ (epsilon_loop_rel c) (LDFA_Eps_Running inp next ([next_step i])) (LDFA_Eps_Done out)). 
-      { admit. } 
-      destruct H. eexists. eapply nlr_consume; eauto. 	
-      * eexists; eapply nlr_noconsume; eauto.
-    + eexists; eapply nlr_skip; eauto; unfold is_nextloop_skip; rewrite CURR_PC; reflexivity.
-Admitted. *)
+
 
 (* 	if advance input = some
     then exists next_char 
