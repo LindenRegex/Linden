@@ -286,7 +286,7 @@ Section Lemmas.
     eapply leaves_equiv_monotony with (seen1:=seen); eauto.
     intros. simpl. rewrite H. rewrite Bool.orb_true_r. auto.
   Qed.
-  
+
   (* Same as above with empty lists *)
   Lemma leaves_equiv_app:
     forall p1 p2 l1 l2,
@@ -368,19 +368,19 @@ Section Lemmas.
       rewrite Bool.orb_true_r. auto.
   Qed.
 
-  (* A repeated list of leafs is equal to the original list *)
+  (* A repeated list of leaves is equal to the original list *)
   Lemma leaves_equiv_repet:
     forall t2 seen,
       leaves_equiv seen t2 (t2 ++ t2).
   Proof.
-    intros t2 seen. 
+    intros t2 seen.
     assert (t2 = t2 ++ []) as t2Apps by (rewrite app_nil_r; auto).
     rewrite t2Apps at 1. eapply leaves_equiv_app2.
     apply leaves_equiv_refl. rewrite <- app_nil_r.
     apply leaves_equiv_comm. eapply leaves_equiv_subseen; auto.
     2: apply leaves_equiv_refl. intros.
     rewrite is_seen_spec in *. apply in_or_app.
-    left. assumption. 
+    left. assumption.
   Qed.
 
   Lemma leaves_equiv_app3:

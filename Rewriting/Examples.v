@@ -229,7 +229,7 @@ Section Examples.
       apply read_char_success_advance in READ.
       rewrite READ in inT. exact inT.
     - eapply IHT1_1; eauto; intros. subst. simpl in H0.
-      apply app_eq_nil in H0 as [l1 l2]. 
+      apply app_eq_nil in H0 as [l1 l2].
       destruct H1. left. exists r1; split; auto.
       eapply d3; eauto.
     - eapply IHT1_2; eauto; intros. subst. simpl in H0.
@@ -244,12 +244,12 @@ Section Examples.
       all: (exists r2; split; eauto).
     - subst. simpl in H0. rewrite H0 in *.
       simpl in *. eapply IHT1; eauto. intros.
-      repeat destruct H1; eauto. 
+      repeat destruct H1; eauto.
     - subst. simpl in H0. rewrite H0 in *.
       simpl in *. destruct greedy; simpl in inT.
       all: apply in_app_or in inT as [inT1 | inT2].
       2, 3: eapply IHT1_2; eauto.
-      all: eapply IHT1_1; intros; repeat destruct H1; eauto. 
+      all: eapply IHT1_1; intros; repeat destruct H1; eauto.
     - subst. simpl in H0. rewrite app_cons in H0.
       apply app_eq_nil in H0 as [l1 l2]. discriminate.
     - unfold lk_result in RES_LK. rewrite first_tree_leaf in RES_LK.
@@ -277,7 +277,7 @@ Section Examples.
     intros. inversion H2; inversion H3.
     subst. left. exists r. split; eauto.
   Qed.
-  
+
   (* Inputs of leaves only make (non-strictly positive) progress in the direction
      of matching *)
   Lemma input_only_forward:
@@ -340,7 +340,7 @@ Section Examples.
       apply actions_no_leaves_add_right with (a := [Acheck i]) (b := acts).
       apply check_end_no_leaves. auto. lia.
     }
-    unfold actions_no_leaves in NL1. eapply NL1; eauto. 
+    unfold actions_no_leaves in NL1. eapply NL1; eauto.
   Qed.
 
   (* If the remaining length is 0, and we have a tree which represents a quantified
@@ -353,7 +353,7 @@ Section Examples.
       is_tree rer acts i g dir t2 ->
       tree_leaves t1 g i dir = tree_leaves t2 g i dir.
   Proof.
-    intros i d g dir acts r t1 t2  greedy l T1 T2. 
+    intros i d g dir acts r t1 t2  greedy l T1 T2.
     inversion T1; subst. eapply is_tree_determ with (t1 := t1) (t2 := t2) in SKIP; eauto.
     subst; reflexivity.
     specialize (null_length_check_fails _ _ _ _ _ _ l ISTREE1) as nlf.
@@ -446,7 +446,7 @@ Section Examples.
     remember (tree_leaves t3 g i dir) as l2.
     induction l2. inversion T2; inversion T1; subst. reflexivity.
     eapply flatmap_leaves_equiv_r; eauto. unfold equiv_leaffuncts. intros.
-    inversion H; inversion H0; subst. 
+    inversion H; inversion H0; subst.
     inversion TREE; inversion TREE0; subst; try contradiction. destruct a; simpl in *.
     2: reflexivity.
     eapply IH; eauto. eapply strict_suffix_remaining_length; eauto.
@@ -472,6 +472,6 @@ Section Examples.
     induction l2. inversion T2; inversion T1; subst. reflexivity.
     eapply flatmap_leaves_equiv_r; eauto. unfold equiv_leaffuncts. intros.
     inversion H; inversion H0; subst. destruct lf; simpl in *.
-    eapply IH; eauto. 
+    eapply IH; eauto.
   Qed.
 End Examples.
