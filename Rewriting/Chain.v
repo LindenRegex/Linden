@@ -1,5 +1,5 @@
 From Linden Require Export ProofSetup ForcedQuant RegexpTree.
-From Linden.Rewriting Require Import Examples.
+From Linden.Rewriting Require Import Examples Associativity.
 
 Section EquivalenceChain.
   Context {params: LindenParameters}.
@@ -33,9 +33,9 @@ Proof.
     - reflexivity. }
   (* associativity of the sequence *)
   etransitivity.
-  { apply seq_equiv. reflexivity. symmetry. apply sequence_assoc_equiv. }
+  { apply seq_equiv. reflexivity. symmetry. apply seq_assoc. }
   etransitivity.
-  { apply sequence_assoc_equiv. }
+  { apply seq_assoc. }
   (* merges the first two, and last two, quantifiers *)
   etransitivity.
   { apply seq_equiv.

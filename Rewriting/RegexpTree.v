@@ -31,7 +31,7 @@ Section RegexpTree.
           eapply quantified_S_equiv_forward. }
         etransitivity.
         { symmetry.
-          eapply sequence_assoc_equiv. }
+          eapply seq_assoc. }
         eapply seq_equiv_dir.
         reflexivity.
         auto.
@@ -51,7 +51,7 @@ Section RegexpTree.
         { symmetry.
           eapply quantified_S_equiv_backward. }
         etransitivity.
-        { eapply sequence_assoc_equiv. }
+        { eapply seq_assoc. }
         eapply seq_equiv_dir.
         auto.
         reflexivity.
@@ -118,7 +118,7 @@ Section RegexpTree.
           eapply quantified_S_equiv_forward. }
         etransitivity.
         { symmetry.
-          eapply sequence_assoc_equiv. }
+          eapply seq_assoc. }
         eapply seq_equiv_dir.
         apply forced_equiv.
         auto.
@@ -146,7 +146,7 @@ Section RegexpTree.
         { symmetry.
           eapply quantified_S_equiv_backward. }
         etransitivity.
-        { eapply sequence_assoc_equiv. }
+        { eapply seq_assoc. }
         eapply seq_equiv_dir.
         auto.
         apply forced_equiv.
@@ -897,7 +897,7 @@ Section RegexpTree.
         eapply seq_equiv_dir. symmetry. eapply bounded_atmost_forward; auto.
         reflexivity.
       } etransitivity. {
-        symmetry. eapply sequence_assoc_equiv.
+        symmetry. eapply seq_assoc.
       }
       etransitivity. {
         eapply seq_equiv_dir. reflexivity.
@@ -917,7 +917,7 @@ Section RegexpTree.
         eapply seq_equiv_dir. reflexivity.
         symmetry. eapply atmost_bounded_backward; auto.
       } etransitivity. {
-        eapply sequence_assoc_equiv.
+        eapply seq_assoc.
       } etransitivity. {
         eapply seq_equiv_dir. eapply quantified_open_greedy_right; auto.
         reflexivity.
@@ -939,7 +939,7 @@ Section RegexpTree.
         symmetry. eapply bounded_atmost_forward; auto.
         reflexivity.
       } etransitivity. {
-        symmetry. eapply sequence_assoc_equiv.
+        symmetry. eapply seq_assoc.
       } etransitivity. {
         eapply seq_equiv_dir. reflexivity.
         eapply quantified_open_greedy_left; auto.
@@ -962,7 +962,7 @@ Section RegexpTree.
         symmetry. eapply atmost_bounded_backward; auto.
       }
       etransitivity. {
-        eapply sequence_assoc_equiv.
+        eapply seq_assoc.
       } etransitivity. {
         eapply seq_equiv_dir. eapply quantified_open_greedy_left; auto.
         reflexivity.

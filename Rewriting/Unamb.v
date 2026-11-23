@@ -400,7 +400,7 @@ Section UnAmbiguity.
       (* r{min + 1, delta} r{1, 0}*)
       etransitivity. {apply seq_equiv_dir. apply IH. reflexivity. }
       (* (r{1, 0} r{min, delta}) r{1, 0}*)
-      rewrite <- sequence_assoc_equiv_dir.
+      rewrite <- (equiv_to_dir _ _ _ backward (seq_assoc _ _ _ _)).
       (* r{1, 0} (r{min, delta} r{1, 0})*)
       etransitivity. {
         apply seq_equiv_dir. reflexivity.
@@ -434,7 +434,8 @@ Section UnAmbiguity.
         }
         (* ((r{1, 0} r{0, delta1}) r{1, 0} | r *)
         etransitivity. {
-          apply disj_equiv_dir. rewrite <- sequence_assoc_equiv_dir. apply seq_equiv_dir.
+          apply disj_equiv_dir.
+          rewrite <- (equiv_to_dir _ _ _ backward (seq_assoc _ _ _ _)). apply seq_equiv_dir.
           apply quantified_one_equiv; auto. rewrite <- quantified_S_equiv_backward; auto.
           reflexivity. rewrite <- (sequence_epsilon_right_equiv _ _ backward). reflexivity.
         }
@@ -457,7 +458,7 @@ Section UnAmbiguity.
         (* r | (r{1, 0} r{0, delta1}) r{1, 0} *)
         etransitivity. {
           apply disj_equiv_dir. rewrite <- (sequence_epsilon_right_equiv _ _ backward). reflexivity.
-          rewrite <- sequence_assoc_equiv_dir. apply seq_equiv_dir.
+          rewrite <- (equiv_to_dir _ _ _ backward (seq_assoc _ _ _ _)). apply seq_equiv_dir.
           apply quantified_one_equiv; auto. rewrite <- quantified_S_equiv_backward; auto.
           reflexivity. 
         }
@@ -560,7 +561,7 @@ Section UnAmbiguity.
       (* r{1, 0} r{min + 1, delta} *)
       etransitivity. {apply seq_equiv_dir. reflexivity. apply IH. }
       (* r{1, 0} (r{min, delta} r{1, 0})*)
-      rewrite  sequence_assoc_equiv_dir.
+      rewrite (equiv_to_dir _ _ _ forward (seq_assoc _ _ _ _)).
       (* (r{1, 0} r{min, delta}) r{1, 0}*) 
       etransitivity. {apply seq_equiv_dir. rewrite <- quantified_S_equiv_forward. 2: auto. all: reflexivity. }
       reflexivity. 
@@ -593,7 +594,8 @@ Section UnAmbiguity.
       }
       (* r{1, 0} (r{0, delta1} r{1, 0}) | r *)
       etransitivity. {
-        apply disj_equiv_dir. rewrite sequence_assoc_equiv_dir. apply seq_equiv_dir.
+        apply disj_equiv_dir. rewrite (equiv_to_dir _ _ _ forward (seq_assoc _ _ _ _)).
+        apply seq_equiv_dir.
         rewrite <- quantified_S_equiv_forward; auto. reflexivity.
         apply quantified_one_equiv; auto. 
         rewrite <- (sequence_epsilon_left_equiv _ _ forward). reflexivity.
@@ -618,7 +620,7 @@ Section UnAmbiguity.
       (* r | r{1, 0} (r{0, delta1} r{1, 0}) *)
       etransitivity. {
         apply disj_equiv_dir. rewrite <- (sequence_epsilon_left_equiv _ _ forward). reflexivity.
-        rewrite  sequence_assoc_equiv_dir. apply seq_equiv_dir.
+        rewrite (equiv_to_dir _ _ _ forward (seq_assoc _ _ _ _)). apply seq_equiv_dir.
         rewrite <- quantified_S_equiv_forward; auto. reflexivity.
         apply quantified_one_equiv; auto. 
       }
@@ -791,7 +793,7 @@ Section UnAmbiguity.
         apply unamb_quantifier_pops_right; assumption.
       }
       (* r{0, delta1} (r{min2, delta2} r{1,0})*)
-      rewrite sequence_assoc_equiv.
+      rewrite seq_assoc.
       (* (r{0, delta1} r{min2, delta2}) r{1,0}*)
       etransitivity. {
         apply seq_equiv. apply IHmin2. reflexivity.
@@ -832,7 +834,7 @@ Section UnAmbiguity.
         apply unamb_quantifier_pops_left; assumption.
       }
       (* (r{1,0} r{min1, delta1}) r{min2, delta2}*)
-      rewrite <- sequence_assoc_equiv.
+      rewrite <- seq_assoc.
       (* r{1,0} (r{min1, delta1} r{min2, delta2})*)
       etransitivity. {
         apply seq_equiv. reflexivity.

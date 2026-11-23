@@ -7,40 +7,6 @@ Section Utilities.
   Context {params: LindenParameters}.
   Context (rer: RegExpRecord).
 
-  Lemma sequence_assoc_equiv r0 r1 r2:
-    Sequence r0 (Sequence r1 r2) ≅[rer] Sequence (Sequence r0 r1) r2.
-  Proof.
-    (* autounfold with tree_equiv; destruct dir; tree_equiv_inv. *)
-    (*tree_equiv_rw; destruct dir; compute_tr_simpl.*)
-    unfold tree_equiv. intros [].
-    - unfold tree_equiv_dir. split. 1: simpl; rewrite app_assoc; reflexivity.
-      intros i gm tr1 tr2 TREE1 TREE2. inversion TREE1; subst. inversion TREE2; subst. simpl in *.
-      clear TREE1 TREE2.
-      inversion CONT0; subst. simpl in CONT1.
-      clear CONT0. revert i gm tr1 tr2 CONT CONT1.
-      change (actions_equiv_dir rer forward [Areg r0; Areg (Sequence r1 r2)] [Areg r0; Areg r1; Areg r2]).
-      apply app_eq_left with (acts := [Areg r0]).
-      unfold actions_equiv_dir. intros inp gm t1 t2 TREE1 TREE2.
-      inversion TREE1; subst. simpl in CONT. replace t2 with t1 by (eapply is_tree_determ; eauto). reflexivity.
-    - unfold tree_equiv_dir. split. 1: simpl; rewrite app_assoc; reflexivity.
-      intros i gm tr1 tr2 TREE1 TREE2. inversion TREE1; subst. inversion TREE2; subst. simpl in *.
-      clear TREE1 TREE2.
-      inversion CONT; subst. simpl in CONT1.
-      clear CONT. revert i gm tr1 tr2 CONT1 CONT0.
-      change (actions_equiv_dir rer backward [Areg r2; Areg r1; Areg r0] [Areg r2; Areg (Sequence r0 r1)]).
-      apply app_eq_left with (acts := [Areg r2]).
-      unfold actions_equiv_dir. intros inp gm t1 t2 TREE1 TREE2.
-      inversion TREE2; subst. simpl in CONT. replace t2 with t1 by (eapply is_tree_determ; eauto). reflexivity.
-  Qed.
-
-  Lemma sequence_assoc_equiv_dir r0 r1 r2:
-    forall dir, Sequence r0 (Sequence r1 r2) ≅[rer][dir] Sequence (Sequence r0 r1) r2.
-  Proof.
-    intros dir.
-    pose proof (sequence_assoc_equiv r0 r1 r2 dir) as SEQASSOC. assumption.
-  Qed.
-  
-
   Create HintDb is_tree.
   Hint Constructors is_tree: is_tree.
   Lemma is_tree_skip_epsilon_r a i gm dir tr:
