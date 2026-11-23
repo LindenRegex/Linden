@@ -165,13 +165,10 @@ Section Examples.
       x ≅[rer][dir] x' -> y ≅[rer][dir] y' ->
       Disjunction x y ≅[rer][dir] Disjunction x' y'.
   Proof.
-    intros x x' y y' dir [GRPX EQSX] [GRPY EQSY]; split; simpl.
-    apply groups_equiv_app; auto.
-    intros i gm t1 t2 TREE1 TREE2.
-    inversion TREE1; inversion TREE2; subst. clear TREE1 TREE2. simpl.
-    unfold tree_equiv_tr_dir. simpl. apply leaves_equiv_app.
-    specialize (EQSX _ _ _ _ ISTREE1 ISTREE0). auto.
-    specialize (EQSY _ _ _ _ ISTREE2 ISTREE3). auto.
+    intros x x' y y' dir EQX EQY; simpl.
+    specialize (regex_equiv_ctx_samedir _ x x' dir EQX (CDisjunctionR CHole y) (eq_refl)) as XX'.
+    specialize (regex_equiv_ctx_samedir _ y y' dir EQY (CDisjunctionL x' CHole) (eq_refl)) as YY'.
+    simpl in XX', YY'. rewrite XX'. rewrite YY'. reflexivity.
   Qed.
 
   Lemma disj_elim_copy: forall r1 r2 dir,
