@@ -1,6 +1,13 @@
 From Linden Require Import ProofSetup.
 From Linden.Rewriting Require Import Examples FlatMap ForcedQuant Associativity Distributivity RegexpTree.
 
+(* Regexes are said to be non-ambigous when they can match in atmost one way.
+   We define an under-approximating non-ambiguous analaysis, and prove its correctness.
+   When some regexes are non-ambiguous, more rewrits become possible: those that would
+   be prevented by the different ways of matching said regex.
+   We state and prove rewrites that are only possible when some regex is unambiguous,
+   particularly quantifier merging ones, like in RegexpTree.v.
+ *)
 
 Section UnAmbiguity.
   Context {params: LindenParameters}.
