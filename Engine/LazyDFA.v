@@ -41,6 +41,20 @@ Proof. repeat (decide equality). Defined.
 Definition dec_eqb {T} (dec : forall x y : T, {x = y} + {x <> y}) (x y : T) : bool :=
   if dec x y then true else false.
 
+Lemma dec_eqb_true_iff : forall {T} (dec : forall x y : T, {x = y} + {x <> y}) x y,
+  dec_eqb dec x y = true <-> x = y.
+Proof.
+  intros T dec x y. unfold dec_eqb.
+  destruct (dec x y); split; intro H; congruence.
+Qed.
+
+Lemma dec_eqb_false_iff : forall {T} (dec : forall x y : T, {x = y} + {x <> y}) x y,
+  dec_eqb dec x y = false <-> x <> y.
+Proof.
+  intros T dec x y. unfold dec_eqb.
+  destruct (dec x y); split; intro H; congruence.
+Qed.
+
 Definition dfa_state_contains (st: dfa_state) (i: internal_state) : bool :=
   List.existsb (fun x => dec_eqb internal_state_eq_dec x i) st.
 
@@ -68,9 +82,55 @@ Definition get_trans (table: transition_table) (curr: dfa_state) (char: Characte
     dec_eqb dfa_state_eq_dec s curr
     && dec_eqb EqDec.eq_dec c char) table).
 
+Lemma empty_trans: 
+forall curr char,
+  get_trans [] curr char = None.
+Proof.
+  auto.
+Qed.
+
 Definition add_trans (table : transition_table) (curr : dfa_state) (char : Character)
   (next : dfa_state) (found_match : bool) : transition_table :=
     (curr, char, next, found_match) :: table.
+
+Lemma new_tab:
+  forall (curr': dfa_state) (char': Character) (next': dfa_state) (b': bool) (ttab ttab': transition_table)
+    (NEWTAB: ttab' = add_trans ttab curr' char' next' b')
+    (curr next: dfa_state) (char: Character) (b: bool)
+    (DIFFTRANS: dec_eqb dfa_state_eq_dec curr' curr = false \/ dec_eqb EqDec.eq_dec char' char = false),
+      get_trans ttab curr char = get_trans ttab' curr char.
+Proof.
+  intros. subst ttab'.
+  unfold get_trans, add_trans.
+  cbn [find].
+  destruct DIFFTRANS as [H | H].
+  - rewrite H. cbn [andb]. reflexivity.
+  - rewrite H. rewrite Bool.andb_false_r. reflexivity.
+Qed.
+
+Lemma get_trans_add_trans_gen_inv :
+  forall (ttab : transition_table) (curr curr0 next next0 : dfa_state) 
+         (char char0 : Character) (fm b : bool),
+    get_trans (add_trans ttab curr char next fm) curr0 char0 = Some (next0, b) ->
+    (curr = curr0 /\ char = char0 /\ next = next0 /\ fm = b) \/
+    (get_trans ttab curr0 char0 = Some (next0, b)).
+Proof.
+  intros ttab curr curr0 next next0 char char0 fm b H.
+  unfold get_trans, add_trans in H.
+  simpl in H.
+  destruct (dec_eqb dfa_state_eq_dec curr curr0) eqn:Hcurr;
+  destruct (dec_eqb EqDec.eq_dec char char0) eqn:Hchar;
+  simpl in H.
+  - left.
+    apply dec_eqb_true_iff in Hcurr.
+    apply dec_eqb_true_iff in Hchar.
+    injection H as Hnext Hb.
+    auto.
+  - right. exact H.
+  - right. exact H.
+  - right. exact H.
+Qed.
+
 
 (* states of the LazyDFA algorithm *)
 Inductive ldfa_state : Type :=
@@ -596,6 +656,7 @@ Ltac simpl_length :=
   | H: _ |- context[_ + 0] => rewrite PeanoNat.Nat.add_0_r
   | H: context[_ + 0] |- _ => rewrite PeanoNat.Nat.add_0_r in H
   | H: _ |- S _ < S _ => rewrite <- PeanoNat.Nat.succ_lt_mono 
+  | H: _ |- NoDup [] => constructor
   | _ => unfold in_range; simpl in *; auto; try lia
   end.
 
@@ -983,14 +1044,75 @@ Definition ldfa_measure (st: ldfa_state) : nat :=
   | LDFA_final res => 0
   end.
 
+Definition get_curr (st: ldfa_state) : dfa_state := 
+  match st with
+  | LDFA curr inp ttab best => curr
+  | LDFA_final res => []
+  end.
+
+Definition get_cache (st: ldfa_state) : transition_table := 
+  match st with
+  | LDFA curr inp ttab best => ttab
+  | LDFA_final res => []
+  end.
+
+Definition ldfa_cache_inv (c:code) (ttab: transition_table) : Prop :=
+  forall curr char next b, 
+    get_trans ttab curr char = Some (next, b) -> 
+    in_range c next /\ NoDup next.
+
+Create HintDb ldfa.
+Hint Unfold in_range get_currpcs get_next get_cache ldfa_cache_inv get_curr get_trans get_out get_wq ldfa_cache_inv add_trans : ldfa.
+Hint Resolve NoDup_nil (* empty_trans *) : ldfa.
+
 Inductive ldfa_inv (c:code): ldfa_state -> nat -> Prop :=
 | ldfa_inv_: forall st
-  (* (NODUPNEXT: NoDup (get_next st))
-  (WFNEXT: in_range c (get_next st))
-  (NODUPCURR: NoDup (get_currpcs st))
-  (WFCURR: in_range c (get_currpcs st)) *)
+  (VALIDCACHE: ldfa_cache_inv c (get_cache st))
+  (NODUPCURR: NoDup (get_curr st))
+  (WFCURR: in_range c (get_curr st)) 
   ,
   ldfa_inv c st (ldfa_measure st).
+
+Theorem ldfa_initial_measure:
+  forall inp r init_st,
+    pike_regex r ->
+    initial_ldfa_rel (compilation' r) inp init_st ->
+    ldfa_inv (compilation' r) init_st (inpsize inp).
+Proof.
+  intros inp r init_st H_REG H_INIT.
+  destruct H_INIT as [init_dfa_st [EPS_INIT H_INIT]].
+  pose proof (ldfa_eps_initial_measure inp r H_REG) as INV_INIT.
+  unfold epsilon_closure_rel, initial_epsilon_state in *.
+  pose proof (compiled_wf rer r) as H_WF.
+  pose proof (eps_result_inv _ _ _ _ H_WF EPS_INIT INV_INIT) as EPS_INV.
+  inversion EPS_INV; subst.
+  constructor; unfold get_curr, get_out, get_cache, ldfa_cache_inv in *; auto with ldfa.
+  intros; pose proof (empty_trans); congruence.
+Qed.
+
+Ltac ldfa_decreases_solver :=
+  match goal with 
+  | H: get_trans (add_trans ?ttab ?curr ?char ?next ?b') ?curr0 ?char0 = Some (?next0, ?b) |- _ =>
+    apply get_trans_add_trans_gen_inv in H; destruct H as [[EQCURR [EQCHAR [EQNEXT EQB]]] | OLDTRANS]; subst
+  | VALIDCACHE :
+    forall (curr : dfa_state) (char : Character) (next : dfa_state) (b : bool),
+    get_trans ?ttab curr char = Some (next, b) -> in_range ?code next /\ NoDup next,
+    OLDTRANS : get_trans ?ttab ?curr0 ?char0 = Some (?next0, ?b) 
+    |- in_range ?code ?next0 /\ NoDup ?next0
+    => eapply VALIDCACHE; eauto
+  | COMP_NEXT :
+    clos_refl_trans ldfa_nextloop_state (next_loop_rel ?code ?i)
+    (LDFA_Next_Running [] ?curr) (LDFA_Next_Done ?next ?b),
+    WF : code_wf ?code (size ?code) 
+    |- _
+    => 
+    remember (LDFA_Next_Running [] curr) as s1;
+    assert (S1_INV: ldfa_next_inv code s1 (next_measure s1)) by
+    (constructor; unfold get_next, get_currpcs; subst; simpl in *; auto with ldfa);
+    pose proof (next_result_inv code i _ _ _ WF COMP_NEXT S1_INV) as NEXT_INV;
+    inversion NEXT_INV; subst; auto
+  | _ => auto
+  end.
 
 Theorem ldfa_decreases:
   forall code s1 s2 m1,
@@ -1002,7 +1124,10 @@ Proof.
   intros code s1 s2 m1 WF STEP INV1.
   inversion STEP; inversion INV1; 
   exists (ldfa_measure s2); subst.
-  all: split; [constructor | ]; repeat simpl_length; try apply inpsize_strict; subst; try apply advance_input_decreases; auto.
+  all: split; [constructor | ]; repeat simpl_length; try apply inpsize_strict; subst; try apply advance_input_decreases; auto with ldfa.
+  all: unfold ldfa_cache_inv in *; intros; try (pose proof (empty_trans); congruence).
+  1-4: destruct (VALIDCACHE _ _ _ _ CACHED_TRANS) as [H1 H2]; auto.
+  all: subst next_ttab; repeat ldfa_decreases_solver.
 Qed.
 
 (************** PROGRESS ***************)
