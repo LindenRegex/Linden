@@ -321,7 +321,7 @@ Section UnAmbiguity.
     inversion TREE12; inversion TREE22. inversion ISTREE. inversion TREE21. subst.
     rewrite GROUPEMPT in *. simpl in *.
     destruct plus;  simpl in H1;  try discriminate.
-    all: inversion H1; subst; eapply check_not_stops_quantifier; eauto.
+    inversion H1; subst; eapply check_not_stops_quantifier; eauto.
     assert (n0 = n) by lia. subst. assumption.
   Qed.
 
