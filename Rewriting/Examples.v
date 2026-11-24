@@ -192,77 +192,53 @@ Section Examples.
      can only advance compared to the input it has started from.
    *)
 
-  (* If a property is true for all elements in a list it is true for it's head and it's tail *)
-  Lemma in_concat_prop:
-    forall d rest P,
-      (forall a : action, In a (d :: rest) -> P a) ->
-      P d /\ (forall a, In a rest -> P a).
-  Proof.
-    intros. split.
-    eapply H. simpl. auto.
-    intros. apply H. simpl. auto.
-  Qed.
-
   (* If all elements in a list do not define groups, and are either a regex
      or a check ,then all leave's groups will be the same as the regex's
      group input *)
   Lemma emptygroups_const_groups_ind:
-    forall acts inp inp2 gm gm2 dir t,
+    forall acts inp gm dir t,
       is_tree rer acts inp gm dir t ->
-      (forall a, In a acts -> (exists r, a = (Areg r) /\ def_groups r = []) \/ exists inp, a = (Acheck inp)) ->
-      In (inp2, gm2) (tree_leaves t gm inp dir) ->
-      gm = gm2.
+      Forall (fun a => (exists r, a = Areg r /\ def_groups r = []) \/ (exists i, a = Acheck i)) acts ->
+      Forall (fun l: leaf => let (_ , gm1) := l in gm = gm1) (tree_leaves t gm inp dir).
   Proof.
-    intros acts i1 i2 g1 g2 dir t1 T1 inTa inT.
-    revert i2 g2 inT inTa.
-    (* simple case: derives directly from definition*)
-    induction T1; intros; simpl in inT; try inversion inT; try inversion H; try reflexivity.
-    (* The property is true both for the head and the tail*)
-    all: eapply in_concat_prop in inTa as [[[rn rnIn] | [i iIn]] d3].
-    (* Delete cases where we have a check*)
-    all: try (destruct rnIn; inversion H); try discriminate.
-    (* Divide all cases where in contains two lists*)
-    all: try apply in_app_or in inT as [c1 | c2].
-    (* Solve all trivial cases *)
-    all: try (eapply IHT1; eauto; intros).
-    - unfold advance_input' in inT.
-      apply read_char_success_advance in READ.
-      rewrite READ in inT. exact inT.
-    - eapply IHT1_1; eauto; intros. subst. simpl in H0.
-      apply app_eq_nil in H0 as [l1 l2].
-      destruct H1. left. exists r1; split; auto.
-      eapply d3; eauto.
-    - eapply IHT1_2; eauto; intros. subst. simpl in H0.
-      apply app_eq_nil in H0 as [l1 l2].
-      destruct H1. left. exists r2; split; auto.
-      eapply d3; eauto.
-    - intros. apply in_app_or in H1 as [in1 | in2].
-      2: eapply d3; eauto.
-      subst. simpl in H0. apply app_eq_nil in H0 as [l1 l2].
-      destruct dir; destruct in1; try inversion H0; try inversion H1; left.
-      1, 4: (exists r1; split; eauto).
-      all: (exists r2; split; eauto).
-    - subst. simpl in H0. rewrite H0 in *.
-      simpl in *. eapply IHT1; eauto. intros.
-      repeat destruct H1; eauto.
-    - subst. simpl in H0. rewrite H0 in *.
-      simpl in *. destruct greedy; simpl in inT.
-      all: apply in_app_or in inT as [inT1 | inT2].
+    intros acts inp gm dir t T1 inA. 
+    induction T1; simpl; auto; eapply Forall_cons_iff in inA as [[[r [closeR undefR]] | [i checkId]] e2]; try discriminate; auto.
+    all: try inversion closeR; try inversion checkId; subst; simpl in undefR; try discriminate.
+    - apply read_char_success_advance in READ.
+      unfold advance_input'. rewrite READ. eapply IHT1; auto.
+    - eapply app_eq_nil in undefR as [a1Empt a2Empt].
+      eapply Forall_app; split.
+      + eapply IHT1_1; eauto.
+      + eapply IHT1_2; eauto.
+    - eapply app_eq_nil in undefR as [a1Empt a2Empt].
+      eapply IHT1. eapply Forall_app; split; auto.
+      destruct dir; repeat (eapply Forall_cons_iff; split); try eapply FlatMap_nil.
+      all: left; eexists; auto.
+    - rewrite undefR in *. simpl in IHT1. eapply IHT1; eauto. 
+      repeat (eapply Forall_cons_iff; split); auto.
+      all: left; eexists; auto.
+    - destruct greedy; simpl; eapply Forall_app; split.
       2, 3: eapply IHT1_2; eauto.
-      all: eapply IHT1_1; intros; repeat destruct H1; eauto.
-    - subst. simpl in H0. rewrite app_cons in H0.
-      apply app_eq_nil in H0 as [l1 l2]. discriminate.
+      + rewrite undefR in *; eapply IHT1_1; eauto.
+        repeat (eapply Forall_cons_iff; split); auto.
+        2: right; eexists; eauto.
+        all: left; eexists; eauto.
+      + rewrite undefR in *; eapply IHT1_1; eauto.
+        repeat (eapply Forall_cons_iff; split); auto.
+        2: right; eexists; eauto.
+        all: left; eexists; eauto.
     - unfold lk_result in RES_LK. rewrite first_tree_leaf in RES_LK.
       remember (positivity lk) as l1.
       remember (tree_leaves treelk gm inp (lk_dir lk)) as l2.
-      destruct l1, l2; try inversion inT.
+      destruct l1, l2; try apply Forall_nil.
       + destruct l. simpl in *. inversion RES_LK; subst.
-        assert (gmlk = g2). eapply IHT1_2; eauto. subst.
-        eapply IHT1_1; eauto. intros. destruct H1; auto.
-        left; exists r1; split; auto. contradiction.
+        assert (Forall (fun l : leaf => let (_, gm1) := l in gm = gm1) ((i, gmlk) :: l2)).
+        eapply IHT1_1. eapply Forall_cons. left. exists r1; auto. apply Forall_nil.
+        eapply Forall_cons_iff in H as [eq1 eq2]; subst.
+        eapply IHT1_2; auto.
       + simpl in RES_LK. inversion RES_LK; subst. eapply IHT1_2; eauto.
-    - eapply read_backref_success_advance in READ_BACKREF.
-      rewrite <- READ_BACKREF in inT; exact inT.
+    - apply read_backref_success_advance in READ_BACKREF.
+      rewrite <- READ_BACKREF. eapply IHT1; auto.
   Qed.
 
   (* In the case where we define no groups, the groups created remain constant *)
@@ -273,9 +249,9 @@ Section Examples.
       In (inp2, gm2) (tree_leaves t gm inp dir) ->
       gm = gm2.
   Proof.
-    intros. eapply emptygroups_const_groups_ind; eauto.
-    intros. inversion H2; inversion H3.
-    subst. left. exists r. split; eauto.
+    intros. eapply Forall_forall in H1.
+    2: eapply emptygroups_const_groups_ind; eauto.
+    simpl in H1; auto.
   Qed.
 
   (* Inputs of leaves only make (non-strictly positive) progress in the direction
