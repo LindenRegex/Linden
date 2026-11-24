@@ -1,5 +1,5 @@
 From Linden Require Import ProofSetup.
-From Linden.Rewriting Require Import Examples FlatMap ForcedQuant Associativity Distributivity.
+From Linden.Rewriting Require Import Examples FlatMap ForcedQuant Associativity Distributivity InfQuantified.
 
 Coercion nat_to_N (n: nat) := NoI.N n.
 

@@ -1,5 +1,5 @@
 From Linden Require Import ProofSetup.
-From Linden.Rewriting Require Import Examples FlatMap ForcedQuant Associativity Distributivity RegexpTree.
+From Linden.Rewriting Require Import Examples FlatMap ForcedQuant Associativity Distributivity RegexpTree InfQuantified.
 
 (* Regexes are said to be non-ambigous when they can match in atmost one way.
    We define an under-approximating non-ambiguous analaysis, and prove its correctness.
