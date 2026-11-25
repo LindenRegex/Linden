@@ -186,18 +186,17 @@ Section UnAmbiguity.
       (* Case 2.2: Mismatch *)
       + clear TREE2 TREE1 H3. subst; simpl in *.
         assert (IinT3: In (inp2, gm2) (tree_leaves t3 gm inp dir)).
-        destruct g; simpl; rewrite t; left; reflexivity.
+        { destruct g; simpl; rewrite t; left; reflexivity. }
         assert (inp = inp2) by (eapply input_does_not_back; eauto).
-        assert (gm = gm2) by (eapply emptygroups_const_groups; eauto).
+        assert (gm = gm2) by (eapply emptygroups_const_groups; eauto). 
         inversion TREE; inversion SKIP; subst. simpl. leaves_equiv_t.
         rewrite UNDEFGROUPS in *; simpl in *.
         rewrite app_cons in ISTREE1.
         eapply leaves_concat with (act1 := [Areg r1])in ISTREE1; eauto.
         rewrite t in ISTREE1. apply FlatMap_one_leaf in ISTREE1.
         inversion ISTREE1; inversion TREE1; subst; simpl in *.
-        exfalso. eapply StrictSuffix.ss_irreflexive; eauto.
-        destruct g; simpl; rewrite <- H3.
-        all: leaves_equiv_t.
+        { exfalso. eapply StrictSuffix.ss_irreflexive; eauto. }
+        destruct g; simpl; rewrite <- H3; leaves_equiv_t.
   Qed.
 
   (* If a regex is unambigous and does not define any groups,
@@ -226,7 +225,7 @@ Section UnAmbiguity.
       (* Case 2.2: Mismatch *)
       + clear TREE2 TREE1 H3. subst; simpl in *.
         assert (IinT3: In (inp2, gm2) (tree_leaves t3 gm inp dir)).
-        destruct g; simpl; rewrite t; left; reflexivity.
+        { destruct g; simpl; rewrite t; left; reflexivity. }
         assert (inp = inp2) by (eapply input_does_not_back; eauto).
         assert (gm = gm2) by (eapply emptygroups_const_groups; eauto).
         inversion TREE; inversion SKIP; subst. simpl. leaves_equiv_t.
@@ -236,8 +235,7 @@ Section UnAmbiguity.
         rewrite t in ISTREE1. apply FlatMap_one_leaf in ISTREE1.
         inversion ISTREE1; inversion TREE1; subst; simpl in *.
         exfalso. eapply StrictSuffix.ss_irreflexive; eauto.
-        destruct g; simpl; rewrite <- H3.
-        all: leaves_equiv_t.
+        destruct g; simpl; rewrite <- H3; leaves_equiv_t.
   Qed.
 
   (* If a regex is unambigous and defines no groups, then it's open greedy quantified
@@ -798,7 +796,8 @@ Section UnAmbiguity.
 
   (** * LAZY QUANTIFIED MERGE *)
   (* Here we prove the second statement about unambigous regex which states that
-  if r is unambigous r{0, d1}? r{0, d2}? ~ r{0, d1 + d2}?. This can then be merged with previou *)
+  if r is unambigous r{0, d1}? r{0, d2}? ~ r{0, d1 + d2}?. The statement can be merged with the other statement
+  proved in this file to generalize the rewrite for any m1, m2*)
 
   (* If r is unambigous and a lazy quantifier has a lower number of optional iteration than another one,
   then the leaves of the first quantified are a prefix of the leaves of the second quantified *)
