@@ -153,68 +153,6 @@ Section UnAmbiguity.
     specialize (is_tree_determ _ _ _ _ _ _ _ ISTREE2 TREE) as eq2. subst.
     apply leaves_equiv_refl.
   Qed.
-
-  (* Prefix of list (like inclusion but keeping a sense of order) *)
-  Definition prefix {A} (a b: list A) :=
-    exists acts, b = a ++ acts.
-
-  (* Base case of prefix *)
-  Lemma prefix_base {A}:
-    forall (a: list A),
-      prefix [] a.
-  Proof.
-    intros a. exists a. auto.
-  Qed.
-
-  (* Inductive definition of prefix *)
-  Lemma prefix_head {A}:
-    forall (a b c: list A),
-      prefix (a ++ b) (a ++ c) ->
-      prefix b c.
-  Proof.
-    intros a b c [acts actsEq].
-    exists acts. rewrite <- app_assoc in actsEq.
-    apply app_inv_head in actsEq. auto.
-  Qed.
-
-  (* Inductive definition of prefix but with cons *)
-  Lemma prefix_h {A}:
-    forall a (b c: list A),
-      prefix (a :: b) (a :: c) ->
-      prefix b c.
-  Proof.
-    intros a b c d.
-    eapply prefix_head. rewrite <- app_cons.
-    rewrite <- app_cons. exact d.
-  Qed.
-
-  (* Reflexivity of prefix *)
-  Lemma prefix_refl {A}:
-    forall (a: list A),
-      prefix a a.
-  Proof.
-    intros. exists []. rewrite app_nil_r. auto.
-  Qed.
-
-  (* If a list has a prefix and is equal to another list then we can append the
-  prefix in the equality *)
-  Theorem leaves_equiv_pref:
-    forall l1 l2 l3 ,
-      leaves_equiv [] l1 l3 ->
-      prefix l2 l1 ->
-      leaves_equiv [] l1 (l2 ++ l3).
-  Proof.
-    intros t1 t2 t3  lEq1 [acts lPref].
-    rewrite lPref in lEq1. rewrite  lPref. clear t1 lPref.
-    assert (leaves_equiv [] t2 t2) by reflexivity.
-    eapply leaves_equiv_app  with (p1 := t2) in lEq1. 2: reflexivity.
-    eapply leaves_equiv_trans; eauto.
-    rewrite app_assoc. apply leaves_equiv_app with (l1 := acts) (l2 := acts).
-    2: reflexivity.
-    eapply leaves_equiv_repet.
-  Qed.
-
-
   (** * CHECK NOT STOPS QUANTIFIED *)
   (* This section presents the first of the two properties we found for non ambigous regex.
   The idea being that if a regex in non ambigous and defines no groups, then
@@ -952,12 +890,12 @@ Section UnAmbiguity.
         pose proof (atmost_level_prefix _  (S delta1) _ _ _ _ _ treecont TREECONT0).
         simpl in H. assert (n0 + S delta1 = delta1 + S n0) by lia. rewrite H0 in H.
         specialize (H TREECONT UNAMBR) as [acts eq].
-        symmetry. eapply leaves_equiv_pref; unfold prefix; eauto. symmetry.
-        eapply IHdelta1; eauto. rewrite <- H5. simpl. exists acts. auto.
+        symmetry. eapply leaves_equiv_pref; eauto. symmetry.
+        eapply IHdelta1; eauto. apply prefix_rw. rewrite <- H5. simpl. exists acts. auto.
         symmetry. eapply leaves_equiv_pref; eauto. destruct plus. 2: discriminate.
         inversion H1; subst.
         symmetry. eapply IHdelta1; eauto.
-        exists []. rewrite <- H5. simpl. simpl in TREECONT0.
+        apply prefix_rw. exists []. rewrite <- H5. simpl. simpl in TREECONT0.
         eapply is_tree_determ in TREECONT; eauto. subst. rewrite app_nil_r.
         reflexivity.
   Qed.
@@ -1014,10 +952,10 @@ Section UnAmbiguity.
         destruct plus.
         pose proof (atmost_level_prefix _  +∞ _ _ _ _ _ treecont0 TREECONT1).
         simpl in H. specialize (H TREECONT0 UNAMBR) as [acts eq].
-        eapply leaves_equiv_pref; unfold prefix; eauto. eapply IHl; eauto.
+        eapply leaves_equiv_pref; try apply prefix_rw; eauto. eapply IHl; eauto.
         pose proof (strict_suffix_remaining_length _ _ _ PROGRESS); try lia.
         pose proof (is_tree_determ _ _ _ _ _ _ _ TREECONT0 TREECONT1); subst.
-        eapply leaves_equiv_pref; unfold prefix;  eauto. eapply IHl; eauto.
+        eapply leaves_equiv_pref; try apply prefix_rw;  eauto. eapply IHl; eauto.
         pose proof (strict_suffix_remaining_length _ _ _ PROGRESS); try lia.
         exists []. rewrite app_nil_r; reflexivity.
   Qed.

@@ -1,4 +1,5 @@
 From Linden Require Import LeavesEquivalence Parameters Tree.
+From Linden Require Import LeavesEquivalence.
 From Stdlib Require Import List.
 Import ListNotations.
 
@@ -201,10 +202,34 @@ Proof.
 Qed.
 
 Lemma FlatMap_one_leaf:
-    forall X Y (x:X) f (y:list Y),
-      FlatMap [x] f y ->
-      f x y.
+  forall X Y (x:X) f (y:list Y),
+    FlatMap [x] f y ->
+    f x y.
 Proof.
   intros X Y x f y H. inversion H; inversion FM; subst.
   rewrite app_nil_r. auto.
+Qed.
+
+
+(* Function inclusion with propositional functions: when for all a, f1(a) ⊆ f2(a). *)
+Definition funct_incl {A B} (f1 f2: A -> list B -> Prop) :=
+  forall a l1 l2, f1 a l1 -> f2 a l2 -> LeavesEquivalence.incl l1 l2.
+
+Lemma flatmap_incl {A B}:
+  forall (leaves: list A) (f1 f2: A -> list B -> Prop) leaves1 leaves2,
+    FlatMap leaves f1 leaves1 ->
+    FlatMap leaves f2 leaves2 ->
+    funct_incl f1 f2 ->
+    LeavesEquivalence.incl leaves1 leaves2.
+Proof.
+  intros leaves f1 f2 leaves1 leaves2 FM1 FM2 INCL.
+  generalize dependent leaves2.
+  induction FM1.
+  - intros _ _ _ [].
+  - specialize (IHFM1 INCL). intros leaves2 FM2 lf Hin.
+    inversion FM2; subst.
+    specialize (INCL _ _ _ HEAD HEAD0).
+    apply in_app_or in Hin. destruct Hin.
+    + apply in_or_app. left. auto.
+    + apply in_or_app. right. unfold LeavesEquivalence.incl in IHFM1. auto.
 Qed.

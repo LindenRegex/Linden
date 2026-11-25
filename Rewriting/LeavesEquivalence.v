@@ -429,6 +429,121 @@ Section Lemmas.
     apply leaves_equiv_append_head. apply leaves_equiv_comm.
     rewrite app_assoc. apply leaves_equiv_app_seen; auto.
   Qed.
+
+  (* Inclusion of lists (viewed as sets) *)
+  Definition incl {A} (a b: list A) :=
+    forall x, In x a -> In x b.
+
+  Lemma leaves_equiv_incl':
+    forall a b c: list leaf,
+      leaves_equiv [] a b ->
+      incl c b ->
+      leaves_equiv [] (a ++ c) b.
+  Proof.
+    intros. apply leaves_equiv_comm. rewrite <- app_nil_r with (l := b).
+    apply leaves_equiv_app2.
+    - now apply leaves_equiv_comm.
+    - rewrite app_nil_r. induction c.
+      + apply leaves_equiv_refl.
+      + destruct a0 as [inp gm]. apply equiv_seen_right.
+        * apply is_seen_spec. unfold incl in H0. apply H0. left. reflexivity.
+        * apply IHc. intros x Hin. apply H0. right. auto.
+  Qed.
+
+  Lemma leaves_equiv_incl:
+      forall a b c d e: list leaf,
+        leaves_equiv [] a b -> leaves_equiv [] d e ->
+        incl c b ->
+        leaves_equiv [] (a ++ c ++ d) (b ++ e).
+    Proof.
+      intros. rewrite app_assoc.
+      apply leaves_equiv_app; auto. apply leaves_equiv_incl'; auto.
+    Qed.
+
+    Lemma leaves_equiv_incl2:
+      forall a b c,
+        incl b a ->
+        leaves_equiv [] a c ->
+        leaves_equiv [] (a ++ b) c.
+    Proof.
+      intros. rewrite <- app_nil_r. eapply leaves_equiv_app2.
+      assumption. rewrite app_nil_r. revert a H H0.
+      induction b. intros a H H0. apply leaves_equiv_refl.
+      intros. destruct a. constructor.
+      rewrite is_seen_spec. eapply H; eauto. simpl. left. reflexivity.
+      eapply IHb; eauto. intros x iA. specialize (H x). simpl in H.
+      eapply H. right; auto.
+    Qed.
+
+    Lemma leaves_equiv_incl3:
+      forall a b c d,
+        incl c a ->
+        leaves_equiv [] (a ++ b) d ->
+        leaves_equiv [] (a ++ b ++ c) d.
+    Proof.
+      intros. rewrite app_assoc.
+      eapply leaves_equiv_incl2 ; eauto.
+      intros x xIa. apply in_or_app. left. auto.
+    Qed.
+
+    Lemma leaves_equiv_incl4:
+      forall a b c d e: list leaf,
+        leaves_equiv [] a b ->
+        leaves_equiv [] c e ->
+        incl d a ->
+        leaves_equiv [] (a ++ c ++ d) (b ++ e).
+    Proof.
+      intros.
+      apply leaves_equiv_incl3. assumption.
+      apply leaves_equiv_app; auto.
+    Qed.
+
+    Inductive prefix {A}: list A -> list A -> Prop :=
+    | empty: forall l1, prefix [] l1
+    | next: forall l1 l2 el, prefix l1 l2 -> prefix (el :: l1) (el :: l2).
+
+    (* Reflexivity of prefix *)
+    Lemma prefix_refl {A}:
+      forall (a: list A),
+        prefix a a.
+    Proof.
+      intros. induction a; repeat constructor; auto.
+    Qed.
+
+
+    Lemma prefix_rw {A}:
+      forall (a b: list A),
+        prefix a b <->
+        exists acts, b = a ++ acts.
+    Proof.
+      intros. split.
+      - intros H. induction H as [l1 | l2 l3 el pref [acts IH]].
+        + exists l1; auto.
+        + exists acts; rewrite IH; auto.
+      - intros H.  generalize dependent b. induction a.
+        + constructor.
+        + intros. destruct H. rewrite H.
+          constructor. apply IHa. eexists. auto.
+    Qed.
+
+    (* If a list has a prefix and is equal to another list then we can append the
+  prefix in the equality *)
+    Theorem leaves_equiv_pref:
+      forall l1 l2 l3 ,
+        leaves_equiv [] l1 l3 ->
+        prefix l2 l1 ->
+        leaves_equiv [] l1 (l2 ++ l3).
+    Proof.
+      intros t1 t2 t3 lEq1 pref. eapply prefix_rw in pref as [acts lPref].
+      rewrite lPref in lEq1. rewrite  lPref. clear t1 lPref.
+      assert (leaves_equiv [] t2 t2) by apply leaves_equiv_refl.
+      eapply leaves_equiv_app  with (p1 := t2) in lEq1. 2: apply leaves_equiv_refl.
+      eapply leaves_equiv_trans; eauto.
+      rewrite app_assoc. apply leaves_equiv_app with (l1 := acts) (l2 := acts).
+      2: apply leaves_equiv_refl.
+      eapply leaves_equiv_repet.
+  Qed.
+
 End Lemmas.
 
 (* Leaves equivalence is an equivalence relation *)

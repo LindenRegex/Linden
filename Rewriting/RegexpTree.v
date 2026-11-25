@@ -231,35 +231,6 @@ Section RegexpTree.
     leaves of the branch r{0,m+n}, and hence are duplicates of the leaves of
     r{0,m+n}, so the equivalence holds. *)
 
-    (* Inclusion of lists (viewed as sets) *)
-    Definition incl {A} (a b: list A) :=
-      forall x, In x a -> In x b.
-
-    (* Function inclusion with propositional functions: when for all a, f1(a) ⊆ f2(a). *)
-    (* We will use this notion with f1 := act_from_leaf [r{0,n-1}] and
-    f2 := act_from_leaf [r{0,m+n}]. *)
-    Definition funct_incl {A B} (f1 f2: A -> list B -> Prop) :=
-      forall a l1 l2, f1 a l1 -> f2 a l2 -> incl l1 l2.
-
-    Lemma flatmap_incl {A B}:
-      forall (leaves: list A) (f1 f2: A -> list B -> Prop) leaves1 leaves2,
-        FlatMap leaves f1 leaves1 ->
-        FlatMap leaves f2 leaves2 ->
-        funct_incl f1 f2 ->
-        incl leaves1 leaves2.
-    Proof.
-      intros leaves f1 f2 leaves1 leaves2 FM1 FM2 INCL.
-      generalize dependent leaves2.
-      induction FM1.
-      - intros _ _ _ [].
-      - specialize (IHFM1 INCL). intros leaves2 FM2 lf Hin.
-        inversion FM2; subst.
-        specialize (INCL _ _ _ HEAD HEAD0).
-        apply in_app_or in Hin. destruct Hin.
-        + apply in_or_app. left. auto.
-        + apply in_or_app. right. unfold incl in IHFM1. auto.
-    Qed.
-
     (* The inclusion lemma: for all m and d, the leaves of r{0,m} are
     included in those of r{0,m+d}. *)
     Lemma atmost_leaves_incl' (m: nat) (d: non_neg_integer_or_inf) (g: bool) r:
@@ -324,32 +295,6 @@ Section RegexpTree.
         incl (tree_leaves tm gm inp dir) (tree_leaves tn gm inp dir).
     Proof.
       intros. apply atmost_leaves_incl' with (m := m) (d := +∞) (r := r) (tm := tm) (g := g); auto.
-    Qed.
-
-    Lemma leaves_equiv_incl':
-      forall a b c: list leaf,
-        leaves_equiv [] a b ->
-        incl c b ->
-        leaves_equiv [] (a ++ c) b.
-    Proof.
-      intros. symmetry. rewrite <- app_nil_r with (l := b).
-      apply leaves_equiv_app2.
-      - now symmetry.
-      - rewrite app_nil_r. induction c.
-        + reflexivity.
-        + destruct a0 as [inp gm]. apply equiv_seen_right.
-          * apply is_seen_spec. unfold incl in H0. apply H0. left. reflexivity.
-          * apply IHc. intros x Hin. apply H0. right. auto.
-    Qed.
-
-    Lemma leaves_equiv_incl:
-      forall a b c d e: list leaf,
-        leaves_equiv [] a b -> leaves_equiv [] d e ->
-        incl c b ->
-        leaves_equiv [] (a ++ c ++ d) (b ++ e).
-    Proof.
-      intros. rewrite app_assoc.
-      apply leaves_equiv_app; auto. apply leaves_equiv_incl'; auto.
     Qed.
 
     Lemma atmost_atmost_equiv_actions_mnat (m: nat) (n: non_neg_integer_or_inf) r:
@@ -642,44 +587,6 @@ Section RegexpTree.
     (** * Proving open greedy on both sides **)
 
     (** Helpers to prove tree equality by other equalities and inclusions **)
-    Lemma leaves_equiv_incl2:
-      forall a b c,
-        incl b a ->
-        leaves_equiv [] a c ->
-        leaves_equiv [] (a ++ b) c.
-    Proof.
-      intros. rewrite <- app_nil_r. eapply leaves_equiv_app2.
-      assumption. rewrite app_nil_r. revert a H H0.
-      induction b. intros a H H0. reflexivity.
-      intros. destruct a. constructor.
-      rewrite is_seen_spec. eapply H; eauto. simpl. left. reflexivity.
-      eapply IHb; eauto. intros x iA. specialize (H x). simpl in H.
-      eapply H. right; auto.
-    Qed.
-
-    Lemma leaves_equiv_incl3:
-      forall a b c d,
-        incl c a ->
-        leaves_equiv [] (a ++ b) d ->
-        leaves_equiv [] (a ++ b ++ c) d.
-    Proof.
-      intros. rewrite app_assoc.
-      eapply leaves_equiv_incl2 ; eauto.
-      intros x xIa. apply in_or_app. left. auto.
-    Qed.
-
-    Lemma leaves_equiv_incl4:
-      forall a b c d e: list leaf,
-        leaves_equiv [] a b ->
-        leaves_equiv [] c e ->
-        incl d a ->
-        leaves_equiv [] (a ++ c ++ d) (b ++ e).
-    Proof.
-      intros.
-      apply leaves_equiv_incl3. assumption.
-      apply leaves_equiv_app; auto.
-    Qed.
-
     (* A quantified always contains the current group and input *)
     Lemma atmost_leaves_incl_self (d: non_neg_integer_or_inf) (g: bool)r:
       forall inp gm1  dir tm,
