@@ -82,6 +82,11 @@ Section Definitions.
     Definition tree_nequiv r1 r2 :=
       exists dir, tree_nequiv_dir dir r1 r2.
 
+    Lemma equiv_to_dir:
+      forall r1 r2 dir (EQ:tree_equiv r1 r2),
+        tree_equiv_dir dir r1 r2.
+    Proof. unfold tree_equiv. auto. Qed.
+
   End IsTree.
 
 

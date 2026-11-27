@@ -1,5 +1,5 @@
 From Linden Require Import ProofSetup.
-From Linden.Rewriting Require Import Examples FlatMap ForcedQuant Associativity.
+From Linden.Rewriting Require Import Examples FlatMap ForcedQuant Associativity Distributivity InfQuantified.
 
 Coercion nat_to_N (n: nat) := NoI.N n.
 
@@ -31,7 +31,7 @@ Section RegexpTree.
           eapply quantified_S_equiv_forward. }
         etransitivity.
         { symmetry.
-          eapply sequence_assoc_equiv. }
+          eapply seq_assoc. }
         eapply seq_equiv_dir.
         reflexivity.
         auto.
@@ -51,7 +51,7 @@ Section RegexpTree.
         { symmetry.
           eapply quantified_S_equiv_backward. }
         etransitivity.
-        { eapply sequence_assoc_equiv. }
+        { eapply seq_assoc. }
         eapply seq_equiv_dir.
         auto.
         reflexivity.
@@ -118,7 +118,7 @@ Section RegexpTree.
           eapply quantified_S_equiv_forward. }
         etransitivity.
         { symmetry.
-          eapply sequence_assoc_equiv. }
+          eapply seq_assoc. }
         eapply seq_equiv_dir.
         apply forced_equiv.
         auto.
@@ -146,7 +146,7 @@ Section RegexpTree.
         { symmetry.
           eapply quantified_S_equiv_backward. }
         etransitivity.
-        { eapply sequence_assoc_equiv. }
+        { eapply seq_assoc. }
         eapply seq_equiv_dir.
         auto.
         apply forced_equiv.
@@ -231,41 +231,12 @@ Section RegexpTree.
     leaves of the branch r{0,m+n}, and hence are duplicates of the leaves of
     r{0,m+n}, so the equivalence holds. *)
 
-    (* Inclusion of lists (viewed as sets) *)
-    Definition incl {A} (a b: list A) :=
-      forall x, In x a -> In x b.
-
-    (* Function inclusion with propositional functions: when for all a, f1(a) ⊆ f2(a). *)
-    (* We will use this notion with f1 := act_from_leaf [r{0,n-1}] and
-    f2 := act_from_leaf [r{0,m+n}]. *)
-    Definition funct_incl {A B} (f1 f2: A -> list B -> Prop) :=
-      forall a l1 l2, f1 a l1 -> f2 a l2 -> incl l1 l2.
-
-    Lemma flatmap_incl {A B}:
-      forall (leaves: list A) (f1 f2: A -> list B -> Prop) leaves1 leaves2,
-        FlatMap leaves f1 leaves1 ->
-        FlatMap leaves f2 leaves2 ->
-        funct_incl f1 f2 ->
-        incl leaves1 leaves2.
-    Proof.
-      intros leaves f1 f2 leaves1 leaves2 FM1 FM2 INCL.
-      generalize dependent leaves2.
-      induction FM1.
-      - intros _ _ _ [].
-      - specialize (IHFM1 INCL). intros leaves2 FM2 lf Hin.
-        inversion FM2; subst.
-        specialize (INCL _ _ _ HEAD HEAD0).
-        apply in_app_or in Hin. destruct Hin.
-        + apply in_or_app. left. auto.
-        + apply in_or_app. right. unfold incl in IHFM1. auto.
-    Qed.
-
     (* The inclusion lemma: for all m and d, the leaves of r{0,m} are
     included in those of r{0,m+d}. *)
-    Lemma atmost_leaves_incl' (m: nat) (d: non_neg_integer_or_inf) r:
+    Lemma atmost_leaves_incl' (m: nat) (d: non_neg_integer_or_inf) (g: bool) r:
       forall inp gm dir tm tn,
-        is_tree rer [Areg (Quantified true 0 m r)] inp gm dir tm ->
-        is_tree rer [Areg (Quantified true 0 (m+d)%NoI r)] inp gm dir tn ->
+        is_tree rer [Areg (Quantified g 0 m r)] inp gm dir tm ->
+        is_tree rer [Areg (Quantified g 0 (m+d)%NoI r)] inp gm dir tn ->
         incl (tree_leaves tm gm inp dir) (tree_leaves tn gm inp dir).
     Proof.
       induction m as [|m IHm].
@@ -276,7 +247,8 @@ Section RegexpTree.
         + inversion SKIP0; subst. unfold incl. auto.
         + inversion SKIP0; subst. simpl.
           intros lf H. destruct H; try solve[inversion H]. subst lf.
-          apply in_or_app. right. left. reflexivity.
+          destruct g; simpl. apply in_or_app; right; left; reflexivity.
+          left. constructor.
       - intros inp gm dir tm tn TREE_m TREE_n.
         inversion TREE_m; subst.
         inversion TREE_n; subst. 1: { destruct d; discriminate. } clear TREE_m TREE_n.
@@ -292,59 +264,37 @@ Section RegexpTree.
         pose proof leaves_concat rer _ _ _ [Areg r; Acheck inp] _ _ _ ISTREE1 TREErcheck as CONCAT.
         pose proof leaves_concat rer _ _ _ [Areg r; Acheck inp] _ _ _ ISTREE0 TREErcheck as CONCAT0.
         intros lf Hin.
-        apply in_app_or in Hin. destruct Hin.
+        destruct g; simpl in *. apply in_app_or in Hin. destruct Hin.
         + apply in_or_app. left. eapply (flatmap_incl _ _ _ _ _ CONCAT CONCAT0); eauto.
           unfold funct_incl. intros a l1 l2 ACT1 ACT2.
           inversion ACT1; subst. inversion ACT2; subst. apply IHm; auto.
         + apply in_or_app. auto.
+        + destruct Hin. left; assumption.
+          right. eapply (flatmap_incl _ _ _ _ _ CONCAT CONCAT0); eauto.
+          unfold funct_incl. intros a l1 l2 ACT1 ACT2. inversion ACT1; subst.
+          inversion ACT2; subst. apply IHm; auto.
     Qed.
 
     (* Specialization to d = n-m *)
-    Corollary atmost_leaves_incl_nat (m n: nat) r:
+    Corollary atmost_leaves_incl_nat (m n: nat) (g: bool) r:
       m <= n ->
       forall inp gm dir tm tn,
-        is_tree rer [Areg (Quantified true 0 m r)] inp gm dir tm ->
-        is_tree rer [Areg (Quantified true 0 n r)] inp gm dir tn ->
+        is_tree rer [Areg (Quantified g 0 m r)] inp gm dir tm ->
+        is_tree rer [Areg (Quantified g 0 n r)] inp gm dir tn ->
         incl (tree_leaves tm gm inp dir) (tree_leaves tn gm inp dir).
     Proof.
-      intros. apply atmost_leaves_incl' with (m := m) (d := n-m) (r := r) (tm := tm); auto.
+      intros. apply atmost_leaves_incl' with (m := m) (d := n-m) (r := r) (tm := tm) (g := g); auto.
       simpl. replace (m + (n - m)) with n by lia. auto.
     Qed.
 
     (* Specialization to d = +∞ *)
-    Corollary atmost_leaves_incl_infty (m: nat) r:
+    Corollary atmost_leaves_incl_infty (m: nat) (g: bool) r:
       forall inp gm dir tm tn,
-        is_tree rer [Areg (Quantified true 0 m r)] inp gm dir tm ->
-        is_tree rer [Areg (Quantified true 0 +∞ r)] inp gm dir tn ->
+        is_tree rer [Areg (Quantified g 0 m r)] inp gm dir tm ->
+        is_tree rer [Areg (Quantified g 0 +∞ r)] inp gm dir tn ->
         incl (tree_leaves tm gm inp dir) (tree_leaves tn gm inp dir).
     Proof.
-      intros. apply atmost_leaves_incl' with (m := m) (d := +∞) (r := r) (tm := tm); auto.
-    Qed.
-
-    Lemma leaves_equiv_incl':
-      forall a b c: list leaf,
-        leaves_equiv [] a b ->
-        incl c b ->
-        leaves_equiv [] (a ++ c) b.
-    Proof.
-      intros. symmetry. rewrite <- app_nil_r with (l := b).
-      apply leaves_equiv_app2.
-      - now symmetry.
-      - rewrite app_nil_r. induction c.
-        + reflexivity.
-        + destruct a0 as [inp gm]. apply equiv_seen_right.
-          * apply is_seen_spec. unfold incl in H0. apply H0. left. reflexivity.
-          * apply IHc. intros x Hin. apply H0. right. auto.
-    Qed.
-
-    Lemma leaves_equiv_incl:
-      forall a b c d e: list leaf,
-        leaves_equiv [] a b -> leaves_equiv [] d e ->
-        incl c b ->
-        leaves_equiv [] (a ++ c ++ d) (b ++ e).
-    Proof.
-      intros. rewrite app_assoc.
-      apply leaves_equiv_app; auto. apply leaves_equiv_incl'; auto.
+      intros. apply atmost_leaves_incl' with (m := m) (d := +∞) (r := r) (tm := tm) (g := g); auto.
     Qed.
 
     Lemma atmost_atmost_equiv_actions_mnat (m: nat) (n: non_neg_integer_or_inf) r:
@@ -388,7 +338,7 @@ Section RegexpTree.
             unfold funct_incl. intros a l1 l2 ACT1 ACT2.
             inversion ACT1; subst. inversion ACT2; subst.
             destruct n as [n|].
-            - simpl in TREE0. apply atmost_leaves_incl_nat with (m := n) (n := m + S n) (r := r); eauto. lia.
+            - simpl in TREE0. apply atmost_leaves_incl_nat with (m := n) (n := m + S n) (r := r) (g := true); eauto. lia.
             - simpl in TREE0. replace t0 with t by eauto using is_tree_determ. unfold incl. auto.
           }
           assert (EQUIV: leaves_equiv [] (tree_leaves titer (GroupMap.reset (def_groups r) gm) i
@@ -488,7 +438,7 @@ Section RegexpTree.
             unfold funct_incl. intros a l1 l2 ACT1 ACT2.
             inversion ACT1; subst. inversion ACT2; subst.
             destruct n as [n|].
-            - apply atmost_leaves_incl_infty with (m := n) (r := r); auto.
+            - apply atmost_leaves_incl_infty with (m := n) (r := r) (g := true); auto.
             - replace t0 with t by eauto using is_tree_determ. unfold incl. auto.
           }
           apply leaves_equiv_incl; auto. reflexivity.
@@ -634,7 +584,293 @@ Section RegexpTree.
       apply atmost_bounded_backward.
     Qed.
 
+    (** * Proving open greedy on both sides **)
 
+    (** Helpers to prove tree equality by other equalities and inclusions **)
+    (* A quantified always contains the current group and input *)
+    Lemma atmost_leaves_incl_self (d: non_neg_integer_or_inf) (g: bool)r:
+      forall inp gm1  dir tm,
+        is_tree rer [Areg (Quantified g 0 d r)] inp gm1 dir tm ->
+        incl [(inp, gm1)] (tree_leaves tm gm1 inp dir).
+    Proof.
+      intros i gm dir tm TM.
+      specialize (is_tree_productivity rer [Areg (Quantified g 0 0 r)] i gm dir) as [tn  TN].
+      pose proof (atmost_leaves_incl' _  d _ _ _ _ _ _ tm TN).
+      inversion TN; inversion SKIP; subst. simpl in H.
+      destruct d; eapply H; auto.
+      destruct plus; discriminate.
+    Qed.
+
+    (* A quantified followed by another quantified always contains the current group and input *)
+    Lemma atmost_leaves_incl_self_double (d1 d2: non_neg_integer_or_inf) (g1 g2: bool)r:
+      forall inp gm1 dir tm,
+        is_tree rer [Areg (Quantified g1 0 d1 r); Areg (Quantified g2 0 d2 r)] inp gm1 dir tm ->
+        incl [(inp, gm1)] (tree_leaves tm gm1 inp dir).
+    Proof.
+      intros i gm1 dir tm T1.
+      inversion T1; subst. inversion SKIP; subst.
+      inversion SKIP0; subst. intros x iA. inversion iA.
+      simpl. left. assumption. inversion H.
+      inversion SKIP0; subst. destruct g2; simpl; intros x iA.
+      apply in_or_app. right. assumption.
+      constructor. inversion iA; auto. inversion H.
+      apply atmost_leaves_incl_self in SKIP. intros x iA.
+      specialize (SKIP x iA). destruct g1; simpl; apply in_or_app.
+      right. assumption. left. assumption.
+    Qed.
+
+    (** Induction helper, but instead of equality it works for inclusivity **)
+    Lemma quantifier_inf_step_advances_incl:
+      forall i r  dir acts1 acts2 g t1 t2,
+        is_tree rer ([Areg r; Acheck i] ++ acts1) i g dir t1 ->
+        is_tree rer ([Areg r; Acheck i] ++ acts2) i g dir t2 ->
+        (forall i' gm' t3 t4, is_tree rer acts1 i' gm' dir t3 ->
+                         is_tree rer acts2 i' gm' dir t4 ->
+                         remaining_length i' dir < remaining_length i dir ->
+                         incl (tree_leaves t3 gm' i' dir) (tree_leaves t4 gm' i' dir)) ->
+        incl (tree_leaves t1 g i dir) (tree_leaves t2 g i dir).
+    Proof.
+      intros. intros x xInA.
+      specialize (is_tree_productivity rer [Areg r] i g dir) as [t5 T5].
+      rewrite app_cons in H, H0. eapply leaves_concat with (act1 := [Areg r])in H, H0; eauto.
+      remember (tree_leaves t5 g i dir) as l1.
+      remember (tree_leaves t2 g i dir) as l2.
+      remember (tree_leaves t1 g i dir) as l3. clear Heql1 Heql2 Heql3.
+      generalize dependent l3.
+      revert l1 l2 H0.
+      induction l1; intros.
+      - inversion H. rewrite <- H4 in xInA. contradiction.
+      - inversion H0; inversion H; subst.
+        eapply in_or_app.
+        apply in_app_or in xInA as [cx | cy].
+        left. inversion HEAD; inversion HEAD0; subst.
+        inversion TREE; inversion TREE0; try contradiction; subst.
+        destruct a. simpl in *.
+        2: contradiction.
+        2: right; eapply IHl1; eauto.
+        clear IHl1.
+        revert x cx. eapply H1; eauto.
+        eapply strict_suffix_remaining_length. auto.
+    Qed.
+
+    (* r{0,}r{0, d1} always includes r{0, d2}? *)
+    Lemma quantified_opengreedy_open_incl_openlazy (n: nat):
+      forall r inp gm g d1 d2 dir tm tn ,
+        is_tree rer ([Areg (Quantified true 0 +∞ r); Areg (Quantified g 0 d1 r)]) inp gm dir tm ->
+        is_tree rer  ([Areg (Quantified false 0 d2 r)]) inp gm dir tn ->
+        incl (tree_leaves tn gm inp dir) (tree_leaves tm gm inp dir).
+    Proof.
+      intros. remember (remaining_length inp dir) as l.
+      assert (Hlength_le: remaining_length inp dir <= l) by lia. clear Heql. generalize dependent inp. revert tm tn d1 d2 gm.
+      induction l; intros.
+      - specialize (is_tree_productivity rer [Areg (Quantified g 0 d1 r)] inp gm dir) as [t5 T5].
+        eapply quantified_null_length_skip with (acts := [Areg (Quantified g 0 d1 r)])in H; eauto; eauto.
+        eapply quantified_null_length in T5, H0; auto. rewrite H, T5, H0. intros x xIn; assumption.
+      - inversion H0.
+        + inversion SKIP. subst. simpl. eapply atmost_leaves_incl_self_double; eauto.
+        + subst. simpl. intros x xIn. apply in_app_or in xIn as [cx | cy]. revert x cx.
+          inversion SKIP; subst. simpl. eapply atmost_leaves_incl_self_double; eauto.
+          inversion H; subst. simpl. eapply in_or_app. left.
+          eapply quantifier_inf_step_advances_incl with
+            (acts1 := [Areg (Quantified false 0 plus r)])
+            (acts2 := [Areg (Quantified true 0 plus0 r); Areg (Quantified g 0 d1 r)]);
+            eauto.
+          destruct plus0. discriminate.
+          intros. eapply IHl; eauto.
+          lia.
+    Qed.
+
+    Lemma atmost_atmost_equiv_actions_minf_lazy (n: non_neg_integer_or_inf) r:
+      forall dir ,
+        actions_equiv_dir rer dir [Areg (Quantified true 0 +∞ r); Areg (Quantified false 0 n r)] [Areg (Quantified true 0 +∞ r)].
+    Proof.
+      intros dir i.
+      unfold tree_equiv_tr_dir.
+      remember (remaining_length i dir) as l.
+      assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql. generalize dependent i.
+      induction l; intros i HeqL gm t1 t2 T1 T2.
+      - eapply quantified_null_length in T2; auto.
+        specialize (is_tree_productivity rer [Areg (Quantified false 0 n r)] i gm dir) as [t3 T3].
+        eapply quantified_null_length_skip with (acts := [Areg (Quantified false 0 n r)])in T1; eauto.
+        eapply quantified_null_length in T3; subst; auto. rewrite T2, T1, T3. reflexivity.
+      - inversion T1; inversion T2; inversion SKIP; subst. simpl.
+        +  apply leaves_equiv_app.
+           eapply step_advances_eqs with (r := r) (acts2 := [Areg (Quantified true 0 plus0 r)]) (acts1 := [Areg (Quantified true 0 plus r); Areg (Quantified false 0 (NoI.N 0) r)]); eauto.
+           destruct plus0, plus; try discriminate.
+           intros; eapply IHl; eauto. lia.
+           inversion SKIP0; inversion SKIP1; subst; reflexivity.
+        + simpl in *. apply leaves_equiv_incl4.
+          eapply step_advances_eqs; eauto.
+          exact ISTREE1. exact ISTREE0. intros.
+          destruct plus, plus0; try discriminate.
+          eapply IHl; eauto. lia.
+          inversion SKIP1; inversion SKIP0; reflexivity.
+          destruct plus, plus0; try discriminate.
+          clear SKIP1 ISTREE0 T2 T1 H9 H1 SKIP0 IHl.
+          specialize (is_tree_productivity rer [Areg (Quantified false 0 plus1 r)] i gm dir) as [t4 T4].
+          specialize (is_tree_productivity rer [Areg (Quantified true 0 +∞ r);
+                                                Areg (Quantified false 0 match plus1 with
+                                                        | NoI.N r' => NoI.N (S r')
+                                                        | +∞ => +∞
+                                                        end
+                                                        r)] i gm dir) as [t5 T5].
+          eapply quantifier_inf_step_advances_incl with
+            (acts1 := [Areg (Quantified false 0 plus1 r)])
+            (acts2 := [Areg (Quantified true 0 +∞ r); Areg (Quantified false 0 match plus1 with | NoI.N r' => NoI.N (S r') | +∞ => +∞ end r)]); simpl; eauto.
+          intros; eapply quantified_opengreedy_open_incl_openlazy; eauto.
+    Qed.
+
+    Lemma atmost_atmost_equiv_actions_lazy_minf (n: non_neg_integer_or_inf) r:
+      forall dir ,
+        actions_equiv_dir rer dir [Areg (Quantified false 0 n r); Areg (Quantified true 0 +∞ r)] [Areg (Quantified true 0 +∞ r)].
+    Proof.
+      intros dir i.
+      unfold tree_equiv_tr_dir.
+      remember (remaining_length i dir) as l.
+      assert (Hlength_le: remaining_length i dir <= l) by lia. clear Heql. generalize dependent i. revert n.
+      induction l; intros n i HeqL gm t1 t2 T1 T2.
+      - eapply quantified_null_length in T2.
+        specialize (is_tree_productivity rer [Areg (Quantified true 0 +∞ r)] i gm dir) as [t3 T3].
+        eapply quantified_null_length_skip with (acts := [Areg (Quantified true 0 +∞ r)])in T1; eauto. 2: lia.
+        eapply quantified_null_length in T3; eauto. rewrite T2, T1, T3. reflexivity.
+      - apply Nat.lt_eq_cases in HeqL as [cx | cy].
+        eapply IHl; eauto. lia.
+        inversion T1; inversion T2;  subst. simpl.
+        eapply is_tree_determ in T2; eauto. subst; reflexivity.
+        simpl. eapply leaves_equiv_app4. inversion SKIP; subst. simpl.
+        destruct plus1, plus0; try discriminate.
+        eapply leaves_equiv_app. eapply is_tree_determ  with (t1 := titer1) in ISTREE0; eauto.
+        subst. reflexivity.
+        inversion SKIP0; inversion SKIP1; subst. reflexivity.
+        eapply step_advances_eqs with (acts2 := [Areg (Quantified true 0 plus0 r)]) (acts1 := [Areg (Quantified false 0 plus r); Areg (Quantified true 0 +∞ r)]); eauto.
+        destruct plus0. discriminate.
+        intros. eapply IHl; eauto. lia.
+    Qed.
+
+    (** * FINAL OPEN GREEDY REWRITES *)
+    (* The two first rewrites presented are r{0,}r{0, d}? ~ r{0,} and
+    r{0, d}?r{0,} ~ r{0,} with the other rewrites only being
+    an explicit form of the bounded_atmost_forward and atmost_bounded_backward rules
+    applyed to the two first rewrites. *)
+
+    (* r{0, d1} r{0,} ~ r{0,} *)
+    Lemma quantified_open_greedy_left:
+      forall r delta1 g,
+        (Sequence (Quantified g 0 delta1 r) (Quantified true 0 +∞ r))
+          ≅[rer] (Quantified true 0 +∞ r).
+    Proof.
+      intros r delta1 g.
+      destruct g.
+      - (** True case (already proven) **)
+        etransitivity. eapply atmost_atmost_equiv; eauto.
+        destruct delta1; reflexivity.
+      - (** False case (list analysis) **)
+        split. simpl.  solve_groups_equiv.
+        intros i g t1 t2 T1 T2. destruct dir.
+        + inversion T1; subst; clear T1.
+          simpl in CONT. eapply atmost_atmost_equiv_actions_lazy_minf; eauto.
+        + inversion T1; subst; clear T1.
+          simpl in CONT. eapply atmost_atmost_equiv_actions_minf_lazy; eauto.
+    Qed.
+
+    (* r{0,} r{0, d1} ~ r{0,} *)
+    Lemma quantified_open_greedy_right:
+      forall r delta1 g,
+        (Sequence (Quantified true 0 +∞ r) (Quantified g 0 delta1 r))
+          ≅[rer] (Quantified true 0 +∞ r).
+    Proof.
+      intros r delta1 g.
+      destruct g.
+      - (** True case (already proven) **)
+        etransitivity. eapply atmost_atmost_equiv; eauto.
+        destruct delta1; reflexivity.
+      - (** False case (list analysis) **)
+        split. simpl. solve_groups_equiv.
+        intros i g t1 t2 T1 T2. destruct dir.
+        + inversion T1; subst; clear T1.
+          simpl in CONT. eapply atmost_atmost_equiv_actions_minf_lazy; eauto.
+        + inversion T1; subst; clear T1.
+          simpl in CONT. eapply atmost_atmost_equiv_actions_lazy_minf; eauto.
+    Qed.
+
+    Lemma quantified_open_greedy_right_forward:
+      forall r min delta1 g,
+        (Sequence (Quantified true min  +∞ r) (Quantified g 0 delta1 r))
+          ≅[rer][forward] (Quantified true min +∞ r).
+    Proof.
+      intros r min delta1 g.
+      etransitivity. {
+        eapply seq_equiv_dir. symmetry. eapply bounded_atmost_forward; auto.
+        reflexivity.
+      } etransitivity. {
+        symmetry. eapply seq_assoc.
+      }
+      etransitivity. {
+        eapply seq_equiv_dir. reflexivity.
+        eapply quantified_open_greedy_right; auto.
+      }
+      eapply bounded_atmost_forward; auto.
+    Qed.
+
+    Lemma quantified_open_greedy_right_backward:
+      forall r min delta1 g,
+        (Sequence (Quantified true 0  +∞ r) (Quantified g min delta1 r))
+          ≅[rer][backward] (Quantified true min +∞ r).
+    Proof.
+      intros r min delta1 g.
+      etransitivity. {
+        eapply seq_equiv_dir. reflexivity.
+        symmetry. eapply atmost_bounded_backward; auto.
+      } etransitivity. {
+        eapply seq_assoc.
+      } etransitivity. {
+        eapply seq_equiv_dir. eapply quantified_open_greedy_right; auto.
+        reflexivity.
+      }
+      destruct g. eapply atmost_bounded_backward; eauto.
+      etransitivity. eapply seq_equiv_dir. reflexivity.
+      symmetry. eapply forced_equiv. eapply atmost_bounded_backward; auto.
+    Qed.
+
+    Lemma quantified_open_greedy_left_forward:
+      forall r min delta1 g,
+        (Sequence (Quantified g min delta1 r) (Quantified true 0 +∞ r))
+          ≅[rer][forward] (Quantified true min +∞ r).
+    Proof.
+      intros r min delta1 g.
+      etransitivity. {
+        eapply seq_equiv_dir.
+        symmetry. eapply bounded_atmost_forward; auto.
+        reflexivity.
+      } etransitivity. {
+        symmetry. eapply seq_assoc.
+      } etransitivity. {
+        eapply seq_equiv_dir. reflexivity.
+        eapply quantified_open_greedy_left; auto.
+      }
+      destruct g. eapply bounded_atmost_forward; eauto.
+      etransitivity. eapply seq_equiv_dir.
+      symmetry. eapply forced_equiv. reflexivity.
+      eapply bounded_atmost_forward; auto.
+    Qed.
+
+    Lemma quantified_open_greedy_left_backward:
+      forall r min delta1 g,
+        (Sequence (Quantified g 0 delta1 r) (Quantified true min +∞ r))
+          ≅[rer][backward] (Quantified true min +∞ r).
+    Proof.
+      intros r min delta1 g.
+      etransitivity. {
+        eapply seq_equiv_dir. reflexivity.
+        symmetry. eapply atmost_bounded_backward; auto.
+      }
+      etransitivity. {
+        eapply seq_assoc.
+      } etransitivity. {
+        eapply seq_equiv_dir. eapply quantified_open_greedy_left; auto.
+        reflexivity.
+      } eapply atmost_bounded_backward; auto.
+    Qed.
   End BoundedRepetitions.
 
 (*|
