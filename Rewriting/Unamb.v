@@ -28,7 +28,8 @@ Section UnAmbiguity.
     | Epsilon | Character _ | Anchor _ | Backreference _ => true
     | Disjunction _ _ => false
     | Sequence r1 r2 => andb (na r1) (na r2)
-    | Group _ r | Lookaround _ r => na r
+    | Group _ r => na r
+    | Lookaround _ _ => true
     | Quantified _ _  (NoI.N 0) r1 => na r1
     | Quantified _ _ _ _ => false
     end.
@@ -59,8 +60,7 @@ Section UnAmbiguity.
       rewrite NA1. rewrite NAC. auto.
     - apply andb_true_iff in NA as [NA1 NAC]. auto.
     - destruct plus; try destruct n; inversion NA.
-    - apply andb_true_iff in NA as [NA1 NAC].
-      destruct positivity eqn:POS; destruct tree_leaves as [|[i gm']]; simpl; try lia; auto.
+    - destruct positivity eqn:POS; destruct tree_leaves as [|[i gm']]; simpl; try lia; auto.
   Qed.
 
   Corollary naive_unambiguity:
